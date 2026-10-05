@@ -90,7 +90,7 @@ function App() {
           Поиск по базам данных
         </Text>
 
-        {/* Форма в два столбца */}
+        {/* Форма по два столбца */}
         <Box bg="gray.800" p={6} borderRadius="xl" boxShadow="xl">
           <HStack spacing={4} align="flex-start">
             <VStack flex="1" spacing={4} align="stretch">
