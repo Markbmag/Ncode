@@ -1,4 +1,11 @@
-fastapi
-uvicorn
-mysql-connector-python
-python-dotenv
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0.30
+python-dotenv>=1.0
+pydantic>=2.7
+
+# Database drivers - keep only the ones you need
+pymysql>=1.1            # MySQL / MariaDB
+psycopg[binary]>=3.2    # PostgreSQL
+pymssql>=2.3            # SQL Server
+# SQLite needs no driver (built into Python)

@@ -1,0 +1,183 @@
+"""Configuration loaded from environment variables / a local .env file.
+
+Database connections are declared with one group of variables per connection:
+
+    NCODE_CONN_<KEY>_ENGINE=mysql        # mysql | mariadb | postgresql | mssql | sqlite
+    NCODE_CONN_<KEY>_HOST=10.0.0.1
+    NCODE_CONN_<KEY>_PORT=3306           # optional, engine default is used
+    NCODE_CONN_<KEY>_USER=readonly_user
+    NCODE_CONN_<KEY>_PASSWORD='secret'   # quote it if it contains # or $
+    NCODE_CONN_<KEY>_DATABASE=mydb       # for sqlite: path to the file
+    NCODE_CONN_<KEY>_SCHEMA=             # optional (postgresql / mssql)
+    NCODE_CONN_<KEY>_LABEL=My database   # optional display name
+    NCODE_CONN_<KEY>_ID_HINTS=vin,order  # optional, see ConnectionConfig
+
+The password is stored separately from the host/user/database on purpose: that
+way you never have to URL-encode special characters such as ( ) @ / #.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from dataclasses import dataclass, field
+from typing import Mapping
+
+from dotenv import load_dotenv
+
+# Engine name (as written in .env) -> (SQLAlchemy driver name, default port)
+SUPPORTED_ENGINES: dict[str, tuple[str, int | None]] = {
+    "mysql": ("mysql+pymysql", 3306),
+    "mariadb": ("mysql+pymysql", 3306),
+    "postgresql": ("postgresql+psycopg", 5432),
+    "postgres": ("postgresql+psycopg", 5432),
+    "mssql": ("mssql+pymssql", 1433),
+    "sqlite": ("sqlite", None),
+}
+
+_CONN_VAR = re.compile(
+    r"^NCODE_CONN_([A-Z0-9_]+?)_(ENGINE|HOST|PORT|USER|PASSWORD|DATABASE|SCHEMA|LABEL|ID_HINTS)$"
+)
+
+
+class ConfigError(ValueError):
+    """Raised when the environment configuration is invalid."""
+
+
+@dataclass(frozen=True)
+class ConnectionConfig:
+    key: str                      # lowercase identifier used in the API, e.g. "mes"
+    label: str                    # human readable name shown in the UI
+    engine: str                   # normalised engine name, e.g. "mysql"
+    database: str
+    host: str | None = None
+    port: int | None = None
+    user: str | None = None
+    password: str | None = field(default=None, repr=False)  # never printed
+    schema: str | None = None
+    # Substrings of column names that identify a record (e.g. "vin", "serial").
+    # The first matching column of a result row is returned as `id_column`.
+    id_hints: tuple[str, ...] = ()
+
+    @property
+    def driver(self) -> str:
+        return SUPPORTED_ENGINES[self.engine][0]
+
+    @property
+    def is_mariadb(self) -> bool:
+        return self.engine == "mariadb"
+
+
+@dataclass(frozen=True)
+class Settings:
+    host: str = "127.0.0.1"
+    port: int = 8000
+    cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
+    search_workers: int = 8              # parallel tables per search
+    statement_timeout_sec: int = 20      # per-query timeout where the DB supports it
+    default_row_limit: int = 10          # rows returned per table
+    max_row_limit: int = 200
+    max_total_results: int = 1000        # cap on rows kept per search task
+    task_ttl_sec: int = 3600             # finished tasks are forgotten after this
+    schema_cache_ttl_sec: int = 600      # table/column metadata cache
+    read_only_sessions: bool = True      # ask the DB to refuse writes (best effort)
+
+
+def _int(env: Mapping[str, str], name: str, default: int) -> int:
+    raw = env.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be an integer, got {raw!r}") from exc
+
+
+def _bool(env: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = env.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def load_settings(env: Mapping[str, str] | None = None) -> Settings:
+    env = os.environ if env is None else env
+    origins_raw = env.get("NCODE_CORS_ORIGINS", "")
+    origins = tuple(o.strip() for o in origins_raw.split(",") if o.strip())
+    defaults = Settings()
+    return Settings(
+        host=env.get("NCODE_HOST", defaults.host),
+        port=_int(env, "NCODE_PORT", defaults.port),
+        cors_origins=origins or defaults.cors_origins,
+        search_workers=max(1, _int(env, "NCODE_SEARCH_WORKERS", defaults.search_workers)),
+        statement_timeout_sec=max(1, _int(env, "NCODE_STATEMENT_TIMEOUT_SEC", defaults.statement_timeout_sec)),
+        default_row_limit=max(1, _int(env, "NCODE_DEFAULT_ROW_LIMIT", defaults.default_row_limit)),
+        max_row_limit=max(1, _int(env, "NCODE_MAX_ROW_LIMIT", defaults.max_row_limit)),
+        max_total_results=max(1, _int(env, "NCODE_MAX_TOTAL_RESULTS", defaults.max_total_results)),
+        task_ttl_sec=max(60, _int(env, "NCODE_TASK_TTL_SEC", defaults.task_ttl_sec)),
+        schema_cache_ttl_sec=max(0, _int(env, "NCODE_SCHEMA_CACHE_TTL_SEC", defaults.schema_cache_ttl_sec)),
+        read_only_sessions=_bool(env, "NCODE_READ_ONLY_SESSIONS", defaults.read_only_sessions),
+    )
+
+
+def load_connections(env: Mapping[str, str] | None = None) -> dict[str, ConnectionConfig]:
+    """Parse every NCODE_CONN_<KEY>_* variable into a ConnectionConfig.
+
+    Fails loudly (ConfigError) on incomplete or unknown configuration instead of
+    silently ignoring it.
+    """
+    env = os.environ if env is None else env
+
+    raw: dict[str, dict[str, str]] = {}
+    for name, value in env.items():
+        match = _CONN_VAR.match(name)
+        if match:
+            raw.setdefault(match.group(1), {})[match.group(2)] = value
+
+    connections: dict[str, ConnectionConfig] = {}
+    for key_upper, values in sorted(raw.items()):
+        key = key_upper.lower()
+        engine = (values.get("ENGINE") or "").strip().lower()
+        if engine not in SUPPORTED_ENGINES:
+            raise ConfigError(
+                f"NCODE_CONN_{key_upper}_ENGINE must be one of "
+                f"{', '.join(sorted(SUPPORTED_ENGINES))}, got {engine!r}"
+            )
+        database = (values.get("DATABASE") or "").strip()
+        if not database:
+            raise ConfigError(f"NCODE_CONN_{key_upper}_DATABASE is required")
+
+        host = (values.get("HOST") or "").strip() or None
+        if engine != "sqlite" and not host:
+            raise ConfigError(f"NCODE_CONN_{key_upper}_HOST is required for engine {engine!r}")
+
+        port_raw = (values.get("PORT") or "").strip()
+        if port_raw:
+            try:
+                port: int | None = int(port_raw)
+            except ValueError as exc:
+                raise ConfigError(f"NCODE_CONN_{key_upper}_PORT must be an integer") from exc
+        else:
+            port = SUPPORTED_ENGINES[engine][1]
+
+        hints = tuple(
+            h.strip().lower() for h in (values.get("ID_HINTS") or "").split(",") if h.strip()
+        )
+        connections[key] = ConnectionConfig(
+            key=key,
+            label=(values.get("LABEL") or "").strip() or key_upper,
+            engine=engine,
+            database=database,
+            host=host,
+            port=port,
+            user=(values.get("USER") or "").strip() or None,
+            password=values.get("PASSWORD") or None,
+            schema=(values.get("SCHEMA") or "").strip() or None,
+            id_hints=hints,
+        )
+    return connections
+
+
+def init_environment() -> None:
+    """Load backend/.env (if present) into os.environ. Real env vars win."""
+    load_dotenv(override=False)
