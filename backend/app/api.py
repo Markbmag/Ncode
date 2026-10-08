@@ -1,0 +1,511 @@
+"""Ncode API (routes). Use create_app() to build the FastAPI application.
+
+    POST   /api/auth/login              {username, password} -> {token, expires_at, user}
+    POST   /api/auth/logout
+    GET    /api/auth/me
+    GET    /api/health
+    GET    /api/connections             (only the ones the user may use)
+    GET    /api/engines                 database types + whether their driver is installed
+    POST   /api/connections             (admin) add a database from the UI
+    POST   /api/connections/test-draft  (admin) try settings before saving
+    GET    /api/connections/{key}/details   (admin)
+    PUT    /api/connections/{key}       (admin)
+    DELETE /api/connections/{key}       (admin)
+    POST   /api/connections/{key}/test
+    GET    /api/connections/{key}/tables?refresh=false
+    POST   /api/search                  -> {"task_id": ...}
+    GET    /api/search/{task_id}        -> progress (+ results when finished)
+    DELETE /api/search/{task_id}        -> cancel
+    WS     /ws/{task_id}                first client message: {"token": "..."}
+
+Send the token as `Authorization: Bearer <token>`.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+import time
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
+
+from .appdb import ANONYMOUS, AppDB, User
+from .config import ENGINES, ConnectionConfig, Settings, driver_available, normalize_engine
+from .crypto import CipherError
+from .db import ConnectionRegistry, describe_error, probe
+from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, SearchRequest
+from .search import SearchOptions, classify_type, start_search_thread
+from .security import LoginThrottle, hash_password, hash_token, new_token, verify_password
+from .tasks import SearchTask, TaskStore
+
+logger = logging.getLogger("ncode.api")
+
+# Used to spend the same time on unknown usernames as on real ones.
+_DUMMY_HASH = hash_password("not-a-real-password")
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app_db: AppDB) -> FastAPI:
+    registry = ConnectionRegistry(connections, settings)
+    for stored in app_db.list_connections():
+        if stored.key in connections:  # a .env definition always wins
+            logger.warning("UI connection %r ignored: the same key is defined in .env", stored.key)
+            continue
+        registry.set_config(stored)
+    store = TaskStore(ttl_sec=settings.task_ttl_sec)
+    throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
+    bearer = HTTPBearer(auto_error=False)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if not settings.auth_enabled:
+            logger.warning("AUTHENTICATION IS DISABLED - anyone who can reach this server can search your databases.")
+        elif app_db.user_count() == 0:
+            logger.warning(
+                "No users exist yet. Create the first admin with:  python -m app.manage create-user <name> --admin"
+            )
+        yield
+        registry.dispose_all()
+        app_db.dispose()
+
+    app = FastAPI(title="Ncode", version="0.3.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["*"],
+        expose_headers=["Retry-After"],  # lets the login screen show the lockout countdown
+    )
+
+    # ------------------------------------------------------------------
+    # auth helpers
+    # ------------------------------------------------------------------
+    def user_from_token(token: str | None) -> User | None:
+        if not settings.auth_enabled:
+            return ANONYMOUS
+        if not token:
+            return None
+        return app_db.user_for_token(hash_token(token))
+
+    def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> User:
+        user = user_from_token(creds.credentials if creds else None)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Not authenticated", headers={"WWW-Authenticate": "Bearer"})
+        return user
+
+    def require_connection(key: str, user: User) -> None:
+        # Same 404 for "doesn't exist" and "not allowed": don't reveal hidden databases.
+        if key not in registry.configs or not user.can_use(key):
+            raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
+
+    def can_access_task(user: User, task: SearchTask) -> bool:
+        return user.is_admin or task.owner == user.username
+
+    def get_task_or_404(task_id: str, user: User) -> SearchTask:
+        task = store.get(task_id)
+        if task is None or not can_access_task(user, task):
+            raise HTTPException(status_code=404, detail="Unknown or expired task")
+        return task
+
+    # ------------------------------------------------------------------
+    # auth endpoints
+    # ------------------------------------------------------------------
+    @app.post("/api/auth/login")
+    def login(payload: LoginRequest, request: Request):
+        if not settings.auth_enabled:
+            raise HTTPException(status_code=400, detail="Authentication is disabled")
+        username = payload.username.strip().lower()
+        ip = request.client.host if request.client else "unknown"
+        throttle_key = f"{username}|{ip}"
+
+        wait = throttle.locked_for(throttle_key)
+        if wait:
+            raise HTTPException(status_code=429, detail="Too many failed attempts", headers={"Retry-After": str(wait)})
+
+        user = app_db.get_user_by_name(username)
+        password_ok = verify_password(payload.password, user.password_hash if user else _DUMMY_HASH)
+        if user is None or not password_ok or not user.is_active:
+            throttle.fail(throttle_key)
+            app_db.audit(username, "login_failed", status="denied")
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+
+        throttle.success(throttle_key)
+        token = new_token()
+        expires_at = app_db.create_session(user.id, hash_token(token), settings.session_ttl_hours * 3600)
+        app_db.audit(user.username, "login", status="ok")
+        return {
+            "token": token,
+            "expires_at": expires_at,
+            "user": {"username": user.username, "role": user.role},
+        }
+
+    @app.post("/api/auth/logout")
+    def logout(creds: HTTPAuthorizationCredentials | None = Depends(bearer)):
+        if creds and settings.auth_enabled:
+            app_db.delete_session(hash_token(creds.credentials))
+        return {"ok": True}
+
+    @app.get("/api/auth/me")
+    def me(user: User = Depends(current_user)):
+        return {"username": user.username, "role": user.role}
+
+    # ------------------------------------------------------------------
+    # connections
+    # ------------------------------------------------------------------
+    def require_admin(user: User = Depends(current_user)) -> User:
+        if not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only an administrator can manage connections")
+        return user
+
+    def details_of(cfg: ConnectionConfig, user: User) -> ConnectionDetails:
+        return ConnectionDetails(
+            key=cfg.key,
+            label=cfg.label,
+            engine=cfg.engine,
+            host=cfg.host,
+            port=cfg.port,
+            username=cfg.user,
+            has_password=bool(cfg.password),
+            database=cfg.database,
+            schema_name=cfg.schema,
+            id_hints=list(cfg.id_hints),
+            source=cfg.source,
+            editable=user.is_admin and cfg.source == "ui",
+        )
+
+    def slugify(label: str) -> str:
+        base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:40] or "db"
+        if base[0].isdigit():
+            base = f"db_{base}"
+        existing = registry.configs
+        key, n = base, 2
+        while key in existing:
+            key = f"{base}_{n}"
+            n += 1
+        return key
+
+    def validate_sqlite_path(raw: str) -> None:
+        path = Path(raw).expanduser()
+        if not path.is_file():
+            raise HTTPException(status_code=400, detail=f"File not found on the server: {raw}")
+        try:
+            if path.resolve() == app_db.path.resolve():
+                raise HTTPException(status_code=400, detail="Ncode's own database cannot be connected")
+            with open(path, "rb") as handle:
+                header = handle.read(16)
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Cannot read the file: {exc.strerror or exc}") from exc
+        if header != b"SQLite format 3\x00":
+            raise HTTPException(status_code=400, detail="This is not a SQLite file")
+
+    def build_config(payload: ConnectionPayload, key: str) -> ConnectionConfig:
+        """Validate the form and build a config (without a password)."""
+        engine = normalize_engine(payload.engine)
+        info = ENGINES.get(engine)
+        if info is None:
+            raise HTTPException(status_code=400, detail=f"Unknown database type: {payload.engine}")
+        host = (payload.host or "").strip() or None
+        if info.file_based:
+            validate_sqlite_path(payload.database)
+        elif not host:
+            raise HTTPException(status_code=400, detail="Enter the server address (host)")
+        return ConnectionConfig(
+            key=key,
+            label=payload.label,
+            engine=engine,
+            database=payload.database,
+            host=None if info.file_based else host,
+            port=None if info.file_based else (payload.port or info.default_port),
+            user=(payload.username or "").strip() or None,
+            password=None,
+            schema=(payload.schema_name or "").strip() or None,
+            id_hints=tuple(h.strip().lower() for h in payload.id_hints if h.strip()),
+            source="ui",
+        )
+
+    def same_target(a: ConnectionConfig, b: ConnectionConfig) -> bool:
+        """A saved password may only be reused for the same server, port and user."""
+        return (a.engine, a.host, a.port, a.user) == (b.engine, b.host, b.port, b.user)
+
+    def ensure_driver(engine: str) -> None:
+        if not driver_available(engine):
+            info = ENGINES[engine]
+            raise HTTPException(
+                status_code=400,
+                detail=f"The driver for {info.label} is not installed. Run on the server: pip install {info.pip} "
+                "— then restart the backend.",
+            )
+
+    def get_ui_connection(key: str) -> ConnectionConfig:
+        cfg = registry.configs.get(key)
+        if cfg is None:
+            raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
+        if cfg.source != "ui":
+            raise HTTPException(
+                status_code=400, detail="This connection is defined in the .env file — it can only be changed there"
+            )
+        return cfg
+
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok"}
+
+    @app.get("/api/engines", response_model=list[EngineOption])
+    def list_engines(_user: User = Depends(current_user)):
+        return [
+            EngineOption(
+                name=i.name,
+                label=i.label,
+                default_port=i.default_port,
+                available=driver_available(i.name),
+                pip=i.pip,
+                file_based=i.file_based,
+            )
+            for i in ENGINES.values()
+        ]
+
+    @app.get("/api/connections", response_model=list[ConnectionInfo])
+    def list_connections(user: User = Depends(current_user)):
+        # Host, user and password are never exposed here.
+        return [
+            ConnectionInfo(
+                key=c.key,
+                label=c.label,
+                engine=c.engine,
+                database=c.database,
+                id_hints=list(c.id_hints),
+                source=c.source,
+                editable=user.is_admin and c.source == "ui",
+            )
+            for c in sorted(registry.configs.values(), key=lambda c: c.label.lower())
+            if user.can_use(c.key)
+        ]
+
+    @app.post("/api/connections/test-draft")
+    def test_draft(payload: ConnectionPayload, _admin: User = Depends(require_admin)):
+        """Try a connection that has not been saved yet (the 'Check connection' button)."""
+        try:
+            cfg = build_config(payload, "draft")
+        except HTTPException as exc:
+            return {"ok": False, "error": exc.detail}
+        password = payload.password or None
+        existing = registry.configs.get(payload.key) if payload.key else None
+        if not password and existing is not None and existing.source == "ui" and same_target(existing, cfg):
+            password = existing.password
+        try:
+            tables = probe(replace(cfg, password=password), settings)
+        except Exception as exc:
+            return {"ok": False, "error": describe_error(exc, cfg.engine)}
+        return {"ok": True, "tables": tables}
+
+    @app.post("/api/connections", response_model=ConnectionDetails, status_code=201)
+    def create_connection(payload: ConnectionPayload, admin: User = Depends(require_admin)):
+        cfg = replace(build_config(payload, slugify(payload.label)), password=payload.password or None)
+        ensure_driver(cfg.engine)
+        try:
+            saved = app_db.save_connection(cfg, admin.username)
+        except CipherError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        registry.set_config(saved)
+        app_db.audit(admin.username, "connection_add", connection=saved.key, status="ok")
+        return details_of(saved, admin)
+
+    @app.get("/api/connections/{key}/details", response_model=ConnectionDetails)
+    def connection_details(key: str, admin: User = Depends(require_admin)):
+        cfg = registry.configs.get(key)
+        if cfg is None:
+            raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
+        return details_of(cfg, admin)
+
+    @app.put("/api/connections/{key}", response_model=ConnectionDetails)
+    def update_connection(key: str, payload: ConnectionPayload, admin: User = Depends(require_admin)):
+        existing = get_ui_connection(key)
+        draft = build_config(payload, key)
+        password = payload.password or None
+        if not password:
+            if same_target(existing, draft):
+                password = existing.password
+            elif not ENGINES[draft.engine].file_based:
+                raise HTTPException(
+                    status_code=400, detail="When changing the server, port or user, enter the password again"
+                )
+        cfg = replace(draft, password=password)
+        ensure_driver(cfg.engine)
+        try:
+            found = app_db.update_connection(cfg)
+        except CipherError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if not found:
+            raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
+        registry.set_config(cfg)
+        app_db.audit(admin.username, "connection_edit", connection=key, status="ok")
+        return details_of(cfg, admin)
+
+    @app.delete("/api/connections/{key}")
+    def delete_connection(key: str, admin: User = Depends(require_admin)):
+        get_ui_connection(key)
+        app_db.delete_connection(key)
+        registry.remove(key)
+        app_db.audit(admin.username, "connection_delete", connection=key, status="ok")
+        return {"ok": True}
+
+    @app.post("/api/connections/{key}/test")
+    def test_connection(key: str, user: User = Depends(current_user)):
+        require_connection(key, user)
+        try:
+            registry.test(key)
+        except Exception as exc:
+            return {"ok": False, "error": describe_error(exc, registry.get_config(key).engine)}
+        return {"ok": True}
+
+    @app.get("/api/connections/{key}/tables")
+    def list_tables(key: str, refresh: bool = Query(False), user: User = Depends(current_user)):
+        require_connection(key, user)
+        try:
+            schema = registry.get_schema(key, refresh=refresh)
+        except Exception as exc:
+            detail = describe_error(exc, registry.get_config(key).engine)
+            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+        return {
+            "tables": [
+                {
+                    "name": name,
+                    "columns": len(cols),
+                    # columns that a text search can look into
+                    "searchable": sum(1 for c in cols if classify_type(c["type"]) == "text"),
+                }
+                for name, cols in sorted(schema.items(), key=lambda item: item[0].lower())
+            ]
+        }
+
+    # ------------------------------------------------------------------
+    # search
+    # ------------------------------------------------------------------
+    @app.post("/api/search", status_code=202)
+    def start_search(payload: SearchRequest, user: User = Depends(current_user)):
+        require_connection(payload.connection, user)
+        if store.running_count(user.username) >= settings.max_concurrent_searches:
+            raise HTTPException(
+                status_code=429,
+                detail=f"You already have {settings.max_concurrent_searches} searches running. "
+                "Wait for one to finish or cancel it.",
+            )
+
+        row_limit = min(payload.row_limit or settings.default_row_limit, settings.max_row_limit)
+        opts = SearchOptions(
+            phrase=payload.phrase,
+            match_mode=payload.match_mode,
+            case_sensitive=payload.case_sensitive,
+            include_numeric=payload.include_numeric,
+            include_dates=payload.include_dates,
+            row_limit=row_limit,
+            tables=payload.tables,
+            include_tables=payload.include_tables,
+            exclude_tables=payload.exclude_tables,
+            schema=payload.schema_name,
+            refresh_schema=payload.refresh_schema,
+        )
+        task = store.create(payload.connection, payload.phrase, settings.max_total_results, owner=user.username)
+
+        audit_id = app_db.audit(
+            user.username,
+            "search",
+            connection=payload.connection,
+            phrase=payload.phrase,
+            options=json.dumps(
+                {
+                    "match_mode": opts.match_mode,
+                    "case_sensitive": opts.case_sensitive,
+                    "include_numeric": opts.include_numeric,
+                    "include_dates": opts.include_dates,
+                    "row_limit": opts.row_limit,
+                    "tables": opts.tables[:50],
+                    "include_tables": opts.include_tables,
+                    "exclude_tables": opts.exclude_tables,
+                }
+            ),
+            status="running",
+        )
+
+        def on_finish(finished: SearchTask) -> None:
+            info = finished.progress()
+            app_db.audit_finish(
+                audit_id,
+                finished.status,
+                info["found"],
+                info["error_count"],
+                (finished.finished_at or time.time()) - finished.created_at,
+            )
+
+        start_search_thread(task, registry, opts, settings, on_finish=on_finish)
+        return {"task_id": task.id}
+
+    @app.get("/api/search/{task_id}")
+    def get_search(task_id: str, include_results: bool = Query(True), user: User = Depends(current_user)):
+        task = get_task_or_404(task_id, user)
+        return task.snapshot(include_results=include_results and task.is_final)
+
+    @app.delete("/api/search/{task_id}")
+    def cancel_search(task_id: str, user: User = Depends(current_user)):
+        get_task_or_404(task_id, user).cancel()
+        return {"status": "cancelling"}
+
+    @app.websocket("/ws/{task_id}")
+    async def search_progress(websocket: WebSocket, task_id: str):
+        await websocket.accept()
+        task: SearchTask | None = None
+        try:
+            # Browsers can't set headers on WebSockets, and tokens in the URL end up in
+            # logs, so the client sends the token as its first message instead.
+            try:
+                first = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+                token = first.get("token") if isinstance(first, dict) else None
+            except (asyncio.TimeoutError, ValueError, KeyError):
+                token = None
+            user = await asyncio.to_thread(user_from_token, token)
+            if user is None:
+                await websocket.send_json({"status": "unauthorized"})
+                return
+
+            candidate = store.get(task_id)
+            if candidate is None or not can_access_task(user, candidate):
+                await websocket.send_json({"status": "unknown"})
+                return
+            task = candidate
+
+            last_sent = None
+            while True:
+                if task.is_final:
+                    await websocket.send_json(task.snapshot(include_results=True))
+                    break
+                progress = task.progress()
+                if progress != last_sent:
+                    await websocket.send_json(progress)
+                    last_sent = progress
+                await asyncio.sleep(0.3)
+        except WebSocketDisconnect:
+            # The browser went away: stop wasting database resources on this search.
+            if task is not None and not task.is_final:
+                task.cancel()
+        finally:
+            try:
+                await websocket.close()
+            except RuntimeError:
+                pass  # already closed
+
+    return app

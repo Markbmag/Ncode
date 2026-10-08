@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Ncode's own users/audit database
+backend/data/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import URL, Engine, ObjectKind
 from sqlalchemy.exc import SAWarning
 
-from .config import ConnectionConfig, Settings
+from .config import ENGINES, ConnectionConfig, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -93,37 +93,107 @@ def _install_session_guards(engine: Engine, cfg: ConnectionConfig, settings: Set
             cursor.close()
 
 
+def build_engine(cfg: ConnectionConfig, settings: Settings, pool_size: int | None = None) -> Engine:
+    engine = create_engine(
+        _build_url(cfg),
+        connect_args=_connect_args(cfg, settings),
+        pool_size=pool_size or settings.search_workers,
+        max_overflow=0,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
+    _install_session_guards(engine, cfg, settings)
+    return engine
+
+
+def probe(cfg: ConnectionConfig, settings: Settings) -> int:
+    """Connect with a throw-away engine and return the number of tables. Raises on failure."""
+    engine = build_engine(cfg, settings, pool_size=1)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            return len(inspect(conn).get_table_names(schema=cfg.schema))
+    finally:
+        engine.dispose()
+
+
+def describe_error(exc: Exception, engine_name: str | None = None) -> str:
+    """Turn a driver exception into a short, actionable message (shown in the UI)."""
+    lines = str(getattr(exc, "orig", None) or exc).strip().splitlines()
+    raw = lines[0][:300] if lines else type(exc).__name__
+    low = raw.lower()
+    info = ENGINES.get(engine_name or "")
+
+    if isinstance(exc, ModuleNotFoundError) or "no module named" in low:
+        pip = f"pip install {info.pip}" if info and info.pip else "pip install <driver>"
+        return f"The database driver is not installed. Run on the server: {pip} — then restart the backend."
+    if any(t in low for t in ("access denied", "password authentication failed", "login failed", "authentication failed")):
+        return f"Wrong username or password. ({raw})"
+    if any(t in low for t in ("unknown database", "cannot open database", "does not exist", "unable to open database")):
+        return f"Database not found — check its name. ({raw})"
+    if any(
+        t in low
+        for t in (
+            "timed out", "timeout", "can't connect", "cannot connect", "could not connect", "connection refused",
+            "name or service not known", "getaddrinfo", "no route to host", "unreachable", "adaptive server connection failed",
+        )
+    ):
+        return f"Cannot reach the server. Check the host and port, whether the VPN is on, and whether access is allowed. ({raw})"
+    return raw
+
+
 class ConnectionRegistry:
-    """Lazily creates one Engine per configured connection and caches schemas."""
+    """Holds the known connections, lazily creates one Engine per connection and caches schemas.
+
+    Connections can be added, replaced and removed at runtime (UI-managed databases).
+    """
 
     def __init__(self, configs: dict[str, ConnectionConfig], settings: Settings):
-        self.configs = configs
+        self._configs: dict[str, ConnectionConfig] = dict(configs)
         self.settings = settings
         self._engines: dict[str, Engine] = {}
         self._schemas: dict[tuple[str, str | None], _SchemaEntry] = {}
         self._lock = threading.Lock()
 
-    # -- engines -----------------------------------------------------------
-    def get_config(self, key: str) -> ConnectionConfig:
-        try:
-            return self.configs[key]
-        except KeyError:
-            raise KeyError(f"Unknown connection {key!r}") from None
+    # -- configs -----------------------------------------------------------
+    @property
+    def configs(self) -> dict[str, ConnectionConfig]:
+        """A snapshot copy (safe to iterate while connections are being edited)."""
+        with self._lock:
+            return dict(self._configs)
 
+    def get_config(self, key: str) -> ConnectionConfig:
+        with self._lock:
+            try:
+                return self._configs[key]
+            except KeyError:
+                raise KeyError(f"Unknown connection {key!r}") from None
+
+    def set_config(self, cfg: ConnectionConfig) -> None:
+        """Add or replace a connection; any open pool and cached schema for it is dropped."""
+        with self._lock:
+            self._drop_locked(cfg.key)
+            self._configs[cfg.key] = cfg
+
+    def remove(self, key: str) -> None:
+        with self._lock:
+            self._drop_locked(key)
+            self._configs.pop(key, None)
+
+    def _drop_locked(self, key: str) -> None:
+        engine = self._engines.pop(key, None)
+        if engine is not None:
+            engine.dispose()
+        for cache_key in [k for k in self._schemas if k[0] == key]:
+            del self._schemas[cache_key]
+
+    # -- engines -----------------------------------------------------------
     def get_engine(self, key: str) -> Engine:
         cfg = self.get_config(key)
         with self._lock:
             engine = self._engines.get(key)
             if engine is None:
-                engine = create_engine(
-                    _build_url(cfg),
-                    connect_args=_connect_args(cfg, self.settings),
-                    pool_size=self.settings.search_workers,
-                    max_overflow=0,
-                    pool_pre_ping=True,
-                    pool_recycle=1800,
-                )
-                _install_session_guards(engine, cfg, self.settings)
+                engine = build_engine(cfg, self.settings)
                 self._engines[key] = engine
             return engine
 

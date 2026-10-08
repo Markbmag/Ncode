@@ -1,11 +1,66 @@
 import axios from 'axios';
 
+const TOKEN_KEY = 'ncode_token';
+export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
+
+export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token: string | null): void => {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+};
+
 export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 export const WS_URL: string = API_URL.replace(/^http/, 'ws');
 
 export const http = axios.create({ baseURL: API_URL });
 
+// Attach the session token to every request.
+http.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.set('Authorization', `Bearer ${token}`);
+  return config;
+});
+
+// An expired/invalid session anywhere sends the user back to the login screen.
+http.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401 && getToken()) {
+      setToken(null);
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
+    return Promise.reject(error);
+  },
+);
+
+/** Pulls a readable message out of an API error (FastAPI puts it in `detail`). */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const detail: unknown = error.response?.data?.detail;
+    if (typeof detail === 'string' && detail) return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first: unknown = detail[0];
+      if (typeof first === 'object' && first !== null && 'msg' in first) return String((first as { msg: unknown }).msg);
+    }
+    if (!error.response) return 'Сервер недоступен. Проверьте, что backend запущен.';
+  }
+  return fallback;
+}
+
+// ---------------------------------------------------------------- types
+
 export type MatchMode = 'contains' | 'exact' | 'starts_with';
+
+export interface User {
+  username: string;
+  role: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  expires_at: number;
+  user: User;
+}
 
 export interface Connection {
   key: string;
@@ -13,6 +68,57 @@ export interface Connection {
   engine: string;
   database: string;
   id_hints: string[];
+  source: string; // "env" (from .env) | "ui" (managed in the interface)
+  editable: boolean;
+}
+
+export interface EngineOption {
+  name: string;
+  label: string;
+  default_port: number | null;
+  available: boolean;
+  pip: string | null;
+  file_based: boolean;
+}
+
+export interface ConnectionDetails {
+  key: string;
+  label: string;
+  engine: string;
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  has_password: boolean;
+  database: string;
+  schema_name: string | null;
+  id_hints: string[];
+  source: string;
+  editable: boolean;
+}
+
+export interface ConnectionPayload {
+  label: string;
+  engine: string;
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  password: string | null;
+  database: string;
+  schema_name: string | null;
+  id_hints: string[];
+  key?: string | null;
+}
+
+export interface DraftTestResult {
+  ok: boolean;
+  tables?: number;
+  error?: string;
+}
+
+export interface TableInfo {
+  name: string;
+  columns: number;
+  searchable: number;
 }
 
 export interface SearchHit {
@@ -42,4 +148,6 @@ export interface TaskMessage extends Partial<Progress> {
   errors?: TableError[];
   truncated_tables?: string[];
   results_capped?: boolean;
+  skipped?: number;
+  elapsed_sec?: number;
 }

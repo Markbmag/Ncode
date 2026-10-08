@@ -13,7 +13,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import String, cast, column, func, or_, select, table as sa_table
 from sqlalchemy import types as sqltypes
@@ -39,8 +39,9 @@ class SearchOptions:
     include_numeric: bool = False
     include_dates: bool = False
     row_limit: int = 10
-    include_tables: list[str] = field(default_factory=list)
-    exclude_tables: list[str] = field(default_factory=list)
+    tables: list[str] = field(default_factory=list)          # exact names; empty = all
+    include_tables: list[str] = field(default_factory=list)  # glob patterns
+    exclude_tables: list[str] = field(default_factory=list)  # glob patterns
     schema: str | None = None
     refresh_schema: bool = False
 
@@ -95,7 +96,9 @@ def filter_tables(names: list[str], opts: SearchOptions) -> list[str]:
     def hit(name: str, patterns: list[str]) -> bool:
         return any(fnmatchcase(name.lower(), p.lower()) for p in patterns)
 
-    selected = [n for n in names if not opts.include_tables or hit(n, opts.include_tables)]
+    exact = {t.lower() for t in opts.tables}
+    selected = [n for n in names if not exact or n.lower() in exact]
+    selected = [n for n in selected if not opts.include_tables or hit(n, opts.include_tables)]
     return [n for n in selected if not hit(n, opts.exclude_tables)]
 
 
@@ -201,6 +204,7 @@ def run_search(
     registry: ConnectionRegistry,
     opts: SearchOptions,
     settings: Settings,
+    on_finish: Callable[[SearchTask], None] | None = None,
 ) -> None:
     """Blocking; meant to run in a background thread. Updates `task` as it goes."""
     try:
@@ -230,13 +234,25 @@ def run_search(
     except Exception as exc:
         logger.exception("search task %s failed", task.id)
         task.finish("error", _short_error(exc))
+    if on_finish is not None:
+        try:
+            on_finish(task)
+        except Exception:
+            logger.exception("on_finish callback failed for task %s", task.id)
 
 
 def start_search_thread(
-    task: SearchTask, registry: ConnectionRegistry, opts: SearchOptions, settings: Settings
+    task: SearchTask,
+    registry: ConnectionRegistry,
+    opts: SearchOptions,
+    settings: Settings,
+    on_finish: Callable[[SearchTask], None] | None = None,
 ) -> threading.Thread:
     thread = threading.Thread(
-        target=run_search, args=(task, registry, opts, settings), name=f"ncode-task-{task.id[:8]}", daemon=True
+        target=run_search,
+        args=(task, registry, opts, settings, on_finish),
+        name=f"ncode-task-{task.id[:8]}",
+        daemon=True,
     )
     thread.start()
     return thread

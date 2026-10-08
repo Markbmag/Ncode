@@ -18,6 +18,7 @@ way you never have to URL-encode special characters such as ( ) @ / #.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 from dataclasses import dataclass, field
@@ -25,15 +26,44 @@ from typing import Mapping
 
 from dotenv import load_dotenv
 
-# Engine name (as written in .env) -> (SQLAlchemy driver name, default port)
-SUPPORTED_ENGINES: dict[str, tuple[str, int | None]] = {
-    "mysql": ("mysql+pymysql", 3306),
-    "mariadb": ("mysql+pymysql", 3306),
-    "postgresql": ("postgresql+psycopg", 5432),
-    "postgres": ("postgresql+psycopg", 5432),
-    "mssql": ("mssql+pymssql", 1433),
-    "sqlite": ("sqlite", None),
+@dataclass(frozen=True)
+class EngineInfo:
+    name: str                      # canonical name used everywhere
+    label: str                     # shown in the UI
+    driver: str                    # SQLAlchemy driver name
+    default_port: int | None
+    module: str | None             # python module that must be importable (None = built in)
+    pip: str | None                # what to pip install if the module is missing
+    file_based: bool = False       # sqlite: "database" is a file path, no host/user
+
+
+ENGINES: dict[str, EngineInfo] = {
+    "mysql": EngineInfo("mysql", "MySQL", "mysql+pymysql", 3306, "pymysql", "pymysql"),
+    "mariadb": EngineInfo("mariadb", "MariaDB", "mysql+pymysql", 3306, "pymysql", "pymysql"),
+    "postgresql": EngineInfo("postgresql", "PostgreSQL", "postgresql+psycopg", 5432, "psycopg", "psycopg[binary]"),
+    "mssql": EngineInfo("mssql", "SQL Server", "mssql+pymssql", 1433, "pymssql", "pymssql"),
+    "sqlite": EngineInfo("sqlite", "SQLite", "sqlite", None, None, None, file_based=True),
 }
+ENGINE_ALIASES = {"postgres": "postgresql", "pg": "postgresql", "sqlserver": "mssql", "mariadb": "mariadb"}
+
+# Kept for backwards compatibility: name -> (driver, default port)
+SUPPORTED_ENGINES: dict[str, tuple[str, int | None]] = {
+    name: (info.driver, info.default_port) for name, info in ENGINES.items()
+}
+
+
+def normalize_engine(name: str) -> str:
+    name = (name or "").strip().lower()
+    return ENGINE_ALIASES.get(name, name)
+
+
+def driver_available(engine: str) -> bool:
+    """True when the Python driver for this engine is installed."""
+    info = ENGINES.get(engine)
+    if info is None:
+        return False
+    return info.module is None or importlib.util.find_spec(info.module) is not None
+
 
 _CONN_VAR = re.compile(
     r"^NCODE_CONN_([A-Z0-9_]+?)_(ENGINE|HOST|PORT|USER|PASSWORD|DATABASE|SCHEMA|LABEL|ID_HINTS)$"
@@ -58,10 +88,12 @@ class ConnectionConfig:
     # Substrings of column names that identify a record (e.g. "vin", "serial").
     # The first matching column of a result row is returned as `id_column`.
     id_hints: tuple[str, ...] = ()
+    # Where the connection is defined: "env" (read-only, from .env) or "ui" (editable, stored encrypted)
+    source: str = "env"
 
     @property
     def driver(self) -> str:
-        return SUPPORTED_ENGINES[self.engine][0]
+        return ENGINES[self.engine].driver
 
     @property
     def is_mariadb(self) -> bool:
@@ -81,6 +113,15 @@ class Settings:
     task_ttl_sec: int = 3600             # finished tasks are forgotten after this
     schema_cache_ttl_sec: int = 600      # table/column metadata cache
     read_only_sessions: bool = True      # ask the DB to refuse writes (best effort)
+    # --- authentication / team usage ---
+    auth_enabled: bool = True            # NEVER turn off on a shared network
+    session_ttl_hours: int = 12
+    app_db_path: str = ""                # users + audit log; "" = backend/data/ncode.sqlite
+    max_concurrent_searches: int = 3     # running searches per user
+    login_max_failures: int = 5          # failed logins before a temporary lock
+    login_lock_sec: int = 300
+    # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
+    secret_key: str = field(default="", repr=False)
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -117,6 +158,13 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         task_ttl_sec=max(60, _int(env, "NCODE_TASK_TTL_SEC", defaults.task_ttl_sec)),
         schema_cache_ttl_sec=max(0, _int(env, "NCODE_SCHEMA_CACHE_TTL_SEC", defaults.schema_cache_ttl_sec)),
         read_only_sessions=_bool(env, "NCODE_READ_ONLY_SESSIONS", defaults.read_only_sessions),
+        auth_enabled=_bool(env, "NCODE_AUTH_ENABLED", defaults.auth_enabled),
+        session_ttl_hours=max(1, _int(env, "NCODE_SESSION_TTL_HOURS", defaults.session_ttl_hours)),
+        app_db_path=(env.get("NCODE_APP_DB") or "").strip(),
+        max_concurrent_searches=max(1, _int(env, "NCODE_MAX_CONCURRENT_SEARCHES", defaults.max_concurrent_searches)),
+        login_max_failures=max(1, _int(env, "NCODE_LOGIN_MAX_FAILURES", defaults.login_max_failures)),
+        login_lock_sec=max(1, _int(env, "NCODE_LOGIN_LOCK_SEC", defaults.login_lock_sec)),
+        secret_key=(env.get("NCODE_SECRET_KEY") or "").strip(),
     )
 
 
@@ -137,18 +185,18 @@ def load_connections(env: Mapping[str, str] | None = None) -> dict[str, Connecti
     connections: dict[str, ConnectionConfig] = {}
     for key_upper, values in sorted(raw.items()):
         key = key_upper.lower()
-        engine = (values.get("ENGINE") or "").strip().lower()
-        if engine not in SUPPORTED_ENGINES:
+        engine = normalize_engine(values.get("ENGINE") or "")
+        if engine not in ENGINES:
             raise ConfigError(
                 f"NCODE_CONN_{key_upper}_ENGINE must be one of "
-                f"{', '.join(sorted(SUPPORTED_ENGINES))}, got {engine!r}"
+                f"{', '.join(sorted(ENGINES))}, got {engine!r}"
             )
         database = (values.get("DATABASE") or "").strip()
         if not database:
             raise ConfigError(f"NCODE_CONN_{key_upper}_DATABASE is required")
 
         host = (values.get("HOST") or "").strip() or None
-        if engine != "sqlite" and not host:
+        if not ENGINES[engine].file_based and not host:
             raise ConfigError(f"NCODE_CONN_{key_upper}_HOST is required for engine {engine!r}")
 
         port_raw = (values.get("PORT") or "").strip()
@@ -158,7 +206,7 @@ def load_connections(env: Mapping[str, str] | None = None) -> dict[str, Connecti
             except ValueError as exc:
                 raise ConfigError(f"NCODE_CONN_{key_upper}_PORT must be an integer") from exc
         else:
-            port = SUPPORTED_ENGINES[engine][1]
+            port = ENGINES[engine].default_port
 
         hints = tuple(
             h.strip().lower() for h in (values.get("ID_HINTS") or "").split(",") if h.strip()

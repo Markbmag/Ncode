@@ -11,8 +11,9 @@ FINAL_STATUSES = ("completed", "cancelled", "error")
 
 
 class SearchTask:
-    def __init__(self, connection: str, phrase: str, max_results: int):
+    def __init__(self, connection: str, phrase: str, max_results: int, owner: str | None = None):
         self.id = str(uuid.uuid4())
+        self.owner = owner
         self.connection = connection
         self.phrase = phrase
         self.max_results = max_results
@@ -105,6 +106,7 @@ class SearchTask:
                 "errors": list(self.errors),
                 "truncated_tables": list(self.truncated_tables),
                 "results_capped": self.results_capped,
+                "elapsed_sec": round((self.finished_at or time.time()) - self.created_at, 2),
             }
             if include_results:
                 data["results"] = list(self.results)
@@ -118,8 +120,10 @@ class TaskStore:
         self._tasks: dict[str, SearchTask] = {}
         self._lock = threading.Lock()
 
-    def create(self, connection: str, phrase: str, max_results: int) -> SearchTask:
-        task = SearchTask(connection, phrase, max_results)
+    def create(
+        self, connection: str, phrase: str, max_results: int, owner: str | None = None
+    ) -> SearchTask:
+        task = SearchTask(connection, phrase, max_results, owner)
         with self._lock:
             self._cleanup_locked()
             self._tasks[task.id] = task
@@ -128,6 +132,10 @@ class TaskStore:
     def get(self, task_id: str) -> SearchTask | None:
         with self._lock:
             return self._tasks.get(task_id)
+
+    def running_count(self, owner: str | None) -> int:
+        with self._lock:
+            return sum(1 for t in self._tasks.values() if t.owner == owner and not t.is_final)
 
     def _cleanup_locked(self) -> None:
         now = time.time()
