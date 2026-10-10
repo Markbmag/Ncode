@@ -13,6 +13,7 @@
     DELETE /api/connections/{key}       (admin)
     POST   /api/connections/{key}/test
     GET    /api/connections/{key}/tables?refresh=false
+    GET    /api/connections/{key}/schema?refresh=false   tables, typed columns, keys, relationships
     GET    /api/connections/{key}/browse?table=...   paged rows, optional filter (q, mode ...)
     GET    /api/connections/{key}/structure?table=...
     GET    /api/connections/{key}/export?table=...   CSV stream (all rows or only matches)
@@ -47,6 +48,7 @@ from .config import ENGINES, ConnectionConfig, Settings, driver_available, norma
 from .crypto import CipherError
 from .db import ConnectionRegistry, describe_error, probe
 from .explore import browse_table, csv_stream, table_structure
+from .schema_graph import describe_schema
 from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, MatchMode, SearchRequest
 from .search import SearchOptions, classify_type, start_search_thread
 from .security import LoginThrottle, hash_password, hash_token, new_token, verify_password
@@ -398,6 +400,18 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 for name, cols in sorted(schema.items(), key=lambda item: item[0].lower())
             ]
         }
+
+    @app.get("/api/connections/{key}/schema")
+    def schema_v2(key: str, refresh: bool = Query(False), user: User = Depends(current_user)):
+        """Schema v2: every table with typed columns, primary keys, foreign keys and relationships."""
+        require_connection(key, user)
+        try:
+            columns = registry.get_schema(key, refresh=refresh)
+            primary, foreign = registry.get_keys(key, refresh=refresh)
+        except Exception as exc:
+            detail = describe_error(exc, registry.get_config(key).engine)
+            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+        return {"connection": key, **describe_schema(columns, primary, foreign)}
 
     # ------------------------------------------------------------------
     # explorer: browse one table, see its structure, export it

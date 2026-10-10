@@ -197,3 +197,52 @@ export interface Limits {
   max_row_limit: number;
   max_export_rows: number;
 }
+
+// ---------------------------------------------------------------- schema v2
+
+/** Column types normalised by the backend (app/schema_graph.py). */
+export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'time' | 'json' | 'binary' | 'unknown';
+
+export interface SchemaColumn {
+  name: string;
+  type: ColumnType;
+  db_type: string;
+  nullable: boolean;
+  primary_key: boolean;
+  foreign_key: { table: string; column: string } | null;
+}
+
+export interface SchemaTable {
+  name: string;
+  primary_key: string[];
+  columns: SchemaColumn[];
+}
+
+export interface Relationship {
+  from_table: string;
+  from_columns: string[];
+  to_table: string;
+  to_columns: string[];
+}
+
+export interface SchemaV2 {
+  connection: string;
+  version: 2;
+  tables: SchemaTable[];
+  relationships: Relationship[];
+}
+
+// ---------------------------------------------------------------- result envelope (used from M1 on)
+
+export interface ResultColumn {
+  name: string;
+  type: ColumnType;
+  role: 'dimension' | 'measure';
+}
+
+export interface ResultEnvelope {
+  columns: ResultColumn[];
+  rows: unknown[][];
+  stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean };
+  sql: string | null;
+}

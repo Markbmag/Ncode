@@ -4,6 +4,9 @@ Type a phrase, pick a database, and Ncode searches **every table and text column
 for it, showing matching rows with the matching fields highlighted. Works with
 MySQL / MariaDB, PostgreSQL, SQL Server and SQLite (via SQLAlchemy).
 
+Ncode is growing into a self-hosted data work and analysis platform (question builder, SQL
+editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 - **Connect databases from the UI** - no config files, no code (admins only).
 - **Choose where to search** - all tables, hand-picked tables, or skip patterns like `log_*`.
 - **Browse tables** - page through any table, sort by a column, filter rows, see its structure.
@@ -32,6 +35,17 @@ MySQL / MariaDB, PostgreSQL, SQL Server and SQLite (via SQLAlchemy).
     npm run dev
 
 Open http://localhost:5173.
+
+The app has one page per section (`/search`, `/browse`, `/admin` ...), so links and the browser's
+back button work. When you serve the built frontend (`npm run build` -> `dist/`) from your own web
+server, send unknown paths to `index.html` (for nginx: `try_files $uri /index.html;`).
+
+### Ncode's own database and upgrades
+
+Users, sessions, UI-added connections and the audit log live in `backend/data/ncode.sqlite`.
+Its tables are created and upgraded automatically (Alembic migrations in
+`backend/app/migrations`) every time the backend starts; an existing file keeps its data.
+**Back the file up before upgrading Ncode.** To migrate by hand: `cd backend && alembic upgrade head`.
 
 ### Tests
 
@@ -90,7 +104,7 @@ Binary columns (BLOBs) are never searched or returned.
 
 ## Browsing and exporting
 
-**Browse tables** (next to *Search* at the top): pick a table to page through its rows, click a
+**Browse** (in the sidebar): pick a table to page through its rows, click a
 column header to sort, type in the filter box to show only matching rows, open the **Structure**
 tab for column types and keys. Click any row for the full record.
 
@@ -119,6 +133,7 @@ Opening and exporting a table are written to the audit log.
     DELETE /api/connections/{key}               (admin) remove
     POST   /api/connections/{key}/test
     GET    /api/connections/{key}/tables
+    GET    /api/connections/{key}/schema?refresh=false   typed columns, primary/foreign keys, relationships
     GET    /api/connections/{key}/browse?table=...     paged rows (limit, offset, sort, desc, q, mode ...)
     GET    /api/connections/{key}/structure?table=...
     GET    /api/connections/{key}/export?table=...     CSV stream
@@ -129,6 +144,10 @@ Opening and exporting a table are written to the audit log.
     WS     /ws/{task_id}
 
 Interactive docs: http://localhost:8000/docs
+
+`/schema` normalises column types to `string`, `number`, `boolean`, `date`, `datetime`, `time`,
+`json`, `binary` or `unknown` (the original type is in `db_type`) and lists the foreign keys between
+visible tables as `relationships`. Admins can see it as **Admin -> Data model**.
 
 ## Users, permissions and audit
 

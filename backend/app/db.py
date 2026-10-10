@@ -32,6 +32,13 @@ class _SchemaEntry:
     tables: dict[str, list[dict[str, Any]]]
 
 
+@dataclass
+class _KeysEntry:
+    loaded_at: float
+    primary_keys: dict[str, list[str]]
+    foreign_keys: dict[str, list[dict[str, Any]]]
+
+
 def _build_url(cfg: ConnectionConfig) -> URL:
     if cfg.engine == "sqlite":
         return URL.create("sqlite", database=cfg.database)
@@ -153,6 +160,7 @@ class ConnectionRegistry:
         self.settings = settings
         self._engines: dict[str, Engine] = {}
         self._schemas: dict[tuple[str, str | None], _SchemaEntry] = {}
+        self._keys: dict[tuple[str, str | None], _KeysEntry] = {}
         self._lock = threading.Lock()
 
     # -- configs -----------------------------------------------------------
@@ -184,8 +192,9 @@ class ConnectionRegistry:
         engine = self._engines.pop(key, None)
         if engine is not None:
             engine.dispose()
-        for cache_key in [k for k in self._schemas if k[0] == key]:
-            del self._schemas[cache_key]
+        for cache in (self._schemas, self._keys):
+            for cache_key in [k for k in cache if k[0] == key]:
+                del cache[cache_key]
 
     # -- engines -----------------------------------------------------------
     def get_engine(self, key: str) -> Engine:
@@ -208,6 +217,7 @@ class ConnectionRegistry:
                 engine.dispose()
             self._engines.clear()
             self._schemas.clear()
+            self._keys.clear()
 
     # -- schema ------------------------------------------------------------
     def get_schema(
@@ -233,3 +243,41 @@ class ConnectionRegistry:
         with self._lock:
             self._schemas[cache_key] = _SchemaEntry(time.time(), tables)
         return tables
+
+    def get_keys(
+        self, key: str, schema: str | None = None, refresh: bool = False
+    ) -> tuple[dict[str, list[str]], dict[str, list[dict[str, Any]]]]:
+        """(primary keys, foreign keys) per base table, cached like get_schema.
+
+        Kept apart from get_schema so that search, which needs only columns, does
+        not pay for reflecting constraints. A database account that may not read
+        constraint metadata gets empty keys instead of an error.
+        """
+        cfg = self.get_config(key)
+        schema = schema or cfg.schema
+        cache_key = (key, schema)
+        ttl = self.settings.schema_cache_ttl_sec
+
+        with self._lock:
+            entry = self._keys.get(cache_key)
+        if entry and not refresh and ttl > 0 and (time.time() - entry.loaded_at) < ttl:
+            return entry.primary_keys, entry.foreign_keys
+
+        primary: dict[str, list[str]] = {}
+        foreign: dict[str, list[dict[str, Any]]] = {}
+        with self.get_engine(key).connect() as conn:
+            inspector = inspect(conn)
+            try:
+                pks = inspector.get_multi_pk_constraint(schema=schema, kind=ObjectKind.TABLE)
+                primary = {t: list(pk.get("constrained_columns") or []) for (_s, t), pk in pks.items()}
+            except Exception as exc:
+                logger.warning("[%s] cannot read primary keys: %s", key, exc)
+            try:
+                fks = inspector.get_multi_foreign_keys(schema=schema, kind=ObjectKind.TABLE)
+                foreign = {t: list(items) for (_s, t), items in fks.items()}
+            except Exception as exc:
+                logger.warning("[%s] cannot read foreign keys: %s", key, exc)
+
+        with self._lock:
+            self._keys[cache_key] = _KeysEntry(time.time(), primary, foreign)
+        return primary, foreign

@@ -4,6 +4,7 @@ sqlalchemy>=2.0.30
 python-dotenv>=1.0
 cryptography>=43   # encrypts database passwords saved from the UI
 pydantic>=2.7
+alembic>=1.13      # migrations of Ncode's own database
 
 # Database drivers - keep only the ones you need
 pymysql>=1.1            # MySQL / MariaDB
