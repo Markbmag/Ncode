@@ -21,9 +21,12 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import ConnectionConfig
 from .crypto import Cipher, CipherError
+from .migrate import upgrade
 
 logger = logging.getLogger(__name__)
 
+# Mirrors the latest migration (app/migrations/versions); the queries below use it.
+# Schema changes go into a new migration first, then here.
 metadata = MetaData()
 
 users_table = Table(
@@ -142,7 +145,7 @@ class AppDB:
         self.engine = create_engine(
             URL.create("sqlite", database=str(path)), connect_args={"timeout": 15}
         )
-        metadata.create_all(self.engine)
+        upgrade(self.engine)  # creates or migrates the tables (app/migrations)
 
     def dispose(self) -> None:
         self.engine.dispose()

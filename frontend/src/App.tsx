@@ -3,8 +3,10 @@ import { Flex, Spinner } from '@chakra-ui/react';
 import axios from 'axios';
 import { http, setToken, UNAUTHORIZED_EVENT } from './api';
 import type { User } from './api';
+import { queryClient } from './lib/queryClient';
 import Login from './Login';
-import Workspace from './Workspace';
+import { AppRoutes } from './routes';
+import { WorkspaceProvider } from './workspace/WorkspaceProvider';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +30,7 @@ function App() {
   // Any 401 from the API (expired session, password changed, user disabled)
   useEffect(() => {
     const handler = () => {
+      queryClient.clear(); // never show one user's data to the next
       setUser(null);
       setNotice('Your session has expired. Please sign in again.');
     };
@@ -42,6 +45,7 @@ function App() {
       // the local session is cleared anyway
     }
     setToken(null);
+    queryClient.clear();
     setUser(null);
     setNotice('');
   }, []);
@@ -62,7 +66,11 @@ function App() {
     return <Login onLoggedIn={setUser} notice={notice} />;
   }
 
-  return <Workspace user={user} onLogout={handleLogout} />;
+  return (
+    <WorkspaceProvider user={user} onLogout={handleLogout}>
+      <AppRoutes />
+    </WorkspaceProvider>
+  );
 }
 
 export default App;

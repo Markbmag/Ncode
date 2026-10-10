@@ -125,6 +125,15 @@ def _searchable_columns(columns: list[dict[str, Any]], opts: SearchOptions) -> l
     return result
 
 
+def build_conditions(columns: list[dict[str, Any]], opts: SearchOptions) -> list[Any]:
+    """One LIKE/equality condition per searchable column (to be OR-ed together)."""
+    conditions = []
+    for name, kind in _searchable_columns(columns, opts):
+        expr = column(name, String()) if kind == "text" else cast(column(name), String())
+        conditions.append(_predicate(expr, opts))
+    return conditions
+
+
 def _pick_id_column(row: dict[str, Any], cfg: ConnectionConfig) -> str | None:
     for hint in cfg.id_hints:
         for name in row:
@@ -154,10 +163,7 @@ def search_table(
         selected_names = [c["name"] for c in columns if classify_type(c["type"]) != "binary"]
         tbl = sa_table(table_name, *[column(n) for n in selected_names], schema=opts.schema or cfg.schema)
 
-        conditions = []
-        for name, kind in searchable:
-            expr = column(name, String()) if kind == "text" else cast(column(name), String())
-            conditions.append(_predicate(expr, opts))
+        conditions = build_conditions(columns, opts)
 
         # Fetch one extra row so we can tell the user the result was cut off.
         stmt = select(*[tbl.c[n] for n in selected_names]).where(or_(*conditions)).limit(opts.row_limit + 1)

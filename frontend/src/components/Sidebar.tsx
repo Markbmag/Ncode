@@ -1,8 +1,10 @@
 import {
   Avatar, Badge, Box, Button, Flex, HStack, IconButton, Text, Tooltip, VStack, useColorMode,
 } from '@chakra-ui/react';
+import { NavLink } from 'react-router-dom';
 import type { Connection, User } from '../api';
 import { LockIcon, LogOutIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
+import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 
 interface SidebarProps {
@@ -38,7 +40,7 @@ export function Logo() {
           Ncode
         </Text>
         <Text fontSize="xs" color="mutedText">
-          Search any database
+          Data workspace
         </Text>
       </Box>
     </HStack>
@@ -59,6 +61,52 @@ export function ColorModeButton() {
   );
 }
 
+/** The app's sections. `compact` is the horizontal strip used on small screens. */
+export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compact?: boolean }) {
+  return (
+    <Flex
+      as="nav"
+      aria-label="Sections"
+      direction={compact ? 'row' : 'column'}
+      gap={compact ? 1 : 0.5}
+      overflowX={compact ? 'auto' : undefined}
+    >
+      {NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly).map((item) => (
+        <Box
+          as={NavLink}
+          key={item.to}
+          to={item.to}
+          end={item.to === '/'}
+          display="flex"
+          alignItems="center"
+          gap={3}
+          px={3}
+          py={compact ? 1.5 : 2}
+          flexShrink={0}
+          borderRadius="lg"
+          fontSize="sm"
+          fontWeight={600}
+          color="mutedText"
+          _hover={{ bg: 'panelHover', color: 'bodyText' }}
+          sx={{ '&.active': { bg: 'rgba(99,102,241,0.14)', color: 'bodyText' } }}
+        >
+          <item.icon boxSize={4} />
+          <Text as="span" flex={1} whiteSpace="nowrap">
+            {item.label}
+          </Text>
+          {item.milestone && !compact && (
+            <Tooltip label={`Coming in milestone ${item.milestone} of the roadmap`} hasArrow>
+              <Badge fontSize="0.6rem" bg="chipBg" color="faintText" borderRadius="full" px={1.5}>
+                soon
+              </Badge>
+            </Tooltip>
+          )}
+        </Box>
+      ))}
+    </Flex>
+  );
+}
+
 export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEdit, user, onLogout }: SidebarProps) {
   return (
     <Flex
@@ -76,6 +124,10 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
     >
       <Box px={5} pt={5} pb={4}>
         <Logo />
+      </Box>
+
+      <Box px={3} pb={4}>
+        <NavLinks isAdmin={isAdmin} />
       </Box>
 
       <Flex px={5} pb={2} align="center" justify="space-between">

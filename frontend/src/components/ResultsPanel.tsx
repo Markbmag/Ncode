@@ -58,9 +58,10 @@ function cellText(value: unknown): string {
 interface ResultsPanelProps {
   state: SearchState;
   connectionLabel: string;
+  onOpenTable: (table: string) => void;
 }
 
-export function ResultsPanel({ state, connectionLabel }: ResultsPanelProps) {
+export function ResultsPanel({ state, connectionLabel, onOpenTable }: ResultsPanelProps) {
   const toast = useToast();
   const params = state.params;
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
@@ -216,9 +217,14 @@ export function ResultsPanel({ state, connectionLabel }: ResultsPanelProps) {
                   {columns.hidden > 0 && ` · ${columns.hidden} more column${columns.hidden === 1 ? '' : 's'} in the record view`}
                 </Text>
               </HStack>
-              <Text fontSize="xs" color="faintText" display={{ base: 'none', md: 'block' }}>
-                Click a row to open the full record
-              </Text>
+              <HStack spacing={3}>
+                <Text fontSize="xs" color="faintText" display={{ base: 'none', xl: 'block' }}>
+                  Click a row to open the full record
+                </Text>
+                <Button size="xs" variant="subtle" onClick={() => onOpenTable(group.table)}>
+                  {state.truncatedTables.includes(group.table) ? 'See all matches →' : 'Open in table view →'}
+                </Button>
+              </HStack>
             </Flex>
             <Box overflow="auto" maxH="580px">
               <Table size="sm" variant="simple">

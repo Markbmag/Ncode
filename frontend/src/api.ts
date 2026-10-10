@@ -47,6 +47,22 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Like apiErrorMessage, but also understands errors of requests made with responseType "blob". */
+export async function apiErrorMessageAsync(error: unknown, fallback: string): Promise<string> {
+  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+    try {
+      const parsed: unknown = JSON.parse(await error.response.data.text());
+      if (typeof parsed === 'object' && parsed !== null && 'detail' in parsed) {
+        const detail = (parsed as { detail: unknown }).detail;
+        if (typeof detail === 'string' && detail) return detail;
+      }
+    } catch {
+      // not JSON - fall through to the generic message
+    }
+  }
+  return apiErrorMessage(error, fallback);
+}
+
 // ---------------------------------------------------------------- types
 
 export type MatchMode = 'contains' | 'exact' | 'starts_with';
@@ -150,4 +166,83 @@ export interface TaskMessage extends Partial<Progress> {
   results_capped?: boolean;
   skipped?: number;
   elapsed_sec?: number;
+}
+
+export interface BrowseRow {
+  values: Record<string, unknown>;
+  matched: string[];
+}
+
+export interface BrowseResponse {
+  table: string;
+  columns: string[];
+  omitted: string[]; // binary columns that are not shown
+  rows: BrowseRow[];
+  has_more: boolean;
+  offset: number;
+  limit: number;
+  sort: string | null;
+  descending: boolean;
+  note: string | null;
+}
+
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+}
+
+export interface Limits {
+  max_row_limit: number;
+  max_export_rows: number;
+}
+
+// ---------------------------------------------------------------- schema v2
+
+/** Column types normalised by the backend (app/schema_graph.py). */
+export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'time' | 'json' | 'binary' | 'unknown';
+
+export interface SchemaColumn {
+  name: string;
+  type: ColumnType;
+  db_type: string;
+  nullable: boolean;
+  primary_key: boolean;
+  foreign_key: { table: string; column: string } | null;
+}
+
+export interface SchemaTable {
+  name: string;
+  primary_key: string[];
+  columns: SchemaColumn[];
+}
+
+export interface Relationship {
+  from_table: string;
+  from_columns: string[];
+  to_table: string;
+  to_columns: string[];
+}
+
+export interface SchemaV2 {
+  connection: string;
+  version: 2;
+  tables: SchemaTable[];
+  relationships: Relationship[];
+}
+
+// ---------------------------------------------------------------- result envelope (used from M1 on)
+
+export interface ResultColumn {
+  name: string;
+  type: ColumnType;
+  role: 'dimension' | 'measure';
+}
+
+export interface ResultEnvelope {
+  columns: ResultColumn[];
+  rows: unknown[][];
+  stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean };
+  sql: string | null;
 }

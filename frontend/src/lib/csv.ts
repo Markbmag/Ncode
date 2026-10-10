@@ -7,7 +7,7 @@ export type CsvDelimiter = ';' | ',';
  * like "+7 (999) 123" are left alone.
  */
 function neutralize(text: string): string {
-  return /^(?:[=@\t\r]|[+-](?![\d\s.()-]))/.test(text) ? `'${text}` : text;
+  return /^(?:[=@\t\r]|[+-](?=[^\d\s.()-]))/.test(text) ? `'${text}` : text;
 }
 
 export function cellToString(value: unknown): string {
@@ -34,9 +34,8 @@ export function buildCsv(
   return lines.join('\r\n') + '\r\n';
 }
 
-/** Saves text as a file. A UTF-8 BOM makes Excel open Cyrillic correctly. */
-export function downloadText(filename: string, text: string): void {
-  const blob = new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' });
+/** Hands a Blob to the browser as a file download. */
+export function saveBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -45,6 +44,11 @@ export function downloadText(filename: string, text: string): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Saves text as a file. A UTF-8 BOM makes Excel open Cyrillic correctly. */
+export function downloadText(filename: string, text: string): void {
+  saveBlob(filename, new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' }));
 }
 
 export function safeFilename(...parts: string[]): string {
