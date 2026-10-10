@@ -53,6 +53,18 @@ Its tables are created and upgraded automatically (Alembic migrations in
     pip install -r requirements-dev.txt
     pytest
 
+The query engine is also tested against real servers when you point it at **empty scratch
+databases** (the tests create and drop tables named `q_*` - never use production):
+
+    NCODE_TEST_PG_URL=postgresql+psycopg://user:pass@host:5432/scratch \
+    NCODE_TEST_MYSQL_URL=mysql+pymysql://user:pass@host:3306/scratch \
+    NCODE_TEST_MSSQL_URL=mssql+pymssql://user:pass@host:1433/scratch \
+    pytest tests/test_query_live.py
+
+Without these variables those tests are skipped. `tests/golden/query/` holds the exact SQL each
+question compiles to on each database; after an intended change run `UPDATE_GOLDEN=1 pytest` and
+review the diff.
+
 ## Adding a database
 
 ### From the interface (recommended)
@@ -138,12 +150,62 @@ Opening and exporting a table are written to the audit log.
     GET    /api/connections/{key}/structure?table=...
     GET    /api/connections/{key}/export?table=...     CSV stream
     GET    /api/limits
+    POST   /api/query                 {"spec": {...}}             run a question (see below)
+    POST   /api/query/compile         {"spec": {...}}             the SQL a question runs, without running it
+    POST   /api/query/sql             {"connection", "sql", "params"}   SQL mode (read-only)
+    POST   /api/query/sql/check       {"connection", "sql"}       is this SQL allowed? which {{params}}?
+    GET    /api/query/tasks/{id}      poll a long query           DELETE: cancel it
     POST   /api/search            {"connection": "mes", "phrase": "..."}  -> {"task_id"}
     GET    /api/search/{task_id}
     DELETE /api/search/{task_id}  (cancel)
     WS     /ws/{task_id}
 
 Interactive docs: http://localhost:8000/docs
+
+### Questions (query engine)
+
+A *question* is JSON, so the visual builder (M2), saved questions and dashboards all share it:
+
+    {"connection": "mes", "source": {"table": "orders"},
+     "joins": [{"table": "customers"}],
+     "aggregations": [{"fn": "sum", "ref": "orders.total", "alias": "revenue"},
+                      {"fn": "count_distinct", "ref": "orders.customer_id", "alias": "buyers"}],
+     "breakouts": [{"ref": "orders.created_at", "bucket": "month"}, {"ref": "customers.region"}],
+     "filters": {"op": "and", "rules": [{"ref": "orders.status", "op": "=", "value": "paid"},
+                                        {"ref": "orders.created_at", "op": "last", "value": {"amount": 12, "unit": "month"}}]},
+     "having": [{"ref": "revenue", "op": ">", "value": 1000}],
+     "order": [{"ref": "revenue", "dir": "desc"}],
+     "limit": 1000}
+
+- **Joins** without `on` follow foreign keys, also through tables in between
+  (customers -> orders -> order_items -> products). If no path exists you get an error, never a
+  silently dropped join. Give `on` (and an `alias`) to join on anything else.
+- **Aggregations**: count, count_distinct, sum, avg, min, max. **Breakouts** group by a column, a
+  date `bucket` (minute ... year; weeks start on Monday) or a number `bin_width`.
+- **Filters** nest `and`/`or` groups. Operators depend on the column type: `= != > >= < <= between
+  in not_in is_null not_null is_empty not_empty contains not_contains starts_with ends_with is_true
+  is_false last current`. Text matching ignores case unless `"case_sensitive": true`; `%` and `_`
+  are matched literally. `!=`, `not_in` and `not_contains` keep empty (NULL) values.
+- **Custom columns** (`"expressions"`): `+ - * /` (division by zero gives empty, not an error),
+  `coalesce`, `nullif`, `lower`, `upper`, `trim`, `length`, `abs`, `round`, `concat` and
+  `case`/`when`, usable everywhere a column is.
+- Every name is checked against the real schema and every value is sent as a parameter.
+
+A run answers `{"task_id", "status", "result", "error"}`. The `result` is the same envelope for
+questions and SQL: `columns` (name, type, role), `rows` as arrays, `stats` (duration, row count,
+`truncated`, `cached`) and the `sql` that ran. Results are capped at `NCODE_QUERY_MAX_ROWS` and
+identical runs within `NCODE_QUERY_CACHE_TTL_SEC` are served from a short cache (`"refresh": true`
+skips it).
+
+### SQL mode
+
+`POST /api/query/sql` runs one read-only query, exactly as written. `{{name}}` placeholders become
+parameters (`"params": {"name": "EU"}`); write them without quotes. Before running, the SQL is
+parsed in the database's own dialect and refused unless it is a single `SELECT` / `WITH ... SELECT`
+/ `UNION`, without writes, `SELECT ... INTO`, locking clauses or functions that touch files,
+sleep or reach other servers (`LOAD_FILE`, `SLEEP`, `pg_sleep`, `pg_read_file`, `xp_cmdshell`,
+`OPENROWSET` ...). Only admins may read system catalogs (`information_schema`, `pg_catalog`, `sys`
+...). Rows are capped per database without rewriting your SQL, so `ORDER BY` and `WITH` keep working.
 
 `/schema` normalises column types to `string`, `number`, `boolean`, `date`, `datetime`, `time`,
 `json`, `binary` or `unknown` (the original type is in `db_type`) and lists the foreign keys between
@@ -180,7 +242,12 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
   trusted network/VPN. Traffic is plain HTTP; put it behind HTTPS (reverse proxy) before
   using it outside a trusted LAN, otherwise passwords can be sniffed.
 - Sessions are opened read-only where the database supports it, but the real
-  protection is a database user that only has `SELECT`.
+  protection is a database user that only has `SELECT`. **SQL Server has no read-only session
+  switch**: there, SQL mode relies on the SQL guard and on the login's permissions, so give Ncode a
+  login with `db_datareader` only. A MySQL account must not have the `FILE` privilege.
+- Queries (questions and SQL mode) stop after `NCODE_STATEMENT_TIMEOUT_SEC`; users can cancel
+  them; each user may run `NCODE_MAX_CONCURRENT_QUERIES` at once; every run is in the audit log
+  (action `query` or `sql`, with the SQL).
 - Searching with `LIKE '%text%'` scans whole tables. On very large databases use
   `include_tables` / `exclude_tables` and the per-query timeout
   (`NCODE_STATEMENT_TIMEOUT_SEC`).

@@ -1,6 +1,6 @@
 # Ncode → data work & analysis platform
 
-**Status:** agreed plan v1 · M0 delivered, waiting for the checklist · **Owner:** Mark · **Last updated:** 2026-10-10
+**Status:** agreed plan v1 · M0 and M1 delivered, both waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
 
 This document is the single source of truth for where Ncode is going. It contains the
 analysis of the *DataDesk* low-code project ("Low-code-draft"), what we borrow from it, the
@@ -228,8 +228,9 @@ Order is fixed; M0–M5 form **release v1.0 "Analytics core"**.
 
 | Milestone | Status |
 |---|---|
-| M0 | Delivered on branch `claude/charming-fermi-jknknw`; checklist: [docs/checklists/M0.md](checklists/M0.md) |
-| M1–M9 | Not started |
+| M0 | Delivered on branch `claude/charming-fermi-jknknw`; checklist: [docs/checklists/M0.md](checklists/M0.md) (deferred by Mark) |
+| M1 | Delivered on the same branch; checklist: [docs/checklists/M1.md](checklists/M1.md) |
+| M2–M9 | Not started |
 
 ```mermaid
 flowchart LR
@@ -263,12 +264,12 @@ flowchart LR
   no DML/DDL/commands, no `SELECT … INTO`, no locking clauses, per-dialect denylist of dangerous functions
   (`LOAD_FILE`, `SLEEP`, `BENCHMARK`, `pg_sleep`, `pg_read_file`, `lo_import`, `xp_cmdshell`, `OPENROWSET`, …),
   optional table allow-list (system schemas hidden unless admin), `{{param}}` → bound parameters.
-- **`query/runner.py`** thread pool execution, wrap-for-limit, statement timeout, row cap, task with cancel, TTL result cache
+- **`query/runner.py`** thread pool execution, row cap per engine (replaces wrap-for-limit, see changelog), statement timeout, task with cancel, TTL result cache
   (permission is checked before cache lookup), audit entries, per-user concurrency limit.
 - **Endpoints:** `POST /api/query`, `POST /api/query/sql`, `POST /api/query/compile` (SQL without running), task status/cancel.
 - **Borrowed:** whitelist approach, spec shape, wrap-for-limit, limits (`MAX_ROW_LIMIT`, timeout), operator set, FK join inference.
 - **Tests:** golden SQL for 4 dialects, SQLite execution, a guard suite that includes every DataDesk failure from §4 as a regression test.
-- **New deps:** `sqlglot`.
+- **New deps:** `sqlglot` (pinned `>=30.19,<31`).
 - **Done when:** all tests pass; a grouped, joined, bucketed query runs through `/docs`; `LOAD_FILE`/`SLEEP` are rejected and `REPLACE()` is accepted.
 
 ### M2 · Visual builder & SQL editor (UI) — L
@@ -432,4 +433,6 @@ natural-language questions (LLM) · mobile layout polish.
 |---|---|
 | 2026-10-09 | Plan v1 created from the DataDesk analysis |
 | 2026-10-10 | Ncode v5 imported as the baseline (fixes: one wrong test, `framer-motion` 6 → 11 for React 19 types, lint errors, leftover files removed) |
+| 2026-10-10 | M1 started before the M0 checklist was run (Mark's call); M0 checklist findings are fixed alongside later work. M1 stays on the same branch as M0 (the session's designated branch), tags `m0`/`m1` once the checklists pass |
+| 2026-10-10 | M1 delivered. Decisions: (1) SQL mode does **not** wrap the user's SQL in a sub-select (that breaks `ORDER BY`/`WITH` on SQL Server); rows are capped per engine instead: PostgreSQL server-side cursor (which also refuses a 2nd statement), MySQL `sql_select_limit`, SQL Server `SET ROWCOUNT`, SQLite lazy fetch. (2) The guard adds MySQL-specific checks because sqlglot and MySQL read comments differently (`--1` and `/*! */`); MySQL sessions turn off `NO_BACKSLASH_ESCAPES` for the same reason. (3) Join types are inner/left/full; right joins are left out (swap the tables). (4) Relative date filters (`last`, `current`) moved forward from M2 into the spec. (5) MySQL vs MariaDB is detected from the server, not the label, so timeouts always apply. Verified on PostgreSQL 16, MariaDB 10.11 and SQL Server 2022 as well as SQLite |
 | 2026-10-10 | M0 delivered. Additions beyond the plan: an Admin → *Data model* screen that shows schema v2, and `find_join_path` (FK-graph path search) moved forward from M1 because the graph module needed it to be testable. Working agreement item 3 updated: my environment can now run the tests, build and a browser check |

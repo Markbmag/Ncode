@@ -63,6 +63,7 @@ def build_envelope(
     rows: Sequence[Sequence[Any]],
     *,
     db_types: Sequence[Any] | None = None,
+    column_types: Sequence[str] | None = None,
     duration_ms: float = 0,
     truncated: bool = False,
     cached: bool = False,
@@ -70,13 +71,19 @@ def build_envelope(
 ) -> ResultEnvelope:
     """Builds the envelope from raw driver rows.
 
-    db_types (SQLAlchemy types, e.g. from a compiled Select) win where they are
-    known; otherwise the type is inferred from the values, because a DB-API cursor
-    does not reliably say what a column of a raw SQL query is.
+    column_types (already normalised, e.g. from the query compiler) or db_types
+    (SQLAlchemy types) win where they are known; otherwise the type is inferred from
+    the values, because a DB-API cursor does not reliably say what a column of a raw
+    SQL query is.
     """
     columns = []
     for i, name in enumerate(names):
-        type_ = normalize_type(db_types[i]) if db_types is not None and i < len(db_types) else "unknown"
+        if column_types is not None and i < len(column_types):
+            type_ = column_types[i]
+        elif db_types is not None and i < len(db_types):
+            type_ = normalize_type(db_types[i])
+        else:
+            type_ = "unknown"
         if type_ == "unknown":
             type_ = infer_type(row[i] for row in rows)
         columns.append(ResultColumn(name=name, type=type_, role=column_role(name, type_)))

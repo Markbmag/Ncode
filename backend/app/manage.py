@@ -149,6 +149,11 @@ def main(argv: list[str] | None = None) -> None:
                     f"found={r.found} errors={r.error_count} "
                     f"time={'%.1fs' % r.duration_sec if r.duration_sec is not None else '-'}"
                 )
+            elif r.action in ("query", "sql"):
+                detail = (
+                    f"conn={r.connection} status={r.status} rows={r.found} "
+                    f"time={'%.1fs' % r.duration_sec if r.duration_sec is not None else '-'} sql={r.phrase!r}"
+                )
             print(f"{when}  {r.username or '-':<16} {r.action:<13} {detail}")
 
     db.dispose()

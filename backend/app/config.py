@@ -121,6 +121,12 @@ class Settings:
     max_concurrent_searches: int = 3     # running searches per user
     login_max_failures: int = 5          # failed logins before a temporary lock
     login_lock_sec: int = 300
+    # --- questions and SQL mode (query engine) ---
+    query_default_rows: int = 2000       # rows returned when a question does not say
+    query_max_rows: int = 10000          # hard cap per question / SQL query
+    query_cache_ttl_sec: int = 60        # identical questions within this time reuse the result; 0 = off
+    max_concurrent_queries: int = 3      # running questions per user
+    query_workers: int = 8               # questions running at once on this server
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
 
@@ -167,6 +173,11 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         login_max_failures=max(1, _int(env, "NCODE_LOGIN_MAX_FAILURES", defaults.login_max_failures)),
         login_lock_sec=max(1, _int(env, "NCODE_LOGIN_LOCK_SEC", defaults.login_lock_sec)),
         secret_key=(env.get("NCODE_SECRET_KEY") or "").strip(),
+        query_default_rows=max(1, _int(env, "NCODE_QUERY_DEFAULT_ROWS", defaults.query_default_rows)),
+        query_max_rows=max(1, _int(env, "NCODE_QUERY_MAX_ROWS", defaults.query_max_rows)),
+        query_cache_ttl_sec=max(0, _int(env, "NCODE_QUERY_CACHE_TTL_SEC", defaults.query_cache_ttl_sec)),
+        max_concurrent_queries=max(1, _int(env, "NCODE_MAX_CONCURRENT_QUERIES", defaults.max_concurrent_queries)),
+        query_workers=max(1, _int(env, "NCODE_QUERY_WORKERS", defaults.query_workers)),
     )
 
 

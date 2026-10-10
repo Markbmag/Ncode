@@ -70,28 +70,41 @@ def _connect_args(cfg: ConnectionConfig, settings: Settings) -> dict[str, Any]:
     return {}
 
 
-def _install_session_guards(engine: Engine, cfg: ConnectionConfig, settings: Settings) -> None:
-    """Best-effort extras that can only be set with SQL after connecting."""
+def _session_statements(cfg: ConnectionConfig, settings: Settings, dbapi_connection: Any) -> list[str]:
     statements: list[str] = []
     if cfg.engine in ("mysql", "mariadb"):
+        # Ask the server what it is: a MariaDB server added as "MySQL" (or the other way
+        # round) would otherwise get the wrong timeout setting, i.e. no timeout at all.
+        try:
+            server = str(dbapi_connection.get_server_info() or "")
+        except Exception:
+            server = ""
+        mariadb = "mariadb" in server.lower() if server else cfg.is_mariadb
         timeout = settings.statement_timeout_sec
-        if cfg.is_mariadb:
+        if mariadb:
             statements.append(f"SET SESSION max_statement_time = {timeout}")
         else:
             statements.append(f"SET SESSION max_execution_time = {timeout * 1000}")
         if settings.read_only_sessions:
             statements.append("SET SESSION TRANSACTION READ ONLY")
+        # The SQL guard treats a backslash before a quote as an escape, as MySQL does by
+        # default; make sure the server agrees, or a crafted string could hide SQL from it.
+        statements.append("SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'NO_BACKSLASH_ESCAPES', '')")
     elif cfg.engine == "sqlite" and settings.read_only_sessions:
         statements.append("PRAGMA query_only = ON")
+    return statements
 
-    if not statements:
+
+def _install_session_guards(engine: Engine, cfg: ConnectionConfig, settings: Settings) -> None:
+    """Best-effort extras that can only be set with SQL after connecting."""
+    if cfg.engine not in ("mysql", "mariadb", "sqlite"):
         return
 
     @event.listens_for(engine, "connect")
-    def _on_connect(dbapi_connection, _record):  # pragma: no cover - needs a live DB
+    def _on_connect(dbapi_connection, _record):
         cursor = dbapi_connection.cursor()
         try:
-            for statement in statements:
+            for statement in _session_statements(cfg, settings, dbapi_connection):
                 try:
                     cursor.execute(statement)
                 except Exception as exc:  # old server versions may not support it
