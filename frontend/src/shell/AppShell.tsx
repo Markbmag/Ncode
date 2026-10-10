@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { Box, Flex, HStack, IconButton, Skeleton, VStack } from '@chakra-ui/react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { ColorModeButton, Logo, NavLinks, Sidebar } from '../components/Sidebar';
 import { LogOutIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -15,8 +15,12 @@ function PageFallback() {
 }
 
 /** Sidebar (sections + databases) around the current page. */
+// Work surfaces that use the whole window (editor + results side by side).
+const WIDE_PAGES = ['/questions', '/sql'];
+
 export default function AppShell() {
   const ws = useWorkspace();
+  const wide = WIDE_PAGES.includes(useLocation().pathname);
   return (
     <Flex minH="100vh" align="flex-start">
       <Sidebar
@@ -44,7 +48,13 @@ export default function AppShell() {
           </Box>
         </Box>
 
-        <Box maxW="1180px" mx="auto" px={{ base: 4, md: 8 }} py={{ base: 5, md: 8 }}>
+        <Box
+          maxW={wide ? 'none' : '1180px'}
+          mx="auto"
+          px={wide ? { base: 3, md: 4 } : { base: 4, md: 8 }}
+          py={wide ? 3 : { base: 5, md: 8 }}
+          h={wide ? { base: 'auto', md: '100vh' } : undefined}
+        >
           <Suspense fallback={<PageFallback />}>
             <Outlet />
           </Suspense>

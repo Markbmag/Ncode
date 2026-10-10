@@ -1,6 +1,6 @@
 # Ncode → data work & analysis platform
 
-**Status:** agreed plan v1 · M0 and M1 delivered, both waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
+**Status:** agreed plan v1 · M0–M2 delivered, waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
 
 This document is the single source of truth for where Ncode is going. It contains the
 analysis of the *DataDesk* low-code project ("Low-code-draft"), what we borrow from it, the
@@ -230,7 +230,8 @@ Order is fixed; M0–M5 form **release v1.0 "Analytics core"**.
 |---|---|
 | M0 | Delivered on branch `claude/charming-fermi-jknknw`; checklist: [docs/checklists/M0.md](checklists/M0.md) (deferred by Mark) |
 | M1 | Delivered on the same branch; checklist: [docs/checklists/M1.md](checklists/M1.md) |
-| M2–M9 | Not started |
+| M2 | Delivered on the same branch; checklist: [docs/checklists/M2.md](checklists/M2.md) (Mark tests M0–M2 together) |
+| M3–M9 | Not started |
 
 ```mermaid
 flowchart LR
@@ -281,7 +282,7 @@ flowchart LR
   run selection, `{{param}}` inputs, local history, formatter, resizable panes.
 - **Results table v2:** virtualised, resizable columns, copy cell, type-aware formatting, optional smart-date rendering.
 - **Borrowed:** `FilterBuilder` operator logic, `FieldSelector`, `buildQuerySpec` FK logic, `SqlPreview`, `ResizableSplit`, SQL page UX.
-- **New deps:** CodeMirror 6 packages, `react-resizable-panels`, `@tanstack/react-virtual`, `sql-formatter`.
+- **New deps:** CodeMirror 6 packages, `react-resizable-panels`, `@tanstack/react-virtual`, `sql-formatter` (all ≥ 2 weeks old when added).
 - **Done when:** a non-SQL user builds "revenue by month by region" in under a minute and opens it as SQL.
 
 ### M3 · Visualisation engine — L
@@ -433,6 +434,7 @@ natural-language questions (LLM) · mobile layout polish.
 |---|---|
 | 2026-10-09 | Plan v1 created from the DataDesk analysis |
 | 2026-10-10 | Ncode v5 imported as the baseline (fixes: one wrong test, `framer-motion` 6 → 11 for React 19 types, lint errors, leftover files removed) |
+| 2026-10-10 | M2 delivered. Decisions: (1) frontend unit tests use Node's built-in test runner (`npm test`, Node 22+) instead of vitest, whose optional peer dependencies make npm 10 crash during install; README now asks for Node 22+ (Node 20 is end-of-life, Vite 8 needs 20.19+/22.12+). (2) Queries start with a short server wait (400 ms) so *Stop* can cancel at once; long-polling follows. (3) Questions are drafts kept per browser tab until saving arrives in M4. (4) Result-column renaming (alias) for metrics is in; custom columns use a small formula language (`[col]`, + − × ÷, coalesce, nullif, lower, upper, trim, length, abs, round, concat, case). Verified end-to-end in a browser against PostgreSQL 16: "revenue by month by region" built and opened as SQL in < 10 s of scripted clicks |
 | 2026-10-10 | M1 started before the M0 checklist was run (Mark's call); M0 checklist findings are fixed alongside later work. M1 stays on the same branch as M0 (the session's designated branch), tags `m0`/`m1` once the checklists pass |
 | 2026-10-10 | M1 delivered. Decisions: (1) SQL mode does **not** wrap the user's SQL in a sub-select (that breaks `ORDER BY`/`WITH` on SQL Server); rows are capped per engine instead: PostgreSQL server-side cursor (which also refuses a 2nd statement), MySQL `sql_select_limit`, SQL Server `SET ROWCOUNT`, SQLite lazy fetch. (2) The guard adds MySQL-specific checks because sqlglot and MySQL read comments differently (`--1` and `/*! */`); MySQL sessions turn off `NO_BACKSLASH_ESCAPES` for the same reason. (3) Join types are inner/left/full; right joins are left out (swap the tables). (4) Relative date filters (`last`, `current`) moved forward from M2 into the spec. (5) MySQL vs MariaDB is detected from the server, not the label, so timeouts always apply. Verified on PostgreSQL 16, MariaDB 10.11 and SQL Server 2022 as well as SQLite |
 | 2026-10-10 | M0 delivered. Additions beyond the plan: an Admin → *Data model* screen that shows schema v2, and `find_join_path` (FK-graph path search) moved forward from M1 because the graph module needed it to be testable. Working agreement item 3 updated: my environment can now run the tests, build and a browser check |

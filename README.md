@@ -10,6 +10,10 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
 - **Connect databases from the UI** - no config files, no code (admins only).
 - **Choose where to search** - all tables, hand-picked tables, or skip patterns like `log_*`.
 - **Browse tables** - page through any table, sort by a column, filter rows, see its structure.
+- **Ask questions without SQL** - pick a table, join related tables, filter, summarise (sum, count,
+  average ... by month, by region) and sort, with a live preview. One click shows the SQL.
+- **SQL editor** - read-only SQL with autocomplete from your schema, `{{parameters}}`, history and
+  formatting; unsafe statements are refused before they reach the database.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Team ready** - logins, per-user database access, an audit log.
 
@@ -28,7 +32,7 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
     cd backend
     python -m app.manage create-user yourname --admin      # asks for a password
 
-### Frontend (Node 20+)
+### Frontend (Node 22+)
 
     cd frontend
     npm install
@@ -52,6 +56,9 @@ Its tables are created and upgraded automatically (Alembic migrations in
     cd backend
     pip install -r requirements-dev.txt
     pytest
+
+    cd frontend
+    npm test          # query builder logic (Node's built-in test runner, no extra packages)
 
 The query engine is also tested against real servers when you point it at **empty scratch
 databases** (the tests create and drop tables named `q_*` - never use production):
@@ -113,6 +120,43 @@ Use a **read-only** database account.
 | `include_tables` / `exclude_tables` | glob patterns, e.g. `["log_*"]` |
 
 Binary columns (BLOBs) are never searched or returned.
+
+## Questions (no SQL needed)
+
+**Questions** in the sidebar is a step-by-step builder for the database selected in the sidebar:
+
+1. **Data** - the table to start from.
+2. **Join** - *Join data* lists the tables related by foreign keys (also through tables in
+   between, e.g. customers → orders → products) and joins them automatically. Other tables can be
+   joined on columns you choose.
+3. **Custom columns** - formulas such as `[total] - [discount]`, `round([total] / [qty], 2)`,
+   `coalesce([status], 'none')` or `case([total] >= 100, 'big', 'small')`.
+4. **Filter** - conditions that fit the column type (text contains, number between, dates "in the
+   last 30 days" / "this month" ...), combined with *all* / *any* and nested groups.
+5. **Summarise** - metrics (count, number of distinct, sum, average, min, max) grouped by columns;
+   dates can be grouped by day, week (Monday), month, quarter or year, numbers in ranges.
+6. **Filter the summary**, **Sort**, **Row limit**.
+
+The result updates as you build (*Live preview*; turn it off for slow databases and press **Run**
+or Ctrl/Cmd+Enter). **View SQL** shows the exact SQL; **Open in SQL editor** continues there.
+The question is kept while the browser tab is open; saving questions comes with milestone M4.
+
+## SQL editor
+
+**SQL editor** in the sidebar: the database's tables and columns on the left (click to insert a
+name, *SELECT* to insert a query), the editor, and the result below.
+
+- Ctrl/Cmd+Enter runs the query, or only the selected part. *Stop* cancels it in the database.
+- Autocomplete knows your tables and columns; *Format* tidies the SQL; *History* keeps your last
+  queries (in this browser only).
+- `{{name}}` in the SQL becomes an input field; values are sent as parameters, never pasted into
+  the SQL. Choose *Number* for numeric values.
+- A badge says whether the query passes the read-only check before you run it.
+
+Both pages share the result grid: it scrolls smoothly through thousands of rows, columns can be
+resized by dragging the header edge, a click selects a cell and Ctrl/Cmd+C (or a double-click)
+copies it. **Smart dates** shows dates stored as text (`31.01.2026`) or unix time as real dates.
+Results can be downloaded as CSV.
 
 ## Browsing and exporting
 
