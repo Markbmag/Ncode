@@ -110,6 +110,7 @@ class Settings:
     default_row_limit: int = 10          # rows returned per table
     max_row_limit: int = 200
     max_total_results: int = 1000        # cap on rows kept per search task
+    max_export_rows: int = 50_000        # cap on rows in one CSV export
     task_ttl_sec: int = 3600             # finished tasks are forgotten after this
     schema_cache_ttl_sec: int = 600      # table/column metadata cache
     read_only_sessions: bool = True      # ask the DB to refuse writes (best effort)
@@ -155,6 +156,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         default_row_limit=max(1, _int(env, "NCODE_DEFAULT_ROW_LIMIT", defaults.default_row_limit)),
         max_row_limit=max(1, _int(env, "NCODE_MAX_ROW_LIMIT", defaults.max_row_limit)),
         max_total_results=max(1, _int(env, "NCODE_MAX_TOTAL_RESULTS", defaults.max_total_results)),
+        max_export_rows=max(1, _int(env, "NCODE_MAX_EXPORT_ROWS", defaults.max_export_rows)),
         task_ttl_sec=max(60, _int(env, "NCODE_TASK_TTL_SEC", defaults.task_ttl_sec)),
         schema_cache_ttl_sec=max(0, _int(env, "NCODE_SCHEMA_CACHE_TTL_SEC", defaults.schema_cache_ttl_sec)),
         read_only_sessions=_bool(env, "NCODE_READ_ONLY_SESSIONS", defaults.read_only_sessions),

@@ -47,6 +47,22 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** Like apiErrorMessage, but also understands errors of requests made with responseType "blob". */
+export async function apiErrorMessageAsync(error: unknown, fallback: string): Promise<string> {
+  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+    try {
+      const parsed: unknown = JSON.parse(await error.response.data.text());
+      if (typeof parsed === 'object' && parsed !== null && 'detail' in parsed) {
+        const detail = (parsed as { detail: unknown }).detail;
+        if (typeof detail === 'string' && detail) return detail;
+      }
+    } catch {
+      // not JSON - fall through to the generic message
+    }
+  }
+  return apiErrorMessage(error, fallback);
+}
+
 // ---------------------------------------------------------------- types
 
 export type MatchMode = 'contains' | 'exact' | 'starts_with';
@@ -150,4 +166,34 @@ export interface TaskMessage extends Partial<Progress> {
   results_capped?: boolean;
   skipped?: number;
   elapsed_sec?: number;
+}
+
+export interface BrowseRow {
+  values: Record<string, unknown>;
+  matched: string[];
+}
+
+export interface BrowseResponse {
+  table: string;
+  columns: string[];
+  omitted: string[]; // binary columns that are not shown
+  rows: BrowseRow[];
+  has_more: boolean;
+  offset: number;
+  limit: number;
+  sort: string | null;
+  descending: boolean;
+  note: string | null;
+}
+
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+}
+
+export interface Limits {
+  max_row_limit: number;
+  max_export_rows: number;
 }

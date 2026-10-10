@@ -141,6 +141,8 @@ def main(argv: list[str] | None = None) -> None:
         for r in reversed(db.list_audit(args.limit)):
             when = datetime.fromtimestamp(r.ts).strftime("%Y-%m-%d %H:%M:%S")
             detail = ""
+            if r.action in ("browse", "export", "connection_add", "connection_edit", "connection_delete"):
+                detail = f"conn={r.connection} {r.phrase or ''}".strip()
             if r.action == "search":
                 detail = (
                     f"conn={r.connection} phrase={r.phrase!r} status={r.status} "

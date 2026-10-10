@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Box, Flex, HStack, IconButton, Select, Skeleton, Text, VStack, useDisclosure, useToast } from '@chakra-ui/react';
+import { Box, Button, ButtonGroup, Flex, HStack, IconButton, Select, Skeleton, Text, VStack, useDisclosure, useToast } from '@chakra-ui/react';
 import { apiErrorMessage, http } from './api';
-import type { Connection, ConnectionDetails, EngineOption, MatchMode, TableInfo, User } from './api';
+import type { Connection, ConnectionDetails, EngineOption, Limits, MatchMode, TableInfo, User } from './api';
 import { ColorModeButton, Logo, Sidebar } from './components/Sidebar';
 import { ConnectionModal } from './components/ConnectionModal';
 import { EngineBadge } from './components/EngineBadge';
@@ -11,9 +11,12 @@ import { ResultsPanel } from './components/ResultsPanel';
 import { ScopeModal } from './components/ScopeModal';
 import { SearchBar } from './components/SearchBar';
 import { SearchProgress } from './components/SearchProgress';
+import { TableExplorer } from './components/TableExplorer';
 import { useSearch } from './hooks/useSearch';
 import { LogOutIcon } from './icons';
 import { engineMeta } from './lib/engines';
+import { EMPTY_TARGET } from './lib/explorer';
+import type { ExplorerTarget } from './lib/explorer';
 import { loadJson, saveJson } from './lib/storage';
 
 interface Prefs {
@@ -32,6 +35,7 @@ type TablesEntry = { tables: TableInfo[] } | { error: string };
 
 const DEFAULT_PREFS: Prefs = { matchMode: 'contains', caseSensitive: false, includeNumbers: false, rowLimit: 25 };
 const EMPTY_SCOPE: Scope = { tables: [], exclude: '' };
+const DEFAULT_LIMITS: Limits = { max_row_limit: 200, max_export_rows: 50000 };
 
 const splitPatterns = (text: string): string[] =>
   text
@@ -58,6 +62,9 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
   const [tablesByKey, setTablesByKey] = useState<Record<string, TablesEntry>>({});
   const [searchCount, setSearchCount] = useState(0);
   const [editKey, setEditKey] = useState<string | null>(null);
+  const [view, setView] = useState<'search' | 'browse'>('search');
+  const [explorerTarget, setExplorerTarget] = useState<ExplorerTarget>(EMPTY_TARGET);
+  const [limits, setLimits] = useState<Limits>(DEFAULT_LIMITS);
 
   const connectionModal = useDisclosure();
   const scopeModal = useDisclosure();
@@ -72,11 +79,16 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
   // ---------------------------------------------------------------- initial load
   useEffect(() => {
     let cancelled = false;
-    Promise.all([http.get<Connection[]>('/api/connections'), http.get<EngineOption[]>('/api/engines')])
-      .then(([conns, engineList]) => {
+    Promise.all([
+      http.get<Connection[]>('/api/connections'),
+      http.get<EngineOption[]>('/api/engines'),
+      http.get<Limits>('/api/limits'),
+    ])
+      .then(([conns, engineList, limitData]) => {
         if (cancelled) return;
         setConnections(conns.data);
         setEngines(engineList.data);
+        setLimits(limitData.data);
         setActiveKey((current) => (conns.data.some((c) => c.key === current) ? current : (conns.data[0]?.key ?? '')));
         setLoaded(true);
       })
@@ -162,7 +174,22 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
   const selectConnection = (key: string) => {
     if (key === activeKey) return;
     setActiveKey(key);
+    setExplorerTarget((prev) => ({ ...EMPTY_TARGET, nonce: prev.nonce + 1 }));
     reset();
+  };
+
+  // "Open in table view" from the results: same phrase and options, only that table.
+  const openInExplorer = (table: string) => {
+    const params = state.params;
+    setExplorerTarget((prev) => ({
+      table,
+      q: params?.phrase ?? '',
+      mode: params?.matchMode ?? 'contains',
+      caseSensitive: params?.caseSensitive ?? false,
+      includeNumbers: params?.includeNumbers ?? false,
+      nonce: prev.nonce + 1,
+    }));
+    setView('browse');
   };
 
   const openAdd = () => {
@@ -261,7 +288,7 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
       />
     );
   } else if (state.phase === 'done') {
-    content = <ResultsPanel key={searchCount} state={state} connectionLabel={active?.label ?? ''} />;
+    content = <ResultsPanel key={searchCount} state={state} connectionLabel={active?.label ?? ''} onOpenTable={openInExplorer} />;
   } else {
     content = <ReadyState connectionLabel={active?.label ?? 'your database'} scopeLabel={scopeLabel} />;
   }
@@ -328,6 +355,30 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
               </HStack>
             )}
 
+            {connections.length > 0 && (
+              <ButtonGroup isAttached size="sm" alignSelf="flex-start">
+                <Button variant={view === 'search' ? 'brand' : 'subtle'} onClick={() => setView('search')}>
+                  Search
+                </Button>
+                <Button variant={view === 'browse' ? 'brand' : 'subtle'} onClick={() => setView('browse')}>
+                  Browse tables
+                </Button>
+              </ButtonGroup>
+            )}
+
+            {view === 'browse' && active ? (
+              <TableExplorer
+                key={`${activeKey}:${explorerTarget.nonce}`}
+                connectionKey={activeKey}
+                connectionLabel={active.label}
+                tables={tableList}
+                tablesError={tablesError}
+                onReloadTables={() => forgetTables(activeKey)}
+                target={explorerTarget}
+                limits={limits}
+              />
+            ) : (
+              <>
             <SearchBar
               inputRef={inputRef}
               phrase={phrase}
@@ -350,6 +401,8 @@ export default function Workspace({ user, onLogout }: WorkspaceProps) {
             />
 
             {content}
+              </>
+            )}
           </VStack>
         </Box>
       </Box>

@@ -5,7 +5,7 @@ import {
 import type { MatchMode } from '../api';
 import { SearchIcon, TableIcon } from '../icons';
 
-export const ROW_LIMITS = [10, 25, 50, 100, 200];
+const ROW_LIMITS = [10, 25, 50, 100, 200];
 
 const MODES: { value: MatchMode; label: string; hint: string }[] = [
   { value: 'contains', label: 'Contains', hint: 'The phrase appears anywhere in the value' },
@@ -34,7 +34,7 @@ interface SearchBarProps {
   onOpenScope: () => void;
 }
 
-export function SearchBar(props: SearchBarProps) {
+export function SearchBar({ inputRef, ...props }: SearchBarProps) {
   const { running, disabled } = props;
   return (
     <Flex
@@ -53,7 +53,7 @@ export function SearchBar(props: SearchBarProps) {
             <SearchIcon boxSize={5} />
           </InputLeftElement>
           <Input
-            ref={props.inputRef}
+            ref={inputRef}
             h="56px"
             pl="52px"
             fontSize="md"

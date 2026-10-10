@@ -6,7 +6,8 @@ MySQL / MariaDB, PostgreSQL, SQL Server and SQLite (via SQLAlchemy).
 
 - **Connect databases from the UI** - no config files, no code (admins only).
 - **Choose where to search** - all tables, hand-picked tables, or skip patterns like `log_*`.
-- **Export to CSV** - one table or everything, with an Excel-friendly option.
+- **Browse tables** - page through any table, sort by a column, filter rows, see its structure.
+- **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Team ready** - logins, per-user database access, an audit log.
 
 ## Quick start
@@ -87,13 +88,25 @@ Use a **read-only** database account.
 
 Binary columns (BLOBs) are never searched or returned.
 
-## Exporting results
+## Browsing and exporting
 
-Use **Export CSV** above the results: the selected table, or all results in one file (with
-`_table` and `_matched` columns). Choose *For Excel* (semicolon-separated, opens correctly in
-most regional Excel versions, including Cyrillic) or *Standard* (comma). Cells that could be
-interpreted as spreadsheet formulas (starting with `=` or `@`) are neutralised.
-Exports contain what was returned by the search (up to *rows / table*).
+**Browse tables** (next to *Search* at the top): pick a table to page through its rows, click a
+column header to sort, type in the filter box to show only matching rows, open the **Structure**
+tab for column types and keys. Click any row for the full record.
+
+From search results, **Open in table view** (or **See all matches** when a table had more matches
+than the per-table limit) jumps to that table with your phrase already applied, so you can page
+through every match instead of just the first few.
+
+**Export CSV** works in two places:
+- *Results panel*: the rows already shown (one table, or all results with `_table` and `_matched` columns).
+- *Table view*: streams the **whole table, or all rows matching the filter**, straight from the
+  database, up to `NCODE_MAX_EXPORT_ROWS` (default 50,000). Nothing is held in memory.
+
+Choose *For Excel* (semicolon-separated, UTF-8 BOM - opens correctly in most regional Excel
+versions, including Cyrillic) or *Standard* (comma). Cells that spreadsheets could execute as
+formulas (starting with `=` or `@`) get a leading apostrophe.
+Opening and exporting a table are written to the audit log.
 
 ## API
 
@@ -106,6 +119,10 @@ Exports contain what was returned by the search (up to *rows / table*).
     DELETE /api/connections/{key}               (admin) remove
     POST   /api/connections/{key}/test
     GET    /api/connections/{key}/tables
+    GET    /api/connections/{key}/browse?table=...     paged rows (limit, offset, sort, desc, q, mode ...)
+    GET    /api/connections/{key}/structure?table=...
+    GET    /api/connections/{key}/export?table=...     CSV stream
+    GET    /api/limits
     POST   /api/search            {"connection": "mes", "phrase": "..."}  -> {"task_id"}
     GET    /api/search/{task_id}
     DELETE /api/search/{task_id}  (cancel)

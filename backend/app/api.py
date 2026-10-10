@@ -13,6 +13,10 @@
     DELETE /api/connections/{key}       (admin)
     POST   /api/connections/{key}/test
     GET    /api/connections/{key}/tables?refresh=false
+    GET    /api/connections/{key}/browse?table=...   paged rows, optional filter (q, mode ...)
+    GET    /api/connections/{key}/structure?table=...
+    GET    /api/connections/{key}/export?table=...   CSV stream (all rows or only matches)
+    GET    /api/limits
     POST   /api/search                  -> {"task_id": ...}
     GET    /api/search/{task_id}        -> progress (+ results when finished)
     DELETE /api/search/{task_id}        -> cancel
@@ -34,6 +38,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -41,7 +46,8 @@ from .appdb import ANONYMOUS, AppDB, User
 from .config import ENGINES, ConnectionConfig, Settings, driver_available, normalize_engine
 from .crypto import CipherError
 from .db import ConnectionRegistry, describe_error, probe
-from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, SearchRequest
+from .explore import browse_table, csv_stream, table_structure
+from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, MatchMode, SearchRequest
 from .search import SearchOptions, classify_type, start_search_thread
 from .security import LoginThrottle, hash_password, hash_token, new_token, verify_password
 from .tasks import SearchTask, TaskStore
@@ -392,6 +398,126 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 for name, cols in sorted(schema.items(), key=lambda item: item[0].lower())
             ]
         }
+
+    # ------------------------------------------------------------------
+    # explorer: browse one table, see its structure, export it
+    # ------------------------------------------------------------------
+    def resolve_table(key: str, table: str) -> tuple[str, list]:
+        """Map the requested name to a real table (from the cached schema, never raw input)."""
+        try:
+            schema_map = registry.get_schema(key)
+        except Exception as exc:
+            detail = describe_error(exc, registry.get_config(key).engine)
+            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+        if table in schema_map:
+            return table, schema_map[table]
+        lowered = {name.lower(): name for name in schema_map}
+        real = lowered.get(table.lower())
+        if real is None:
+            raise HTTPException(status_code=404, detail=f"Unknown table {table!r}")
+        return real, schema_map[real]
+
+    def filter_options(q: str | None, mode: str, case_sensitive: bool, include_numeric: bool) -> SearchOptions | None:
+        phrase = (q or "").strip()
+        if not phrase:
+            return None
+        return SearchOptions(
+            phrase=phrase,
+            match_mode=mode,
+            case_sensitive=case_sensitive,
+            include_numeric=include_numeric,
+            include_dates=include_numeric,
+        )
+
+    @app.get("/api/limits")
+    def limits(_user: User = Depends(current_user)):
+        return {"max_row_limit": settings.max_row_limit, "max_export_rows": settings.max_export_rows}
+
+    @app.get("/api/connections/{key}/browse")
+    def browse(
+        key: str,
+        table: str = Query(..., min_length=1),
+        limit: int = Query(50, ge=1),
+        offset: int = Query(0, ge=0, le=10_000_000),
+        sort: str | None = Query(None),
+        desc: bool = Query(False),
+        q: str | None = Query(None, max_length=200),
+        mode: MatchMode = Query("contains"),
+        case_sensitive: bool = Query(False),
+        include_numeric: bool = Query(False),
+        user: User = Depends(current_user),
+    ):
+        require_connection(key, user)
+        name, columns = resolve_table(key, table)
+        search = filter_options(q, mode, case_sensitive, include_numeric)
+        try:
+            data = browse_table(
+                registry.get_engine(key),
+                registry.get_config(key),
+                name,
+                columns,
+                limit=min(limit, settings.max_row_limit),
+                offset=offset,
+                sort=sort,
+                descending=desc,
+                search=search,
+            )
+        except Exception as exc:
+            detail = describe_error(exc, registry.get_config(key).engine)
+            raise HTTPException(status_code=502, detail=f"The query failed: {detail}") from exc
+        if offset == 0:  # log "opened the table" once, not every page
+            app_db.audit(
+                user.username, "browse", connection=key, phrase=name + (f" ~ {search.phrase}" if search else ""), status="ok"
+            )
+        return data
+
+    @app.get("/api/connections/{key}/structure")
+    def structure(key: str, table: str = Query(..., min_length=1), user: User = Depends(current_user)):
+        require_connection(key, user)
+        name, columns = resolve_table(key, table)
+        try:
+            cols = table_structure(registry.get_engine(key), registry.get_config(key), name, columns)
+        except Exception as exc:
+            detail = describe_error(exc, registry.get_config(key).engine)
+            raise HTTPException(status_code=502, detail=f"Could not read the table: {detail}") from exc
+        return {"table": name, "columns": cols}
+
+    @app.get("/api/connections/{key}/export")
+    def export_table(
+        key: str,
+        table: str = Query(..., min_length=1),
+        delimiter: str = Query(";", pattern="^[;,]$"),
+        sort: str | None = Query(None),
+        desc: bool = Query(False),
+        q: str | None = Query(None, max_length=200),
+        mode: MatchMode = Query("contains"),
+        case_sensitive: bool = Query(False),
+        include_numeric: bool = Query(False),
+        user: User = Depends(current_user),
+    ):
+        """Streams the table (or only the rows matching `q`) as CSV, up to NCODE_MAX_EXPORT_ROWS rows."""
+        require_connection(key, user)
+        name, columns = resolve_table(key, table)
+        search = filter_options(q, mode, case_sensitive, include_numeric)
+        engine, cfg = registry.get_engine(key), registry.get_config(key)
+        try:  # fail now with a clear error instead of sending a half-empty file
+            browse_table(engine, cfg, name, columns, limit=1, offset=0, sort=sort, descending=desc, search=search)
+        except Exception as exc:
+            detail = describe_error(exc, cfg.engine)
+            raise HTTPException(status_code=502, detail=f"The export failed: {detail}") from exc
+        app_db.audit(
+            user.username, "export", connection=key, phrase=name + (f" ~ {search.phrase}" if search else ""), status="ok"
+        )
+        stream = csv_stream(
+            engine, cfg, name, columns,
+            delimiter=delimiter, max_rows=settings.max_export_rows, sort=sort, descending=desc, search=search,
+        )
+        filename = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "export"
+        return StreamingResponse(
+            stream,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+        )
 
     # ------------------------------------------------------------------
     # search
