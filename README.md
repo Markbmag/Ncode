@@ -12,6 +12,9 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
 - **Browse tables** - page through any table, sort by a column, filter rows, see its structure.
 - **Ask questions without SQL** - pick a table, join related tables, filter, summarise (sum, count,
   average ... by month, by region) and sort, with a live preview. One click shows the SQL.
+- **Charts** - bar, line, area, combo, pie/donut, scatter/bubble, number (KPI), gauge, pivot
+  table, histogram, heatmap and funnel; picked automatically, adjustable, downloadable as PNG/SVG,
+  results as CSV or Excel.
 - **SQL editor** - read-only SQL with autocomplete from your schema, `{{parameters}}`, history and
   formatting; unsafe statements are refused before they reach the database.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
@@ -158,6 +161,28 @@ resized by dragging the header edge, a click selects a cell and Ctrl/Cmd+C (or a
 copies it. **Smart dates** shows dates stored as text (`31.01.2026`) or unix time as real dates.
 Results can be downloaded as CSV.
 
+## Charts
+
+Every result (question or SQL) has a **Table / Chart** switch. *Chart* picks a chart from the shape
+of the result (one number → a number tile, a date and numbers → a line, a category and numbers →
+bars, two categories and a number → stacked bars or a heatmap ...); the *auto* badge says so.
+Choose another type in the list or open **Settings**:
+
+- axes and series, *Split into one series per* (a second column, e.g. one line per region),
+  side by side / stacked / 100 %, horizontal bars, value labels, a goal line, "only the largest N"
+  (the rest is added up as *Other*), axis titles and ranges, legend position;
+- *Highlight one series* (the others turn grey) and a fixed colour per series, which it keeps
+  even when a filter removes other series;
+- number formats per column: currency, percent, decimals, 1.2K style, prefix/suffix;
+- pivot table: rows, columns, values (sum, average, count, min, max) and totals.
+
+Charts follow a few rules on purpose: one y-axis only (two scales on one chart suggest links that
+are not there; Ncode says when two series differ too much in size), at most 8 colours (smaller
+series are added up as *Other*), at most 6 pie slices, and colours tested for colour-blind
+readers in both themes. **Download** offers CSV, an **Excel workbook** (numbers and dates as real
+Excel values) and, for charts, **PNG** or **SVG**. *Reset* returns to the automatic chart.
+Admins find every chart type with sample data under **Admin → Chart gallery**.
+
 ## Browsing and exporting
 
 **Browse** (in the sidebar): pick a table to page through its rows, click a
@@ -199,6 +224,7 @@ Opening and exporting a table are written to the audit log.
     POST   /api/query/sql             {"connection", "sql", "params"}   SQL mode (read-only)
     POST   /api/query/sql/check       {"connection", "sql"}       is this SQL allowed? which {{params}}?
     GET    /api/query/tasks/{id}      poll a long query           DELETE: cancel it
+    GET    /api/query/tasks/{id}/export.xlsx   the finished result as an Excel workbook
     POST   /api/search            {"connection": "mes", "phrase": "..."}  -> {"task_id"}
     GET    /api/search/{task_id}
     DELETE /api/search/{task_id}  (cancel)

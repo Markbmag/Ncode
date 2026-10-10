@@ -6,6 +6,7 @@
     POST   /api/query/sql/check       {"connection", "sql"}                  guard verdict, {{params}}, tables
     GET    /api/query/tasks/{id}?wait_ms=0
     DELETE /api/query/tasks/{id}      cancel
+    GET    /api/query/tasks/{id}/export.xlsx   the finished result as an Excel workbook
 
 A run answers with {"task_id", "status", "result", "error", "elapsed_ms"}. When the
 query finishes within wait_ms the result (a result envelope) is right there;
@@ -20,6 +21,7 @@ import time
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..appdb import AppDB, User
@@ -30,6 +32,7 @@ from .compiler import CompileError, compile_spec, render_sql
 from .runner import QueryRunner, QueryTask, ResultCache, run_sql, run_statement
 from .spec import QuerySpec
 from .sqlguard import GuardError, check_sql
+from .xlsx import xlsx_stream
 
 MAX_WAIT_MS = 15_000
 ParamValue = str | int | float | bool | None
@@ -207,5 +210,18 @@ def register_query_routes(
         task = task_for(task_id, user)
         task.cancel()
         return {"status": "cancelling" if not task.is_final else task.status}
+
+    @router.get("/tasks/{task_id}/export.xlsx")
+    def export_xlsx(task_id: str, user: User = Depends(current_user)):
+        """The rows the user already sees, as .xlsx (re-running the query is not needed)."""
+        task = task_for(task_id, user)
+        if task.status != "completed" or task.result is None:
+            raise HTTPException(status_code=409, detail="The query has no finished result to export")
+        app_db.audit(user.username, "export_xlsx", connection=task.connection, phrase=(task.result.sql or "")[:200], status="ok")
+        return StreamingResponse(
+            xlsx_stream(task.result),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="result.xlsx"'},
+        )
 
     app.include_router(router)

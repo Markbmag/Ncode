@@ -1,6 +1,6 @@
 # Ncode → data work & analysis platform
 
-**Status:** agreed plan v1 · M0–M2 delivered, waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
+**Status:** agreed plan v1 · M0–M3 delivered, waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
 
 This document is the single source of truth for where Ncode is going. It contains the
 analysis of the *DataDesk* low-code project ("Low-code-draft"), what we borrow from it, the
@@ -230,8 +230,9 @@ Order is fixed; M0–M5 form **release v1.0 "Analytics core"**.
 |---|---|
 | M0 | Delivered on branch `claude/charming-fermi-jknknw`; checklist: [docs/checklists/M0.md](checklists/M0.md) (deferred by Mark) |
 | M1 | Delivered on the same branch; checklist: [docs/checklists/M1.md](checklists/M1.md) |
-| M2 | Delivered on the same branch; checklist: [docs/checklists/M2.md](checklists/M2.md) (Mark tests M0–M2 together) |
-| M3–M9 | Not started |
+| M2 | Delivered on the same branch; checklist: [docs/checklists/M2.md](checklists/M2.md) |
+| M3 | Delivered on the same branch; checklist: [docs/checklists/M3.md](checklists/M3.md) (Mark tests M0–M3 together) |
+| M4–M9 | Not started |
 
 ```mermaid
 flowchart LR
@@ -295,7 +296,7 @@ flowchart LR
 - **Formatting engine:** numbers (thousands, decimals, compact, currency, percent), dates, per-column overrides.
 - **Export:** PNG/SVG; CSV; **XLSX** (streamed by the backend).
 - **Borrowed:** saved axis config, KPI card, chart palette (with dark variants), axis-guessing heuristics.
-- **New deps:** `echarts` (thin own wrapper), `xlsxwriter` (backend).
+- **New deps:** `echarts` 6.1 (tree-shaken, own wrapper), `xlsxwriter` (backend), `openpyxl` (backend tests only).
 - **Done when:** every chart type renders from fixtures; VizSpec round-trips; light and dark themes look right.
 
 ### M4 · Library: questions, collections, sharing, importer — M
@@ -434,6 +435,7 @@ natural-language questions (LLM) · mobile layout polish.
 |---|---|
 | 2026-10-09 | Plan v1 created from the DataDesk analysis |
 | 2026-10-10 | Ncode v5 imported as the baseline (fixes: one wrong test, `framer-motion` 6 → 11 for React 19 types, lint errors, leftover files removed) |
+| 2026-10-10 | M3 delivered. Changes to the plan, from data-visualisation practice: (1) **no dual-axis charts** - combo bars + lines share one axis, and the chart says when two series differ > 20x (two scales on one plot invent correlations); (2) at most 8 colour series (the rest folds into "Other"), 6 pie slices, 3 scatter series; (3) the categorical palette is validated for colour-blind separation against Ncode's own light and dark panels; light-mode contrast relief = the table is always one click away; (4) gauge drawn as a progress arc on a same-hue track; (5) XLSX exports the finished task's result (no re-run) via `GET /api/query/tasks/{id}/export.xlsx`; (6) an Admin → Chart gallery renders every type from fixtures for visual checks. Chart settings are kept per question draft / SQL tab until saving arrives in M4 |
 | 2026-10-10 | M2 delivered. Decisions: (1) frontend unit tests use Node's built-in test runner (`npm test`, Node 22+) instead of vitest, whose optional peer dependencies make npm 10 crash during install; README now asks for Node 22+ (Node 20 is end-of-life, Vite 8 needs 20.19+/22.12+). (2) Queries start with a short server wait (400 ms) so *Stop* can cancel at once; long-polling follows. (3) Questions are drafts kept per browser tab until saving arrives in M4. (4) Result-column renaming (alias) for metrics is in; custom columns use a small formula language (`[col]`, + − × ÷, coalesce, nullif, lower, upper, trim, length, abs, round, concat, case). Verified end-to-end in a browser against PostgreSQL 16: "revenue by month by region" built and opened as SQL in < 10 s of scripted clicks |
 | 2026-10-10 | M1 started before the M0 checklist was run (Mark's call); M0 checklist findings are fixed alongside later work. M1 stays on the same branch as M0 (the session's designated branch), tags `m0`/`m1` once the checklists pass |
 | 2026-10-10 | M1 delivered. Decisions: (1) SQL mode does **not** wrap the user's SQL in a sub-select (that breaks `ORDER BY`/`WITH` on SQL Server); rows are capped per engine instead: PostgreSQL server-side cursor (which also refuses a 2nd statement), MySQL `sql_select_limit`, SQL Server `SET ROWCOUNT`, SQLite lazy fetch. (2) The guard adds MySQL-specific checks because sqlglot and MySQL read comments differently (`--1` and `/*! */`); MySQL sessions turn off `NO_BACKSLASH_ESCAPES` for the same reason. (3) Join types are inner/left/full; right joins are left out (swap the tables). (4) Relative date filters (`last`, `current`) moved forward from M2 into the spec. (5) MySQL vs MariaDB is detected from the server, not the label, so timeouts always apply. Verified on PostgreSQL 16, MariaDB 10.11 and SQL Server 2022 as well as SQLite |

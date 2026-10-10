@@ -24,6 +24,8 @@ import type { FilterGroup, QuerySpec } from '../query/types';
 import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
 import type { TaskSnapshot } from '../query/useQueryRun';
 import { useSchema } from '../query/useSchema';
+import { DEFAULT_VIZ } from '../viz/state';
+import type { VizState } from '../viz/state';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
@@ -52,11 +54,26 @@ function Builder({ connection }: { connection: string }) {
   const [autoPreview, setAutoPreview] = useState(() => loadJson('ncode_auto_preview', true));
   const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
   const [showFields, setShowFields] = useState(false);
+  const [viz, setViz] = useState<VizState>(() => {
+    try {
+      const raw = sessionStorage.getItem(`${draftKey(connection)}_viz`);
+      return raw ? (JSON.parse(raw) as VizState) : DEFAULT_VIZ;
+    } catch {
+      return DEFAULT_VIZ;
+    }
+  });
   const sqlModal = useDisclosure();
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
   useEffect(() => saveJson('ncode_auto_preview', autoPreview), [autoPreview]);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`${draftKey(connection)}_viz`, JSON.stringify(viz));
+    } catch {
+      // a convenience only
+    }
+  }, [viz, connection]);
   useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
   useEffect(() => {
     try {
@@ -241,6 +258,8 @@ function Builder({ connection }: { connection: string }) {
         smartDates={smartDates}
         onSmartDates={setSmartDates}
         filename={`${ws.active?.label ?? connection}_${validDraft?.source.table ?? 'question'}`}
+        viz={viz}
+        onVizChange={setViz}
         empty={
           <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
             {validDraft ? 'Run the question to see the result (Ctrl/Cmd + Enter).' : 'Pick a table to start. The result appears here while you build.'}

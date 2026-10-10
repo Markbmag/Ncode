@@ -5,7 +5,7 @@ import {
   SimpleGrid, Skeleton, Table, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack,
 } from '@chakra-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaTable, SchemaV2 } from '../api';
 import { EngineBadge } from '../components/EngineBadge';
@@ -178,7 +178,15 @@ export default function AdminPage() {
 
   return (
     <VStack align="stretch" spacing={6}>
-      <PageHeader title="Admin" subtitle="Databases and their data model. Users and permissions get a screen in M9." />
+      <PageHeader
+        title="Admin"
+        subtitle="Databases and their data model. Users and permissions get a screen in M9."
+        actions={
+          <Button as={RouterLink} to="/admin/charts" size="sm" variant="subtle">
+            Chart gallery
+          </Button>
+        }
+      />
 
       <Panel
         title="Databases"

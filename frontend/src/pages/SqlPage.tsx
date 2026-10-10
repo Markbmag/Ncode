@@ -22,6 +22,8 @@ import { addHistory, loadHistory } from '../query/sqlHistory';
 import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
 import type { TaskSnapshot } from '../query/useQueryRun';
 import { useSchema } from '../query/useSchema';
+import { DEFAULT_VIZ } from '../viz/state';
+import type { VizState } from '../viz/state';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 interface Incoming {
@@ -62,6 +64,7 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
   const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
   const [check, setCheck] = useState<{ ok: boolean; error: string | null } | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [viz, setViz] = useState<VizState>(() => loadJson<VizState>(`${draftKey(connection)}_viz`, DEFAULT_VIZ));
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
@@ -71,6 +74,7 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
   }, [initialSql, navigate]);
   useEffect(() => saveJson(draftKey(connection), text), [connection, text]);
   useEffect(() => saveJson('ncode_sql_limit', limit), [limit]);
+  useEffect(() => saveJson(`${draftKey(connection)}_viz`, viz), [connection, viz]);
   useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
 
   // Ask the server's guard whether this SQL may run (shown before running).
@@ -225,6 +229,8 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
         smartDates={smartDates}
         onSmartDates={setSmartDates}
         filename={`${ws.active?.label ?? connection}_sql`}
+        viz={viz}
+        onVizChange={setViz}
         empty={
           <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
             Write a SELECT and press Ctrl/Cmd + Enter. Only read-only queries run.

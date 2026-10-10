@@ -6,6 +6,7 @@ cryptography>=43   # encrypts database passwords saved from the UI
 pydantic>=2.7
 alembic>=1.13      # migrations of Ncode's own database
 sqlglot>=30.19,<31  # parses SQL typed by users (read-only guard); major versions change the syntax tree
+xlsxwriter>=3.2     # Excel export of results (streams rows, constant memory)
 
 # Database drivers - keep only the ones you need
 pymysql>=1.1            # MySQL / MariaDB

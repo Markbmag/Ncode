@@ -215,3 +215,51 @@ def test_limits_endpoint_reports_query_caps(env):
     client, _, alice, _ = env
     limits = client.get("/api/limits", headers=alice).json()
     assert limits["query_default_rows"] == 2000 and limits["query_max_rows"] == 10000
+
+
+# ---------------------------------------------------------------- Excel export
+
+def test_xlsx_export_keeps_types_and_neutralises_formulas(env):
+    import io
+
+    import openpyxl  # test-only reader
+
+    client, app_db, alice, _ = env
+    sql = (
+        "SELECT id, total, created_at, paid_on, status, '=1+1' AS tricky FROM q_orders "
+        "WHERE id IN (1, 6) ORDER BY id"
+    )
+    data = post(client, alice, "/api/query/sql", {"connection": "shop", "sql": sql})
+    res = client.get(f"/api/query/tasks/{data['task_id']}/export.xlsx", headers=alice)
+    assert res.status_code == 200 and res.headers["content-type"].startswith("application/vnd.openxmlformats")
+    sheet = openpyxl.load_workbook(io.BytesIO(res.content)).active
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[0] == ("id", "total", "created_at", "paid_on", "status", "tricky")
+    assert rows[1][0] == 1 and rows[1][1] == 100
+    assert rows[2][4] is None  # NULL stays an empty cell
+    assert rows[1][5] == "=1+1" and sheet["F2"].data_type == "s"  # text, not a formula
+    assert any(e.action == "export_xlsx" for e in app_db.list_audit(5))
+
+
+def test_xlsx_export_needs_a_finished_task_of_your_own(env):
+    client, _, alice, admin = env
+    running = post(client, alice, "/api/query/sql", {"connection": "shop", "sql": SLOW_SQL, "wait_ms": 0})
+    assert client.get(f"/api/query/tasks/{running['task_id']}/export.xlsx", headers=alice).status_code == 409
+    client.delete(f"/api/query/tasks/{running['task_id']}", headers=alice)
+    other = auth(client, "bob", "bob-pass-123")
+    assert client.get(f"/api/query/tasks/{running['task_id']}/export.xlsx", headers=other).status_code == 404
+
+
+def test_xlsx_dates_from_a_question_are_real_dates(env):
+    import datetime as dt
+    import io
+
+    import openpyxl
+
+    client, _, alice, _ = env
+    spec = {"connection": "shop", "source": {"table": "q_orders"}, "aggregations": [{"fn": "count", "alias": "n"}],
+            "breakouts": [{"ref": "created_at", "bucket": "month", "alias": "month"}]}
+    data = post(client, alice, "/api/query", {"spec": spec})
+    content = client.get(f"/api/query/tasks/{data['task_id']}/export.xlsx", headers=alice).content
+    first = list(openpyxl.load_workbook(io.BytesIO(content)).active.iter_rows(min_row=2, values_only=True))[0]
+    assert first == (dt.datetime(2025, 12, 1), 1)
