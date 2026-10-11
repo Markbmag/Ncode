@@ -1,4 +1,4 @@
-"""Table definitions for the library. They mirror migration 0002 (app/migrations/versions)."""
+"""Table definitions for the library. They mirror migrations 0002-0004 (app/migrations/versions)."""
 
 from __future__ import annotations
 
@@ -92,4 +92,24 @@ dashboard_cards_table = Table(
     Column("text", Text),
     Column("title", String(200)),
     Column("position", Integer, nullable=False),
+)
+
+datasets_table = Table(
+    "datasets",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(200), nullable=False),
+    Column("description", Text),
+    Column("collection_id", Integer, ForeignKey("collections.id"), nullable=False, index=True),
+    Column("owner_id", Integer),
+    Column("archived", Boolean, nullable=False, default=False),
+    Column("file", String(80), nullable=False),
+    Column("columns", Text, nullable=False),
+    Column("row_count", Integer, nullable=False),
+    Column("size_bytes", Integer, nullable=False),
+    Column("source_name", String(255)),
+    Column("source_format", String(16), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
 )

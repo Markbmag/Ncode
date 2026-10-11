@@ -148,6 +148,8 @@ def test_invalid_questions_are_refused(env):
     save_sql(env, "alice", "DELETE FROM q_orders", status=400)
     save_sql(env, "alice", "SELECT 1; SELECT 2", status=400)
     body = {"name": "x", "kind": "federated", "spec": {}, "connection": "shop"}
+    assert "sources" in call(env, "alice", "POST", "/api/questions", 400, json=body)["detail"]
+    body = {"name": "x", "kind": "pivot", "spec": {}}
     call(env, "alice", "POST", "/api/questions", 422, json=body)
 
 

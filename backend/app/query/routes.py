@@ -66,6 +66,7 @@ class QueryService:
     start_sql: Callable[..., dict[str, Any]]
     guard: Callable[..., Any]
     compile_for: Callable[..., Any]
+    start_task: Callable[..., dict[str, Any]]  # any other work (multi-source questions) with the same limits and audit
 
 
 class CheckSqlRequest(BaseModel):
@@ -93,7 +94,7 @@ def register_query_routes(
                 "Wait for one to finish or cancel it.",
             )
 
-    def compile_for(spec: QuerySpec):
+    def compile_for(spec: QuerySpec, *, default_limit: int | None = None, max_limit: int | None = None):
         key = spec.connection
         try:
             columns = registry.get_schema(key)
@@ -109,8 +110,8 @@ def register_query_routes(
                 tables=columns,
                 relationships=relationships(foreign, set(columns)),
                 db_schema=registry.get_config(key).schema,
-                default_limit=settings.query_default_rows,
-                max_limit=settings.query_max_rows,
+                default_limit=default_limit or settings.query_default_rows,
+                max_limit=max_limit or settings.query_max_rows,
             )
         except CompileError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -222,6 +223,24 @@ def register_query_routes(
         )
         return respond(task, wait_ms)
 
+    def start_task(
+        user: User,
+        *,
+        kind: str,
+        connection: str,
+        sql: str,
+        options: dict[str, Any],
+        work: Callable[[QueryTask], Any],
+        cache_key: str | None,
+        wait_ms: int,
+        refresh: bool,
+    ) -> dict[str, Any]:
+        check_capacity(user)
+        task = QueryTask(owner=user.username, connection=connection, kind=kind)
+        audit_id = audit_start(user, kind, connection, sql, options)
+        runner.submit(task, work, cache_key=cache_key, read_cache=not refresh, on_finish=audit_finish(audit_id))
+        return respond(task, wait_ms)
+
     @router.post("/sql")
     def run_sql_query(body: RunSqlRequest, user: User = Depends(current_user)):
         return start_sql(user, body.connection, body.sql, body.params, body.limit, body.wait_ms, body.refresh)
@@ -251,4 +270,6 @@ def register_query_routes(
         )
 
     app.include_router(router)
-    return QueryService(start_spec=start_spec, start_sql=start_sql, guard=guard, compile_for=compile_for)
+    return QueryService(
+        start_spec=start_spec, start_sql=start_sql, guard=guard, compile_for=compile_for, start_task=start_task
+    )

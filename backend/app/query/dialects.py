@@ -15,6 +15,8 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import ColumnElement
 
 MYSQL_FAMILY = ("mysql", "mariadb")
+# DuckDB (multi-source questions, M6) speaks PostgreSQL's dialect for everything compiled here.
+PG_FAMILY = ("postgresql", "duckdb")
 
 # Which buckets give a date and which a date-time.
 DATE_BUCKETS = ("day", "week", "month", "quarter", "year")
@@ -52,7 +54,7 @@ def date_bucket(expr: Any, unit: str, dialect: str) -> tuple[Any, str]:
     out_type = "date" if unit in DATE_BUCKETS else "datetime"
     sa_type = Date() if out_type == "date" else DateTime()
 
-    if dialect == "postgresql":
+    if dialect in PG_FAMILY:
         truncated = func.date_trunc(_lit(f"'{unit}'"), expr, type_=DateTime())
         return (cast(truncated, Date) if out_type == "date" else truncated), out_type
 

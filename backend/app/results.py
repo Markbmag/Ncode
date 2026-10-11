@@ -42,6 +42,7 @@ class ResultEnvelope(BaseModel):
     rows: list[list[Any]]
     stats: ResultStats
     sql: str | None = None
+    federation: dict[str, Any] | None = None  # multi-source questions: sources read, join statistics (M6)
 
 
 def column_role(name: str, type_: str) -> ColumnRole:

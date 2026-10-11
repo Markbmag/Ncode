@@ -127,6 +127,13 @@ class Settings:
     query_cache_ttl_sec: int = 60        # identical questions within this time reuse the result; 0 = off
     max_concurrent_queries: int = 3      # running questions per user
     query_workers: int = 8               # questions running at once on this server
+    # --- federation and uploaded datasets (M6) ---
+    federation_source_rows: int = 100_000  # rows read from each source of a multi-source question
+    federation_memory_mb: int = 512      # DuckDB memory per multi-source run
+    federation_threads: int = 2          # DuckDB threads per multi-source run
+    uploads_enabled: bool = True         # users may upload CSV / Excel / Parquet files
+    dataset_max_mb: int = 100            # largest file that can be uploaded
+    dataset_max_rows: int = 1_000_000    # rows kept per uploaded file
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
 
@@ -178,6 +185,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         query_cache_ttl_sec=max(0, _int(env, "NCODE_QUERY_CACHE_TTL_SEC", defaults.query_cache_ttl_sec)),
         max_concurrent_queries=max(1, _int(env, "NCODE_MAX_CONCURRENT_QUERIES", defaults.max_concurrent_queries)),
         query_workers=max(1, _int(env, "NCODE_QUERY_WORKERS", defaults.query_workers)),
+        federation_source_rows=max(1, _int(env, "NCODE_FEDERATION_SOURCE_ROWS", defaults.federation_source_rows)),
+        federation_memory_mb=max(64, _int(env, "NCODE_FEDERATION_MEMORY_MB", defaults.federation_memory_mb)),
+        federation_threads=max(1, _int(env, "NCODE_FEDERATION_THREADS", defaults.federation_threads)),
+        uploads_enabled=_bool(env, "NCODE_UPLOADS_ENABLED", defaults.uploads_enabled),
+        dataset_max_mb=max(1, _int(env, "NCODE_DATASET_MAX_MB", defaults.dataset_max_mb)),
+        dataset_max_rows=max(1, _int(env, "NCODE_DATASET_MAX_ROWS", defaults.dataset_max_rows)),
     )
 
 

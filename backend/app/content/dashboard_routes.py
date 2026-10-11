@@ -85,7 +85,15 @@ def _question_info(q: Question | None, qid: int | None) -> dict[str, Any]:
         "parameters": q.parameters,
         "viz": q.viz,
         "tables": _builder_tables(q),
+        "fields": _federated_fields(q),
     }
+
+
+def _federated_fields(q: Question) -> list[dict[str, Any]]:
+    """Columns of a multi-source question's combined rows (as of its last save): filters can be mapped to them."""
+    if q.kind != "federated" or not isinstance(q.spec, dict):
+        return []
+    return [c for c in q.spec.get("result_columns") or [] if isinstance(c, dict) and c.get("name")]
 
 
 def _builder_tables(q: Question) -> list[str]:

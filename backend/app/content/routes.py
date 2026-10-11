@@ -20,8 +20,8 @@
     GET    /api/library/archive                     archived collections and questions
     GET    /api/library/people                      user names and roles to share with
 
-A question is {"kind": "builder", "spec": QuerySpec} or {"kind": "sql", "spec": {"sql", "limit"}};
-"federated" questions only come from the DataDesk importer until M6.
+A question is {"kind": "builder", "spec": QuerySpec}, {"kind": "sql", "spec": {"sql", "limit"}}
+or {"kind": "federated", "spec": FederatedSpec} (several sources combined, app/federation).
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 from ..appdb import AppDB, User
+from ..config import Settings
+from ..federation.routes import register_federation_routes
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.spec import QuerySpec
 from .dashboard_routes import dashboard_summary, register_dashboard_routes
@@ -72,7 +74,7 @@ class QuestionIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     collection_id: int | None = Field(default=None, description="default: the caller's own collection")
-    kind: Literal["builder", "sql"]
+    kind: Literal["builder", "sql", "federated"]
     connection: str | None = Field(default=None, max_length=64, description="sql questions; builder specs carry it")
     spec: dict[str, Any]
     viz: dict[str, Any] | None = None
@@ -83,7 +85,7 @@ class QuestionPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     collection_id: int | None = None
-    kind: Literal["builder", "sql"] | None = None
+    kind: Literal["builder", "sql", "federated"] | None = None
     connection: str | None = Field(default=None, max_length=64)
     spec: dict[str, Any] | None = None
     viz: dict[str, Any] | None = None
@@ -142,6 +144,7 @@ def register_content_routes(
     app: FastAPI,
     *,
     app_db: AppDB,
+    settings: Settings,
     queries: QueryService,
     current_user: Callable[..., User],
     require_connection: Callable[[str, User], None],
@@ -153,9 +156,20 @@ def register_content_routes(
     def fail(exc: ContentError) -> HTTPException:
         return HTTPException(status_code=exc.status, detail=str(exc))
 
+    federation, dataset_store = register_federation_routes(
+        app, content=store, app_db=app_db, settings=settings, queries=queries, current_user=current_user,
+        require_connection=require_connection, fail=fail,
+    )
+
     # ------------------------------------------------------------------ validation
     def validate(user: User, kind: str, connection: str | None, spec: dict[str, Any], defs: list[ParameterDef]):
         """(connection, clean spec, clean parameter list) - or a 400 explaining what is wrong."""
+        if kind == "federated":
+            try:
+                parsed_fed, clean_fed = federation.check(user, spec, defs)
+            except ContentError as exc:
+                raise fail(exc) from exc
+            return "", parsed_fed.model_dump(mode="json", by_alias=True, exclude_unset=True), clean_fed
         if kind == "builder":
             try:
                 parsed = QuerySpec.model_validate(spec)
@@ -214,6 +228,7 @@ def register_content_routes(
             ]
             questions = store.list_questions(user, collection_id=cid)
             dashboards = dashboard_store.list(user, collection_id=cid)
+            datasets = dataset_store.list(user, collection_id=cid)
         except ContentError as exc:
             raise fail(exc) from exc
         return {
@@ -222,6 +237,7 @@ def register_content_routes(
             "collections": children,
             "questions": [summary_json(q) for q in questions],
             "dashboards": [dashboard_summary(d) for d in dashboards],
+            "datasets": [d.summary() for d in datasets],
         }
 
     @router.patch("/api/collections/{cid}")
@@ -304,8 +320,6 @@ def register_content_routes(
         except ContentError as exc:
             raise fail(exc) from exc
         if {"spec", "kind", "connection", "parameters"} & changes.keys():
-            if current.kind == "federated" and "kind" not in changes:
-                raise HTTPException(status_code=400, detail="Imported multi-source questions can be edited once federation arrives (M6)")
             kind = changes.get("kind") or current.kind
             spec = changes.get("spec") if changes.get("spec") is not None else current.spec
             defs = body.parameters if body.parameters is not None else [ParameterDef(**p) for p in current.parameters]
@@ -378,8 +392,13 @@ def register_content_routes(
         extra: dict[str, Any],
     ) -> dict[str, Any]:
         """Run a saved question with parameter values (and, for builder questions, extra conditions)."""
-        require_connection(q.connection, user)
         defs = [ParameterDef(**p) for p in q.parameters]
+        if q.kind == "federated":  # each source checks its own access
+            try:
+                return federation.start(user, q.spec, defs, params, conditions, wait_ms, refresh, extra)
+            except ContentError as exc:
+                raise fail(exc) from exc
+        require_connection(q.connection, user)
         try:
             if q.kind == "builder":
                 values = resolve(defs, params)
@@ -395,7 +414,7 @@ def register_content_routes(
             raise fail(exc) from exc
         except ValidationError as exc:
             raise HTTPException(status_code=400, detail=f"The saved question is not valid any more: {exc.errors()[0]['msg']}") from exc
-        raise HTTPException(status_code=409, detail="Multi-source questions run once federation arrives (M6)")
+        raise HTTPException(status_code=409, detail=f"Unknown question kind {q.kind!r}")
 
     # ------------------------------------------------------------------ archive, people
     @router.get("/api/library/archive")
@@ -407,6 +426,7 @@ def register_content_routes(
             "collections": [c for c in store.archived_collections(user) if c["can_manage"]],
             "questions": [summary_json(q) for q in questions],
             "dashboards": [dashboard_summary(d) for d in dashboard_store.list(user, archived=True, limit=1000) if d.access == "edit"],
+            "datasets": [d.summary() for d in dataset_store.list(user, archived=True, limit=1000) if d.access == "edit"],
         }
 
     @router.get("/api/library/people")

@@ -464,6 +464,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             "query_default_rows": settings.query_default_rows,
             "query_max_rows": settings.query_max_rows,
             "max_concurrent_queries": settings.max_concurrent_queries,  # dashboards queue their cards below it
+            "federation_source_rows": settings.federation_source_rows,
+            "uploads_enabled": settings.uploads_enabled,
+            "dataset_max_mb": settings.dataset_max_mb,
+            "dataset_max_rows": settings.dataset_max_rows,
         }
 
     @app.get("/api/connections/{key}/browse")
@@ -677,6 +681,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         require_connection=require_connection,
     )
     register_content_routes(
-        app, app_db=app_db, queries=queries, current_user=current_user, require_connection=require_connection
+        app, app_db=app_db, settings=settings, queries=queries, current_user=current_user,
+        require_connection=require_connection,
     )
     return app
