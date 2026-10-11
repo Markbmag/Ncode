@@ -17,6 +17,8 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   results as CSV or Excel.
 - **SQL editor** - read-only SQL with autocomplete from your schema, `{{parameters}}`, history and
   formatting; unsafe statements are refused before they reach the database.
+- **Combine databases and files** - join results from several databases and uploaded CSV / Excel /
+  Parquet files on a key (e.g. VIN), with a report of the keys that found no match.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Team ready** - logins, per-user database access, an audit log.
 
@@ -52,7 +54,9 @@ server, send unknown paths to `index.html` (for nginx: `try_files $uri /index.ht
 Users, sessions, UI-added connections and the audit log live in `backend/data/ncode.sqlite`.
 Its tables are created and upgraded automatically (Alembic migrations in
 `backend/app/migrations`) every time the backend starts; an existing file keeps its data.
-**Back the file up before upgrading Ncode.** To migrate by hand: `cd backend && alembic upgrade head`.
+**Back the file up before upgrading Ncode** (and `backend/data/datasets/`, the uploaded files).
+To migrate by hand: `cd backend && alembic upgrade head`. After pulling a new version, run
+`pip install -r requirements.txt` (backend) and `npm install` (frontend) again: new milestones can add packages.
 
 ### Tests
 
@@ -179,9 +183,12 @@ without it, everything goes into a collection **DataDesk import** owned by `--ow
 first admin). Each DataDesk dashboard becomes a dashboard, in a sub-collection of the same name that
 also holds its reports (cards two per row). Single-table reports become builder questions,
 SQL reports SQL questions (only if they pass the read-only check), multi-database reports wait for
-the federated workspace (M6). The report lists every report and why something was not converted.
-DataDesk's file is only read; running the import again skips what was imported before (and creates
-the dashboards of an import made before dashboards existed).
+multi-source questions (each source joined to the first on its key column with a FULL JOIN, as
+DataDesk merged them - but Ncode keeps every row, where DataDesk kept only the last row per key).
+The report lists every report and why something was not converted. DataDesk's file is only read;
+running the import again skips what was imported before, creates the dashboards of an import made
+before dashboards existed and converts multi-database reports that an earlier import kept as
+placeholders ("upgraded").
 
 ## SQL editor
 
@@ -221,6 +228,44 @@ series are added up as *Other*), at most 6 pie slices, and colours tested for co
 readers in both themes. **Download** offers CSV, an **Excel workbook** (numbers and dates as real
 Excel values) and, for charts, **PNG** or **SVG**. *Reset* returns to the automatic chart.
 Admins find every chart type with sample data under **Admin → Chart gallery**.
+
+## Combining sources and uploads
+
+**Combine** in the sidebar builds a *multi-source question*:
+
+1. **Sources** (up to 6): a saved question, a table, SQL on any of your databases, or an uploaded
+   file. Each source is read on its own database (at most `NCODE_FEDERATION_SOURCE_ROWS` rows,
+   100,000 by default) and gets a short name used by the joins and in SQL (`mes_builds`).
+2. **Join**: every further source is joined to the ones above it - *keep all rows on the left*
+   (LEFT JOIN), *only rows with a match* (INNER), *keep all rows on both sides* (FULL) or on the
+   right - on up to four key columns. Ncode suggests a key when both sides have a column with the
+   same name. Keys are compared *automatically* (numbers as numbers, text trimmed), *as text*,
+   *as text ignoring case*, *as numbers* or *exactly as stored*. **Write SQL instead** combines the
+   sources with your own SELECT over their names (DuckDB SQL; read-only, no files, no settings).
+3. Then filter, summarise, sort and chart the combined rows exactly like a question - and save it.
+
+**Match report** (next to the result) shows, per join, how many keys on each side found no
+partner ("37.5 % of MES builds keys have no match in LES shipments (15 of 40)"), examples of such
+keys, keys that repeat (each repeat multiplies rows - the totals grow) and empty keys. A source that
+returned more rows than allowed is flagged, because the combination then only sees the first rows.
+
+Saved multi-source questions behave like the others: they live in collections, go on dashboards
+(dashboard filters can target a column of the combined rows or a parameter) and take parameters:
+filters set to *ask for the value*, `{{name}}` in SQL, and the parameters of saved questions used as
+sources (a value is passed on to every source question with a parameter of that name). Viewing one
+never grants more than you already have: every source still needs your access to its database,
+question or file.
+
+**Uploads** (sidebar) takes CSV / TSV (separator and encoding detected, or chosen), Excel `.xlsx`
+(first sheet or a named one) and Parquet, up to `NCODE_DATASET_MAX_MB` (100 MB) and
+`NCODE_DATASET_MAX_ROWS` (1,000,000 rows). Column types are recognised (numbers, dates such as
+`01.09.2026`, date-times, text); a column that mixes numbers and text stays text. Ncode keeps its own
+compact copy in `backend/data/datasets/` (back it up with `ncode.sqlite`), not the original file.
+Uploaded files live in collections, like questions. `NCODE_UPLOADS_ENABLED=false` turns uploads off.
+
+Everything is combined in an in-process **DuckDB** (installed by `requirements.txt`), with memory
+and thread limits (`NCODE_FEDERATION_MEMORY_MB`, `NCODE_FEDERATION_THREADS`) and, before anything you
+wrote runs, no access to files, the network, extensions or its own settings.
 
 ## Dashboards
 
@@ -344,7 +389,7 @@ skips it).
     GET    /api/collections/{id}/permissions      own and inherited grants (owner and admins)
     PUT    /api/collections/{id}/permissions      {"grants": [{"user": "bob", "level": "view"}, {"role": "all", "level": "edit"}]}
     GET    /api/questions?q=&favorites=&collection=
-    POST   /api/questions                         {"name", "collection_id", "kind": "builder"|"sql", "spec", "viz", "parameters"}
+    POST   /api/questions                         {"name", "collection_id", "kind": "builder"|"sql"|"federated", "spec", "viz", "parameters"}
     GET    /api/questions/{id}   PATCH /api/questions/{id}   DELETE /api/questions/{id} (archived only)
     POST   /api/questions/{id}/duplicate
     POST   /api/questions/{id}/run                {"params": {"region": "EU"}} -> a query task, as above
@@ -355,6 +400,32 @@ A builder question's `spec` is the question JSON above; a filter rule with `"par
 its value from the parameter. A SQL question's `spec` is `{"sql": "...", "limit": 2000}`. Parameters
 are `[{"name", "label", "type": "text"|"number"|"date", "default", "required"}]`. Questions are
 checked when saved (unknown columns, SQL that is not read-only are refused).
+
+### Multi-source questions and uploads
+
+    POST   /api/federated/run                     {"spec", "parameters", "params", "wait_ms", "refresh"} -> a query task
+    POST   /api/federated/check                   {"spec", "parameters"} -> the clean spec and the parameters it uses
+    GET    /api/datasets?q=&collection=           uploaded files you can see
+    POST   /api/datasets?filename=plan.csv&name=&collection_id=&delimiter=auto|comma|semicolon|tab|pipe&header=true&encoding=utf-8|latin-1|utf-16&sheet=
+                                                  body: the file itself (Content-Type: application/octet-stream)
+    GET    /api/datasets/{id}   PATCH (name, description, collection_id, archived)   DELETE (archived only)
+
+A multi-source `spec`:
+
+    {"version": 1,
+     "sources": [{"alias": "mes", "type": "question", "question_id": 12},
+                 {"alias": "les", "type": "sql", "connection": "les", "sql": "SELECT vin, shipped_at FROM shipments"},
+                 {"alias": "plan", "type": "dataset", "dataset_id": 3}],
+     "joins": [{"source": "les", "type": "left", "on": [{"left": "mes.vin", "right": "les.vin", "match": "text_ci"}]},
+               {"source": "plan", "type": "left", "on": [{"left": "mes.vin", "right": "plan.VIN"}]}],
+     "post": {"breakouts": [{"ref": "plant"}], "aggregations": [{"fn": "count"}]},
+     "limit": 2000}
+
+Source types: `question`, `builder` (`"spec"`: a question JSON), `sql` and `dataset`. Instead of
+`joins`, `"mode": "sql", "sql": "SELECT ... FROM mes JOIN les ..."`. `post` is a question without
+its own table (the combined rows are the table `result`; columns whose names clash get the source
+name in front, `mes_vin`). The result envelope adds `federation`: rows read per source, per-join
+statistics (`left_unmatched_keys`, `right_repeated_keys`, samples ...) and the combined columns.
 
 ### Dashboards
 
@@ -406,7 +477,7 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
 - Users only see their own searches; admins see all.
 - **The audit log records every search phrase.** Tell your team.
 - Users, sessions, the audit log and the library (saved questions, collections, sharing) live in
-  `backend/data/ncode.sqlite` (git-ignored; back it up).
+  `backend/data/ncode.sqlite`, uploaded files in `backend/data/datasets/` (git-ignored; back both up).
 - Deleting a user keeps their questions; their own collection becomes an admin-only collection.
 
 ## Security notes
@@ -424,7 +495,13 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
   login with `db_datareader` only. A MySQL account must not have the `FILE` privilege.
 - Queries (questions and SQL mode) stop after `NCODE_STATEMENT_TIMEOUT_SEC`; users can cancel
   them; each user may run `NCODE_MAX_CONCURRENT_QUERIES` at once; every run is in the audit log
-  (action `query` or `sql`, with the SQL).
+  (action `query`, `sql` or `federated`, with the SQL or the sources).
+- Multi-source questions run in DuckDB inside the backend process: before any SQL a user wrote
+  runs, file and network access, extensions and setting changes are switched off for that
+  session, and the SQL is checked by the same guard (plus DuckDB's file functions). Each source is
+  read through the normal, read-only connection with your permissions. Uploaded files are stored
+  as Parquet copies under `backend/data/datasets/`; whoever can see a file's collection can read all
+  of its rows.
 - Searching with `LIKE '%text%'` scans whole tables. On very large databases use
   `include_tables` / `exclude_tables` and the per-query timeout
   (`NCODE_STATEMENT_TIMEOUT_SEC`).

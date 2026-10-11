@@ -8,16 +8,19 @@ import { Link as RouterLink, NavLink, useNavigate, useParams } from 'react-route
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import {
-  ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LayoutIcon, LinkIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
-  SearchIcon, StarIcon, TrashIcon, UsersIcon,
+  ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LayoutIcon, MergeIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
+  SearchIcon, StarIcon, TrashIcon, UploadIcon, UsersIcon,
 } from '../icons';
 import { flattenTree, library, useArchive, useCollection, useCollections, useQuestions } from '../library/api';
 import type { CollectionInfo, QuestionKind, QuestionSummary } from '../library/api';
 import { CollectionDialog, ConfirmDialog, MoveDialog, ShareDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
 import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
+import { DatasetRow } from './DatasetsPage';
+import { datasets } from '../federation/api';
+import { UploadDialog } from '../federation/UploadDialog';
 
-const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: LinkIcon };
+const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -158,7 +161,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
         </Link>
         <Text fontSize="xs" color="mutedText" noOfLines={1}>
           {showCollection && q.collection && `${q.collection.name} · `}
-          {q.kind === 'federated' ? 'multi-source (M6)' : q.connection} · {q.owner ?? 'former user'} · {ago(q.updated_at)}
+          {q.kind === 'federated' ? 'multi-source' : q.connection} · {q.owner ?? 'former user'} · {ago(q.updated_at)}
           {q.description && ` · ${q.description}`}
         </Text>
       </Box>
@@ -243,6 +246,9 @@ function NewButtons({ collection }: { collection?: number }) {
       <Button as={RouterLink} to={`/sql${into}`} size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />}>
         New SQL query
       </Button>
+      <Button as={RouterLink} to={`/combine${into}`} size="sm" variant="subtle" leftIcon={<MergeIcon boxSize={4} />}>
+        Combine sources
+      </Button>
     </HStack>
   );
 }
@@ -310,6 +316,7 @@ function CollectionView({ id }: { id: number }) {
   const toast = useToast();
   const share = useDisclosure();
   const newBoard = useDisclosure();
+  const uploadHere = useDisclosure();
   const edit = useDisclosure();
   const sub = useDisclosure();
   const move = useDisclosure();
@@ -431,6 +438,21 @@ function CollectionView({ id }: { id: number }) {
       <Panel title="Questions" actions={c.access === 'edit' ? <NewButtons collection={c.id} /> : undefined}>
         <QuestionList items={data.questions} loading={false} error={null} empty={c.access === 'edit' ? 'Empty. Save a question into this collection.' : 'Empty.'} />
       </Panel>
+      {((data.datasets?.length ?? 0) > 0 || c.access === 'edit') && (
+        <Panel
+          title="Uploaded files"
+          actions={
+            c.access === 'edit' ? (
+              <Button size="sm" variant="subtle" leftIcon={<UploadIcon boxSize={4} />} onClick={uploadHere.onOpen} data-testid="upload-here">
+                Upload a file
+              </Button>
+            ) : undefined
+          }
+        >
+          {data.datasets?.length ? data.datasets.map((d) => <DatasetRow key={d.id} d={d} />) : <Empty>No files here.</Empty>}
+        </Panel>
+      )}
+      <UploadDialog isOpen={uploadHere.isOpen} onClose={uploadHere.onClose} collectionId={c.id} />
       <NewDashboardDialog isOpen={newBoard.isOpen} onClose={newBoard.onClose} collectionId={c.id} />
 
       {c.can_manage && !c.personal && <ShareDialog isOpen={share.isOpen} onClose={share.onClose} collection={c} />}
@@ -454,7 +476,7 @@ function CollectionView({ id }: { id: number }) {
 function ArchiveView() {
   const { data, isPending, error } = useArchive();
   const toast = useToast();
-  const [deleting, setDeleting] = useState<{ kind: 'question' | 'collection' | 'dashboard'; id: number; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<{ kind: 'question' | 'collection' | 'dashboard' | 'dataset'; id: number; name: string } | null>(null);
   const restore = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
@@ -499,6 +521,20 @@ function ArchiveView() {
               />
             ))}
           </Panel>
+          {(data.datasets?.length ?? 0) > 0 && (
+            <Panel title="Uploaded files">
+              {data.datasets!.map((d) => (
+                <ArchiveRow
+                  key={`f${d.id}`}
+                  icon={<UploadIcon boxSize={4} />}
+                  name={d.name}
+                  detail={d.collection?.name}
+                  onRestore={() => void restore(() => datasets.update(d.id, { archived: false }))}
+                  onDelete={() => setDeleting({ kind: 'dataset', id: d.id, name: d.name })}
+                />
+              ))}
+            </Panel>
+          )}
           <Panel title="Questions">
             {data.questions.length === 0 && <Empty>No archived questions.</Empty>}
             {data.questions.map((q) => {
@@ -531,6 +567,7 @@ function ArchiveView() {
           if (!deleting) return;
           if (deleting.kind === 'collection') await library.deleteCollection(deleting.id);
           else if (deleting.kind === 'dashboard') await dashboards.remove(deleting.id);
+          else if (deleting.kind === 'dataset') await datasets.remove(deleting.id);
           else await library.deleteQuestion(deleting.id);
         }}
       />

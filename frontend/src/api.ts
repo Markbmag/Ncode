@@ -199,6 +199,10 @@ export interface Limits {
   query_default_rows?: number;
   query_max_rows?: number;
   max_concurrent_queries?: number;
+  federation_source_rows?: number;
+  uploads_enabled?: boolean;
+  dataset_max_mb?: number;
+  dataset_max_rows?: number;
 }
 
 // ---------------------------------------------------------------- schema v2
@@ -248,4 +252,34 @@ export interface ResultEnvelope {
   rows: unknown[][];
   stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean };
   sql: string | null;
+  federation?: FederationInfo | null; // multi-source questions (M6)
+}
+
+/** What a multi-source run reports besides the rows (backend/app/federation/engine.py). */
+export interface FederationInfo {
+  sources: { alias: string; label: string; kind: string; connection: string | null; rows: number; truncated: boolean; duration_ms: number }[];
+  joins: JoinStats[];
+  combined_rows: number;
+  combined_columns: { name: string; type: ColumnType }[];
+}
+
+export interface JoinStats {
+  source: string;
+  type: 'inner' | 'left' | 'right' | 'full';
+  keys: string[];
+  match: string[];
+  left_rows: number;
+  right_rows: number;
+  left_unmatched_rows: number;
+  right_unmatched_rows: number;
+  left_null_keys: number;
+  right_null_keys: number;
+  left_keys: number;
+  right_keys: number;
+  left_unmatched_keys: number;
+  right_unmatched_keys: number;
+  left_repeated_keys: number;
+  right_repeated_keys: number;
+  left_samples: unknown[];
+  right_samples: unknown[];
 }

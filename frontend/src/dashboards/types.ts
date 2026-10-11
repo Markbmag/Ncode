@@ -38,6 +38,7 @@ export interface CardQuestion {
   parameters?: ParameterDef[];
   viz?: VizState | null;
   tables?: string[];
+  fields?: { name: string; type: string }[]; // multi-source questions: the combined columns
 }
 
 export interface DashCard {

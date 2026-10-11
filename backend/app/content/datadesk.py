@@ -7,14 +7,17 @@ What becomes what:
 
 * "single" reports -> builder questions (QuerySpec v1)
 * "sql" reports    -> SQL questions, if they pass Ncode's read-only guard
-* "multi" reports  -> "federated" questions that wait for the federation engine (M6)
+* "multi" reports  -> multi-source questions (M6): every source joined to the first on
+                      its key column with a FULL JOIN, as DataDesk merged them - but every
+                      row is kept (DataDesk kept only the last row per key)
 * dashboards       -> dashboards (M5), each in a collection of the same name that also
                       holds its reports; cards are laid out two per row
 
 Everything lands in a collection "DataDesk import" owned by --owner. The importer reads
 the DataDesk file read-only, never touches it, and can be run again: reports imported
 before are recognised (by their DataDesk id) and skipped. A dashboard that was imported as
-a collection only (before M5) is created by re-running the import.
+a collection only (before M5) is created by re-running the import, and multi-source
+reports imported before M6 (as placeholders) are converted ("upgraded").
 
 DataDesk's tables are read by looking at the columns that exist, so small differences
 between DataDesk versions do not matter; whatever cannot be converted is listed in the
@@ -34,11 +37,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from ..appdb import User
+from ..federation.spec import FederatedSpec
 from ..query.spec import QuerySpec
 from ..query.sqlguard import GuardError, check_sql
 from .dashboards import Card, DashboardStore, Definition, Layout
 from .store import ContentStore
-from .tables import collections_table
+from .tables import collections_table, questions_table
 
 ROOT_NAME = "DataDesk import"
 LOOSE_NAME = "Reports not on a dashboard"
@@ -80,7 +84,7 @@ class Item:
     source_id: Any
     name: str
     kind: str
-    outcome: str                 # builder | sql | federated | skipped | exists
+    outcome: str                 # builder | sql | federated | skipped | exists | upgraded
     notes: list[str] = field(default_factory=list)
     collection: str = ""
 
@@ -102,7 +106,8 @@ class ImportReport:
             f"# DataDesk import report ({head})",
             "",
             f"Reports: {len(self.items)} · builder questions: {self.count('builder')} · SQL questions: {self.count('sql')}"
-            f" · multi-source (waiting for M6): {self.count('federated')} · already imported: {self.count('exists')}"
+            f" · multi-source: {self.count('federated')} · already imported: {self.count('exists')}"
+            f" · upgraded to multi-source: {self.count('upgraded')}"
             f" · could not be converted: {self.count('skipped')}",
             f"Dashboards: {len(self.dashboards)} · new: {self.dashboard_outcomes.count('new')}"
             f" · already imported: {self.dashboard_outcomes.count('exists')}",
@@ -385,6 +390,80 @@ def convert_single(spec: dict[str, Any], connection: str) -> tuple[dict[str, Any
     return out, notes
 
 
+def convert_multi(
+    spec: dict[str, Any], connection_for: Any, connections: dict[str, str]
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """A DataDesk "multi" report -> FederatedSpec v1 (+ parameters, notes)."""
+    raw = spec.get("sources") or []
+    if not isinstance(raw, list) or not raw:
+        raise Unconvertible("the multi-source report has no sources")
+    if len(raw) > 6:
+        raise Unconvertible("more than 6 sources (Ncode's limit)")
+    notes: list[str] = []
+    sources: list[dict[str, Any]] = []
+    keys: list[str | None] = []
+    params: list[dict[str, Any]] = []
+    taken: set[str] = set()
+    for i, s in enumerate(raw):
+        if not isinstance(s, dict):
+            raise Unconvertible(f"source {i + 1} is not an object")
+        label = str(_pick(s, "label", "name", "alias", default=f"source {i + 1}"))[:120]
+        alias = re.sub(r"[^a-z0-9_]+", "_", label.lower()).strip("_")[:28] or f"s{i + 1}"
+        if alias[0].isdigit():
+            alias = f"s_{alias}"[:28]
+        base, n = alias, 2
+        while alias in taken or alias in ("result", "main", "temp", "system"):
+            alias = f"{base}_{n}"
+            n += 1
+        taken.add(alias)
+        conn = connection_for(_pick(s, "database", "db", "connection") or spec.get("database"))
+        sql = _pick(s, "sql", "query")
+        if isinstance(sql, str) and sql.strip():
+            try:
+                checked = check_sql(sql, ENGINE_DIALECT.get(connections[conn], connections[conn]), allow_system=False)
+            except GuardError as exc:
+                raise Unconvertible(f"{label}: the SQL is refused by Ncode's read-only guard: {exc}") from exc
+            params += [{"name": p} for p in checked.params if p not in {x["name"] for x in params}]
+            sources.append({"alias": alias, "label": label, "type": "sql", "connection": conn, "sql": sql})
+        else:
+            inner = _pick(s, "spec", "query_spec", default=None)
+            if not isinstance(inner, dict):
+                raise Unconvertible(f"{label}: the source has neither SQL nor a query")
+            converted, inner_notes = convert_single(inner, conn)
+            notes += [f"{label}: {n}" for n in inner_notes]
+            sources.append({"alias": alias, "label": label, "type": "builder", "spec": converted})
+        key = _pick(s, "keyColumn", "key_column", "key", "joinKey", default=None)
+        keys.append(str(key).split(".")[-1] if key else None)
+    joins = []
+    if len(sources) > 1:
+        if not all(keys):
+            raise Unconvertible("every source needs a key column to be joined")
+        first = sources[0]["alias"]
+        for s, key in zip(sources[1:], keys[1:]):
+            joins.append({"source": s["alias"], "type": "full",
+                          "on": [{"left": f"{first}.{keys[0]}", "right": f"{s['alias']}.{key}", "match": "auto"}]})
+        notes.append("sources joined with FULL JOIN on their key columns; unlike DataDesk every row is kept, "
+                     "so totals can differ where a key repeats")
+    out = {"version": 1, "sources": sources, "mode": "join", "joins": joins}
+    try:
+        FederatedSpec.model_validate(out)
+    except ValidationError as exc:
+        raise Unconvertible(f"converted question is not valid: {exc.errors()[0]['msg']}") from exc
+    return out, params, notes
+
+
+def _placeholder(store: ContentStore, qid: int) -> bool:
+    """A multi-source report imported before M6, kept as a placeholder spec."""
+    with store.engine.connect() as conn:
+        row = conn.execute(select(questions_table.c.kind, questions_table.c.spec).where(questions_table.c.id == qid)).first()
+    if row is None or row.kind != "federated":
+        return False
+    try:
+        return isinstance(json.loads(row.spec).get("datadesk"), dict)
+    except (ValueError, AttributeError):
+        return False
+
+
 def convert_viz(chart_type: Any, config: Any) -> dict[str, Any] | None:
     chart = CHARTS.get(_key(chart_type))
     if chart is None or chart == "table":
@@ -475,7 +554,8 @@ def run_import(
             kind = "sql" if isinstance(spec, dict) and spec.get("sql") else "multi" if isinstance(spec, dict) and spec.get("sources") else "single"
         item = Item(source_id=r.get("id"), name=name, kind=kind, outcome="skipped", collection=home.get(r.get("id"), LOOSE_NAME))
         report.items.append(item)
-        if store.question_by_import_key(f"datadesk:report:{r.get('id')}") is not None:
+        existing = store.question_by_import_key(f"datadesk:report:{r.get('id')}")
+        if existing is not None and not _placeholder(store, existing):
             item.outcome = "exists"
             continue
         try:
@@ -505,18 +585,17 @@ def run_import(
                 if checked.params:
                     item.notes.append(f"parameters to review: {', '.join(checked.params)}")
             elif kind in ("multi", "federated", "cross", "crossdb"):
-                sources = spec.get("sources") or []
-                conns = []
-                for s in sources:
-                    try:
-                        conns.append(connection_for(s.get("database") or s.get("db")))
-                    except Unconvertible as exc:
-                        item.notes.append(str(exc))
-                values.update(kind="federated", connection=conns[0] if conns else "", spec={"datadesk": spec, "connections": conns})
-                item.notes.append("runs once federation arrives (M6)")
+                if isinstance(spec.get("datadesk"), dict):  # a placeholder of an earlier import
+                    spec = spec["datadesk"]
+                converted, params, notes = convert_multi(spec, connection_for, connections)
+                item.notes += notes
+                values.update(kind="federated", connection="", spec=converted, parameters=params)
             else:
                 raise Unconvertible(f"unknown report kind {kind!r}")
             item.outcome = values["kind"]
+            if existing is not None:
+                item.outcome = "upgraded"
+                values["existing_id"] = existing
             planned.append((item, values))
         except Unconvertible as exc:
             item.notes.append(str(exc))
@@ -527,6 +606,11 @@ def run_import(
     root = _collection(store, owner, ROOT_NAME, None)
     folders: dict[str, int] = {}
     for item, values in planned:
+        existing_id = values.pop("existing_id", None)
+        if existing_id is not None:
+            store.update_question(owner, existing_id, kind=values["kind"], connection=values["connection"],
+                                  spec=values["spec"], parameters=values.get("parameters", []))
+            continue
         if item.collection not in folders:
             folders[item.collection] = _collection(store, owner, item.collection, root)
         store.create_question(

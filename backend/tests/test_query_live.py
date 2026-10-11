@@ -188,3 +188,68 @@ def test_dashboard_date_range_on_a_timestamp_column(live):
     compiled = compile_spec(spec, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
     with engine.connect() as conn:
         assert norm_rows(conn.execute(compiled.limited(1)).all()) == [(2,)]  # 2026-01-05 and 2026-01-11 23:59
+
+
+def test_federated_sources_load_with_their_types(ncode_engine, live):
+    """M6: rows read through each server's driver (Decimal, dates, booleans, NULLs) load into DuckDB and join."""
+    from app.federation.engine import FederatedRun, Plan, PreparedSource
+    from app.federation.spec import FederatedSpec
+    from app.query.runner import fetch_sql
+
+    spec = FederatedSpec.model_validate({
+        "sources": [{"alias": "o", "type": "sql", "connection": "live", "sql": "x"},
+                    {"alias": "c", "type": "sql", "connection": "live", "sql": "x"}],
+        "joins": [{"source": "c", "type": "left", "on": [{"left": "o.customer_id", "right": "c.id"}]}],
+        "post": {"breakouts": [{"ref": "region"}, {"ref": "created_at", "bucket": "month"}],
+                 "aggregations": [{"fn": "sum", "ref": "total", "alias": "revenue"}],
+                 "filters": {"rules": [{"ref": "vip", "op": "is_true"}]}, "order": [{"ref": "created_at_month"}]},
+    })
+
+    def source(alias, text):
+        return PreparedSource(alias, alias, "sql", "live", fetch=lambda t: fetch_sql(ncode_engine, t, text, {}, 100))
+
+    plan = Plan(spec=spec, post=spec.post_spec(None), sources=[
+        source("o", "SELECT id, customer_id, total, created_at, paid_on FROM q_orders"),
+        source("c", "SELECT id, name, region, vip FROM q_customers"),
+    ])
+    env = FederatedRun(plan, memory_mb=256, threads=1, default_rows=100, max_rows=1000)(
+        QueryTask(owner="t", connection="", kind="federated"))
+    assert env.rows == [["EU", "2026-01-01", 150.0]]  # Anna (VIP): both January orders
+    types = {c["name"]: c["type"] for c in env.federation["combined_columns"]}
+    assert types["total"] == "number" and types["created_at"] == "datetime" and types["paid_on"] == "date"
+    assert types["vip"] in ("boolean", "number")  # SQL Server's BIT reads as a boolean, MySQL's TINYINT(1) as a number
+
+
+def test_federated_join_across_servers():
+    """M6 "done when": results of different servers joined on a key, with the unmatched-keys report."""
+    from app.federation.engine import FederatedRun, Plan, PreparedSource
+    from app.federation.spec import FederatedSpec
+    from app.query.runner import fetch_sql
+
+    urls = [u for u in URLS.values() if u]
+    if len(urls) < 2:
+        pytest.skip("needs two of NCODE_TEST_PG_URL / NCODE_TEST_MYSQL_URL / NCODE_TEST_MSSQL_URL")
+    engines = [create_engine(u) for u in urls[:3]]
+    for e in engines:
+        load(e)
+    try:
+        def source(alias, engine, text):
+            return PreparedSource(alias, f"{alias} on {engine.dialect.name}", "sql", engine.dialect.name,
+                                  fetch=lambda t: fetch_sql(engine, t, text, {}, 100))
+
+        sources = [source("orders", engines[0], "SELECT id, customer_id, total FROM q_orders"),
+                   source("customers", engines[1], "SELECT id, name FROM q_customers WHERE id <> 4")]
+        joins = [{"source": "customers", "type": "left", "on": [{"left": "orders.customer_id", "right": "customers.id"}]}]
+        if len(engines) > 2:
+            sources.append(source("items", engines[2], "SELECT order_id, sku FROM q_order_items"))
+            joins.append({"source": "items", "type": "left", "on": [{"left": "orders.id", "right": "items.order_id"}]})
+        spec = FederatedSpec.model_validate({"sources": [{"alias": s.alias, "type": "sql", "connection": "x", "sql": "x"} for s in sources],
+                                             "joins": joins})
+        env = FederatedRun(Plan(spec=spec, sources=sources, post=spec.post_spec(None)), memory_mb=256, threads=1,
+                           default_rows=100, max_rows=1000)(QueryTask(owner="t", connection="", kind="federated"))
+        first = env.federation["joins"][0]
+        assert (first["left_rows"], first["left_unmatched_rows"], first["left_unmatched_keys"], first["left_samples"]) == (7, 2, 1, [4])
+        assert env.federation["combined_rows"] == (8 if len(engines) > 2 else 7)  # order 1 has two items
+    finally:
+        for e in engines:
+            e.dispose()

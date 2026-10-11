@@ -1,6 +1,6 @@
 # Ncode → data work & analysis platform
 
-**Status:** agreed plan v1 · M0–M3 delivered, waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-10
+**Status:** agreed plan v1 · M0–M6 delivered, waiting for their checklists · **Owner:** Mark · **Last updated:** 2026-10-11
 
 This document is the single source of truth for where Ncode is going. It contains the
 analysis of the *DataDesk* low-code project ("Low-code-draft"), what we borrow from it, the
@@ -213,7 +213,7 @@ from M0 on (DataDesk patched its schema with `try { ALTER TABLE }`; we won't).
 | `permissions` | M4 | collection × (user or role) → view / edit |
 | `favorites` | M4 | per-user stars |
 | `dashboards`, `dashboard_cards` | M5 | layout, filters (JSON), tabs, card kinds (question / text / heading) |
-| `datasets` | M6 | uploaded files: name, path, columns, row count |
+| `datasets` | M6 | uploaded files: name, collection, Parquet file, columns, row count |
 | `field_metadata` | M7 | per column: display name, description, semantic type, format, hidden, parse-as-date |
 | `models`, `metrics` | M7 | saved question as virtual table; named aggregation |
 | `subscriptions`, `alerts` | M8 | schedule, recipients, thresholds |
@@ -234,7 +234,8 @@ Order is fixed; M0–M5 form **release v1.0 "Analytics core"**.
 | M3 | Delivered on the same branch; checklist: [docs/checklists/M3.md](checklists/M3.md) (Mark tests M0–M3 together) |
 | M4 | Delivered on the same branch; checklist: [docs/checklists/M4.md](checklists/M4.md) |
 | M5 | Delivered on the same branch; checklist: [docs/checklists/M5.md](checklists/M5.md). **Release v1.0 "Analytics core" is complete** once the M0–M5 checklists pass |
-| M6–M9 | Not started |
+| M6 | Delivered on the same branch; checklist: [docs/checklists/M6.md](checklists/M6.md) |
+| M7–M9 | Not started |
 
 ```mermaid
 flowchart LR
@@ -435,6 +436,7 @@ natural-language questions (LLM) · mobile layout polish.
 
 | Date | Change |
 |---|---|
+| 2026-10-11 | M6 delivered. Decisions: (1) **DuckDB 1.5.x only**, no SQLite fallback (wheels for Python 3.14 on Windows exist since 1.4.2; 1.5.5 was the newest release older than two weeks); a missing package gives a clear 503; (2) a multi-source question (`kind: "federated"`, FederatedSpec v1) has up to 6 sources - saved questions, tables, SQL on any connection, uploaded files - read in parallel through the normal read-only connections (≤ `NCODE_FEDERATION_SOURCE_ROWS`, 100,000 each, flagged when cut off) and loaded into a fresh in-memory DuckDB per run; (3) joins: inner/left/**right**/full on up to 4 key pairs, keys compared *automatically* (numbers as numbers, text trimmed, empty text = no key), as text, text ignoring case, numbers or exactly; or **SQL over the sources** (DuckDB dialect, same guard + DuckDB file/settings functions denied, tables limited to the source names); (4) every join reports unmatched rows and distinct keys on both sides, examples, empty keys and **repeated keys** (DataDesk's silent overwrite becomes a visible "rows multiply" warning); (5) the step after the join is an ordinary builder question over the table `result`, compiled by the existing compiler with a PostgreSQL dialect renamed duckdb - filters, custom columns, summaries, buckets, having, sort and *ask for the value* parameters all work unchanged; **pivot** stays a chart type (M3) rather than a separate step; (6) DuckDB sessions: memory and thread caps, no spilling to disk, no extension auto-loading, then external access off and `lock_configuration` before any user SQL; uploads are read by a separate session that never runs user SQL; (7) uploads: CSV/TSV (DuckDB's detection over the whole file; separator/encoding/header can be set), XLSX via openpyxl (dates at midnight become dates, mixed columns text), Parquet; stored as Ncode's own Parquet copy in `data/datasets/`, ≤ 100 MB and 1,000,000 rows, in **collections** (same permissions as questions), raw-body upload so no new multipart dependency; (8) parameters of a multi-source question: asked-for filters, `{{names}}` in SQL, and the parameters of source questions (passed on by name); dashboards can map filters to combined columns (saved with the question as `result_columns`) or parameters; (9) access is never widened: each source checks the viewer's access to its connection, question or file; (10) the DataDesk importer converts "multi" reports (FULL JOIN on the key columns, like DataDesk, keeping every row) and upgrades placeholders of earlier imports. Verified: backend tests (incl. live joins across PostgreSQL 16, MariaDB 10.11 and SQL Server 2022), frontend tests, and in a browser: MES (PostgreSQL) and LES (MariaDB) joined on VIN with the unmatched-keys report (52.5 % → 37.5 % after *ignore case*), a CSV plan as third source, summarised, saved, reopened, on a dashboard with a column filter, at phone width |
 | 2026-10-09 | Plan v1 created from the DataDesk analysis |
 | 2026-10-10 | Ncode v5 imported as the baseline (fixes: one wrong test, `framer-motion` 6 → 11 for React 19 types, lint errors, leftover files removed) |
 | 2026-10-11 | M5 delivered (release v1.0 feature-complete). Decisions: (1) `react-grid-layout` **2.2.4** (v2 TypeScript rewrite, React 19 fine; 2.3.0 was only 6 days old); 12 columns, 40 px rows, vertical packing, new cards take the first free spot; phones show cards stacked; (2) a dashboard is saved as a whole (`PUT`), cards in their own table so a deleted question leaves a "deleted" card instead of breaking the dashboard; (3) filters: date range, date, list, text, number; mapped per card to a **parameter** or (builder questions) a **column**; a date range on a single-date parameter passes its start, on a `between` parameter both ends (an open end reaches far), the whole last day counts on datetime columns; (4) **a dashboard never widens access**: viewers need view access to each card's question (else "not shared with you") and to its database; editors may keep but not add questions they cannot see; duplicates keep only visible cards; (5) card runs go through `POST /api/dashboards/{id}/cards/{key}/run`, queued in the browser below the per-user query limit (now in `/api/limits`) with a retry on 429; refresh bypasses the cache; (6) auto-refresh default saved with the dashboard (off / 30 s / 1 / 5 / 15 min); TV mode = browser full screen; print/PDF via the browser with a print stylesheet; (7) Markdown in text cards is a small safe subset rendered as React elements (no HTML; links only http(s), mailto and app paths); (8) the DataDesk importer now creates real dashboards (re-running adds them to earlier imports). Verified: backend tests, live tests on PostgreSQL 16 / MariaDB 10.11 / SQL Server 2022, and a browser run of the "done when" (6 cards + 2 filters keep their layout after reload, refresh, permissions with a second user, TV mode, phone width) |

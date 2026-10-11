@@ -5,6 +5,7 @@ import { queryClient } from '../lib/queryClient';
 import type { QuerySpec } from '../query/types';
 import type { VizState } from '../viz/state';
 import type { DashboardSummary } from '../dashboards/types';
+import type { Dataset, FederatedSpec } from '../federation/types';
 import type { ParameterDef } from './params';
 
 export { flattenTree } from './tree.ts';
@@ -65,9 +66,9 @@ export interface Grant {
 }
 
 export interface QuestionPayload {
-  kind: 'builder' | 'sql';
+  kind: QuestionKind;
   connection?: string;
-  spec: QuerySpec | SqlQuestionSpec;
+  spec: QuerySpec | SqlQuestionSpec | FederatedSpec;
   viz: VizState | null;
   parameters: ParameterDef[];
 }
@@ -105,6 +106,7 @@ export function useCollection(id: number | null) {
           collections: CollectionInfo[];
           questions: QuestionSummary[];
           dashboards: DashboardSummary[];
+          datasets?: Dataset[];
         }>(
           `/api/collections/${id}`,
         )
@@ -131,7 +133,11 @@ export function useArchive() {
   return useQuery({
     queryKey: libraryKeys.archive,
     queryFn: async () =>
-      (await http.get<{ collections: CollectionInfo[]; questions: QuestionSummary[]; dashboards: DashboardSummary[] }>('/api/library/archive')).data,
+      (
+        await http.get<{ collections: CollectionInfo[]; questions: QuestionSummary[]; dashboards: DashboardSummary[]; datasets?: Dataset[] }>(
+          '/api/library/archive',
+        )
+      ).data,
   });
 }
 

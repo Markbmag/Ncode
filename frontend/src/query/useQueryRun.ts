@@ -43,7 +43,7 @@ export function useQueryRun() {
   }, []);
 
   const run = useCallback(
-    async (request: () => Promise<TaskSnapshot>, keepResult = true) => {
+    async (request: () => Promise<TaskSnapshot>, keepResult = true, onCompleted?: (result: ResultEnvelope) => void) => {
       const id = ++runId.current;
       cancelTask(taskId.current);
       taskId.current = null;
@@ -66,6 +66,7 @@ export function useQueryRun() {
           if (id !== runId.current) return;
         }
         taskId.current = null;
+        if (snap.status === 'completed' && snap.result) onCompleted?.(snap.result);
         setState((prev) => ({
           ...prev,
           phase: 'done',

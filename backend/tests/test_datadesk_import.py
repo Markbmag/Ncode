@@ -43,6 +43,7 @@ def test_dry_run_reports_and_writes_nothing(env, datadesk):
     before = datadesk.read_bytes()
     report = do_import(env, datadesk, dry_run=True)
     assert outcomes(report) == {1: "builder", 2: "sql", 3: "skipped", 4: "federated", 5: "skipped", 6: "builder", 7: "skipped"}
+    assert "FULL JOIN" in " ".join(report.items[3].notes)
     notes = {i.source_id: " ".join(i.notes) for i in report.items}
     assert "read-only guard" in notes[3]
     assert "'regex' is not known" in notes[5]
@@ -89,9 +90,34 @@ def test_import_creates_questions_in_dashboard_collections(env, datadesk):
     ]
     assert run(env, "admin", revenue["id"])["status"] == "completed"
 
-    federated = questions["Orders vs tickets"]
-    assert federated["kind"] == "federated"
-    assert "M6" in run(env, "admin", federated["id"], status=409)["detail"]
+    federated = call(env, "admin", "GET", f"/api/questions/{questions['Orders vs tickets']['id']}")
+    assert federated["kind"] == "federated" and federated["connection"] == ""
+    spec = federated["spec"]
+    assert [(s["alias"], s["type"]) for s in spec["sources"]] == [("orders", "builder"), ("tickets", "sql")]
+    assert spec["sources"][1]["connection"] == "crm"
+    assert spec["joins"] == [{"source": "tickets", "type": "full",
+                              "on": [{"left": "orders.customer_id", "right": "tickets.customer", "match": "auto"}]}]
+    # runs like any multi-source question; here "crm" is not a connection of this server
+    assert "tickets: Unknown connection 'crm'" in run(env, "admin", federated["id"], status=404)["detail"]
+
+
+def test_placeholders_of_earlier_imports_are_upgraded(env, datadesk):
+    """Before M6 a multi-source report was imported as a placeholder; importing again converts it."""
+    db = env["db"]
+    store = ContentStore(db.engine)
+    admin = db.get_user_by_name("admin")
+    store.create_question(
+        admin, name="Orders vs tickets", description=None, collection_id=store.personal_collection(admin).id,
+        connection="shop", kind="federated", spec={"datadesk": {"sources": [
+            {"label": "orders", "database": "db1", "spec": {"from": "q_orders"}, "keyColumn": "customer_id"},
+            {"label": "again", "database": "db1", "sql": "SELECT * FROM q_orders", "keyColumn": "customer_id"},
+        ]}, "connections": ["shop"]}, viz=None, parameters=[], import_key="datadesk:report:4",
+    )
+    report = do_import(env, datadesk, dry_run=False)
+    assert outcomes(report)[4] == "upgraded"
+    q = next(q for q in call(env, "admin", "GET", "/api/questions")["questions"] if q["name"] == "Orders vs tickets")
+    full = call(env, "admin", "GET", f"/api/questions/{q['id']}")
+    assert full["connection"] == "" and full["spec"]["sources"][1]["alias"] == "tickets"
 
 
 def test_import_twice_skips_what_exists(env, datadesk):

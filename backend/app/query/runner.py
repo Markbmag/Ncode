@@ -271,26 +271,32 @@ def _unpooled_connection(engine: Engine) -> Any:
     return engine.dialect.connect(*cargs, **cparams)
 
 
-def run_statement(engine: Engine, task: QueryTask, statement: Any, limit: int, column_types: list[str], sql: str) -> ResultEnvelope:
-    """A compiled builder statement (already limited to limit + 1 rows)."""
+def fetch_statement(engine: Engine, task: QueryTask, statement: Any, limit: int) -> tuple[list[str], list[tuple], bool]:
+    """(column names, at most `limit` raw rows, truncated) of a compiled builder statement."""
     dialect = engine.dialect.name
-    started = time.perf_counter()
     with engine.connect() as conn:
         task.set_cancel_hook(_cancel_hook(engine, conn, dialect))
         result = conn.execution_options(stream_results=dialect == "postgresql").execute(statement)
         names = list(result.keys())
         rows = result.fetchmany(limit + 1)
         result.close()
-    truncated = len(rows) > limit
-    rows = [tuple(r) for r in rows[:limit]]
+    return names, [tuple(r) for r in rows[:limit]], len(rows) > limit
+
+
+def run_statement(engine: Engine, task: QueryTask, statement: Any, limit: int, column_types: list[str], sql: str) -> ResultEnvelope:
+    """A compiled builder statement (already limited to limit + 1 rows)."""
+    started = time.perf_counter()
+    names, rows, truncated = fetch_statement(engine, task, statement, limit)
     return build_envelope(
         names, rows, column_types=column_types, duration_ms=(time.perf_counter() - started) * 1000,
         truncated=truncated, sql=sql,
     )
 
 
-def run_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any], limit: int) -> ResultEnvelope:
-    """SQL typed by a user (already checked by sqlguard). Runs exactly as written.
+def fetch_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any], limit: int) -> tuple[list[str], list[tuple], bool]:
+    """(column names, at most `limit` raw rows, truncated) of SQL typed by a user (already checked by sqlguard).
+
+    The SQL runs exactly as written.
 
     Rows are capped without rewriting the SQL: PostgreSQL uses a server-side cursor
     (also refuses a second statement), MySQL/MariaDB sql_select_limit, SQL Server
@@ -309,7 +315,6 @@ def run_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any], l
             # and with parameters psycopg reads every % as a placeholder: escape them.
             driver_sql = text.replace("%", "%%")
 
-    started = time.perf_counter()
     with engine.connect() as conn:
         task.set_cancel_hook(_cancel_hook(engine, conn, dialect))
         dbapi = conn.connection.dbapi_connection
@@ -347,7 +352,13 @@ def run_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any], l
                     conn.invalidate()  # never return a connection with a row cap to the pool
         if not conn.invalidated:
             conn.rollback()  # end the read transaction (closes the PostgreSQL cursor too)
-    truncated = len(rows) > limit
+    return names, rows[:limit], len(rows) > limit
+
+
+def run_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any], limit: int) -> ResultEnvelope:
+    """SQL typed by a user, as a result envelope."""
+    started = time.perf_counter()
+    names, rows, truncated = fetch_sql(engine, task, sql, params, limit)
     return build_envelope(
-        names, rows[:limit], duration_ms=(time.perf_counter() - started) * 1000, truncated=truncated, sql=sql,
+        names, rows, duration_ms=(time.perf_counter() - started) * 1000, truncated=truncated, sql=sql,
     )

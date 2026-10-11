@@ -30,7 +30,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ..appdb import User, users_table
 from .tables import (
-    collections_table, dashboard_cards_table, dashboards_table, favorites_table, permissions_table, questions_table,
+    collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, permissions_table,
+    questions_table,
 )
 
 Level = Literal["view", "edit"]
@@ -203,6 +204,7 @@ def _clean_name(name: str, limit: int) -> str:
 class ContentStore:
     def __init__(self, engine: Engine):
         self.engine = engine
+        self.on_files_deleted: Any = None  # set by app/federation: removes uploaded files of deleted datasets
 
     # ------------------------------------------------------------------ snapshot
     def snapshot(self) -> Snapshot:
@@ -371,10 +373,14 @@ class ContentStore:
                 conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "dashboard", favorites_table.c.item_id.in_(dids)))
                 conn.execute(delete(dashboard_cards_table).where(dashboard_cards_table.c.dashboard_id.in_(dids)))
                 conn.execute(delete(dashboards_table).where(dashboards_table.c.id.in_(dids)))
+            files = [r.file for r in conn.execute(select(datasets_table.c.file).where(datasets_table.c.collection_id.in_(ids)))]
+            conn.execute(delete(datasets_table).where(datasets_table.c.collection_id.in_(ids)))
             conn.execute(delete(permissions_table).where(permissions_table.c.collection_id.in_(ids)))
             # children first: parent_id is a foreign key
             for dead in sorted(ids, key=lambda i: -len(snap.chain(i))):
                 conn.execute(delete(collections_table).where(collections_table.c.id == dead))
+        if files and self.on_files_deleted is not None:
+            self.on_files_deleted(files)
         return len(qids)
 
     # ------------------------------------------------------------------ permissions
@@ -618,3 +624,4 @@ def forget_user(conn: Any, user_id: int, username: str) -> None:
     conn.execute(update(collections_table).where(collections_table.c.owner_id == user_id).values(owner_id=None))
     conn.execute(update(questions_table).where(questions_table.c.owner_id == user_id).values(owner_id=None))
     conn.execute(update(dashboards_table).where(dashboards_table.c.owner_id == user_id).values(owner_id=None))
+    conn.execute(update(datasets_table).where(datasets_table.c.owner_id == user_id).values(owner_id=None))

@@ -30,7 +30,10 @@ from sqlglot.errors import ParseError, TokenError
 
 from .dialects import MYSQL_FAMILY
 
-SQLGLOT_DIALECT = {"mysql": "mysql", "mariadb": "mysql", "postgresql": "postgres", "mssql": "tsql", "sqlite": "sqlite"}
+SQLGLOT_DIALECT = {
+    "mysql": "mysql", "mariadb": "mysql", "postgresql": "postgres", "mssql": "tsql", "sqlite": "sqlite",
+    "duckdb": "duckdb",  # SQL over the sources of a multi-source question (M6)
+}
 
 PARAM = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]{0,63})\s*\}\}")
 MAX_SQL_CHARS = 100_000
@@ -67,6 +70,17 @@ DENIED_FUNCTIONS = {
     # SQLite
     "readfile", "writefile", "edit", "fts3_tokenizer", "zipfile", "sqlar_compress",
 }
+
+# DuckDB: reading files or settings. External access is also switched off in the
+# DuckDB session (app/federation/workspace.py); this is the second layer.
+DUCKDB_DENIED_FUNCTIONS = {
+    "read_csv", "read_csv_auto", "read_parquet", "parquet_scan", "read_json", "read_json_auto", "read_ndjson",
+    "read_ndjson_auto", "read_json_objects", "read_ndjson_objects", "read_text", "read_blob", "glob", "sniff_csv",
+    "parquet_metadata", "parquet_schema", "parquet_file_metadata", "parquet_kv_metadata", "iceberg_scan",
+    "delta_scan", "sqlite_scan", "sqlite_attach", "postgres_scan", "postgres_query", "mysql_scan", "mysql_query",
+    "query", "query_table", "getenv", "current_setting", "which_secret", "load_extension",
+}
+_DUCKDB_DENIED_PREFIXES = ("duckdb_", "pragma_", "read_", "parquet_", "json_execute")
 
 SYSTEM_SCHEMAS = {"information_schema", "pg_catalog", "pg_toast", "mysql", "performance_schema", "sys"}
 SYSTEM_DATABASES = {"master", "msdb", "model", "tempdb", "mysql", "information_schema", "performance_schema", "sys"}
@@ -133,7 +147,7 @@ def check_sql(sql: str, dialect: str, *, allow_system: bool = False) -> CheckedS
             raise GuardError(f"Not allowed in a read-only query: {_describe(node)}")
         if isinstance(node, exp.Func):
             name = _function_name(node)
-            if name in DENIED_FUNCTIONS:
+            if name in DENIED_FUNCTIONS or (dialect == "duckdb" and _duckdb_denied(name)):
                 raise GuardError(f"The function {name.upper()}() is not allowed")
         if isinstance(node, exp.WithTableHint):
             for hint in node.expressions:
@@ -148,6 +162,10 @@ def check_sql(sql: str, dialect: str, *, allow_system: bool = False) -> CheckedS
             if label not in tables:
                 tables.append(label)
     return CheckedSQL(sql=sql, params=params, tables=tables)
+
+
+def _duckdb_denied(name: str) -> bool:
+    return name in DUCKDB_DENIED_FUNCTIONS or name.startswith(_DUCKDB_DENIED_PREFIXES)
 
 
 def _function_name(node: exp.Func) -> str:

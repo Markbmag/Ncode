@@ -217,12 +217,25 @@ def param_shapes(kind: str, spec: dict[str, Any]) -> dict[str, ParamShape]:
     """How many values each parameter of a question takes: one, two (between) or a list (in).
 
     SQL parameters always take one value; builder parameters follow the filter operator."""
-    if kind != "builder":
+    if kind not in ("builder", "federated"):
         return {}
     from .params import spec_params  # params imports store, like this module
 
+    if kind == "federated":
+        from ..federation.spec import FederatedSpec
+
+        try:
+            parsed = FederatedSpec.model_validate(spec)
+        except ValueError:
+            return {}
+        uses = spec_params(parsed.post_spec(None))
+        for s in parsed.sources:
+            if s.spec is not None:
+                uses += spec_params(s.spec)
+    else:
+        uses = spec_params(QuerySpec.model_validate(spec))
     out: dict[str, ParamShape] = {}
-    for name, op in spec_params(QuerySpec.model_validate(spec)):
+    for name, op in uses:
         out.setdefault(name, "pair" if op == "between" else "list" if op in ("in", "not_in") else "single")
     return out
 
@@ -292,7 +305,7 @@ def apply_filters(
             if converted is not None:
                 params[mapping.param] = converted
         elif mapping.field:
-            if kind != "builder":
+            if kind not in ("builder", "federated"):
                 raise ContentError("Only questions built without SQL can be filtered by a column; map the filter to a parameter")
             conditions.extend(_field_conditions(f.type, mapping.field, value))
     return params, conditions

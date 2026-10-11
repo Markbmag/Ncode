@@ -256,3 +256,19 @@ export const SaveIcon = make(
 );
 
 export const ChevronRightIcon = make(<path d="m9 18 6-6-6-6" />);
+
+export const MergeIcon = make(
+  <>
+    <circle cx="18" cy="18" r="3" />
+    <circle cx="6" cy="6" r="3" />
+    <path d="M6 21V9a9 9 0 0 0 9 9" />
+  </>,
+);
+
+export const UploadIcon = make(
+  <>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m17 8-5-5-5 5" />
+    <path d="M12 3v12" />
+  </>,
+);
