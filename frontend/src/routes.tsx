@@ -15,6 +15,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const CombinePage = lazy(() => import('./pages/CombinePage'));
 const DatasetsPage = lazy(() => import('./pages/DatasetsPage'));
 const XrayPage = lazy(() => import('./pages/XrayPage'));
+const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const ChartGalleryPage = lazy(() => import('./pages/ChartGalleryPage'));
 
@@ -36,6 +37,7 @@ export function AppRoutes() {
         <Route path="xray" element={<XrayPage />} />
         <Route path="dashboards" element={<DashboardsPage />} />
         <Route path="dashboards/:id" element={<DashboardPage />} />
+        <Route path="subscriptions" element={<SubscriptionsPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/charts" element={<ChartGalleryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

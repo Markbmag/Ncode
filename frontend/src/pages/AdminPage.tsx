@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import {
   Alert, AlertIcon, Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Select,
-  SimpleGrid, Skeleton, Table, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack,
+  SimpleGrid, Skeleton, Tab, TabList, TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack,
 } from '@chakra-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Navigate, Link as RouterLink } from 'react-router-dom';
+import { Navigate, Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { Panel } from '../admin/Panel';
+import { DeliverySettings } from '../admin/DeliverySettings';
+import { SharingSettings } from '../admin/SharingSettings';
+import { UsagePanel } from '../admin/UsagePanel';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
@@ -15,18 +18,6 @@ import { LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icon
 import { engineMeta } from '../lib/engines';
 import { queryKeys } from '../lib/queryClient';
 import { useWorkspace } from '../workspace/useWorkspace';
-
-function Panel({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
-  return (
-    <Box bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="2xl" p={{ base: 4, md: 5 }}>
-      <Flex align="center" justify="space-between" mb={4} gap={3} wrap="wrap">
-        <Text fontWeight={700}>{title}</Text>
-        {actions}
-      </Flex>
-      {children}
-    </Box>
-  );
-}
 
 function TableCard({ table, connection }: { table: SchemaTable; connection: string }) {
   const [editing, setEditing] = useState<SchemaColumn | null>(null);
@@ -159,14 +150,21 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
 export default function AdminPage() {
   const ws = useWorkspace();
   const [modelKey, setModelKey] = useState('');
+  const [search, setSearch] = useSearchParams();
   if (!ws.isAdmin) return <Navigate to="/" replace />;
+  const tabIndex = Math.max(0, TABS.indexOf(search.get('tab') ?? 'databases'));
+  const setTab = (i: number) => setSearch((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set('tab', TABS[i]);
+    return next;
+  }, { replace: true });
   const selected = ws.connections.some((c) => c.key === modelKey) ? modelKey : ws.activeKey;
 
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
         title="Admin"
-        subtitle="Databases and their data model: names, formats, relationships and metrics everyone uses. Users and permissions get a screen in M9."
+        subtitle="Databases and their data model, delivery of subscriptions, sharing outside Ncode and usage. Users and permissions get a screen in M9."
         actions={
           <Button as={RouterLink} to="/admin/charts" size="sm" variant="subtle">
             Chart gallery
@@ -174,70 +172,95 @@ export default function AdminPage() {
         }
       />
 
-      <Panel
-        title="Databases"
-        actions={
-          <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={ws.openAddConnection}>
-            Add a database
-          </Button>
-        }
-      >
-        {ws.connections.length === 0 ? (
-          <Text fontSize="sm" color="mutedText">
-            No databases yet.
-          </Text>
-        ) : (
-          <VStack align="stretch" spacing={2}>
-            {ws.connections.map((c) => (
-              <Flex key={c.key} align="center" gap={3} px={3} py={2} borderRadius="xl" bg="chipBg">
-                <EngineBadge engine={c.engine} size={30} />
-                <Box flex={1} minW={0}>
-                  <Text fontSize="sm" fontWeight={600} noOfLines={1}>
-                    {c.label}{' '}
-                    <Text as="span" color="faintText" fontWeight={400} fontFamily="mono" fontSize="xs">
-                      {c.key}
+      <Tabs index={tabIndex} onChange={setTab} size="sm" variant="soft-rounded" colorScheme="purple" isLazy>
+        <TabList flexWrap="wrap" gap={1}>
+          <Tab data-testid="admin-tab-databases">Databases</Tab>
+          <Tab data-testid="admin-tab-delivery">Delivery</Tab>
+          <Tab data-testid="admin-tab-sharing">Sharing</Tab>
+          <Tab data-testid="admin-tab-usage">Usage</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel px={0} pt={5}>
+            <VStack align="stretch" spacing={6}>
+                <Panel
+                  title="Databases"
+                  actions={
+                    <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={ws.openAddConnection}>
+                      Add a database
+                    </Button>
+                  }
+                >
+                  {ws.connections.length === 0 ? (
+                    <Text fontSize="sm" color="mutedText">
+                      No databases yet.
                     </Text>
-                  </Text>
-                  <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                    {engineMeta(c.engine).label} · {c.database}
-                  </Text>
-                </Box>
-                {c.editable ? (
-                  <IconButton
-                    aria-label={`Edit ${c.label}`}
-                    size="sm"
-                    icon={<PencilIcon boxSize={3.5} />}
-                    onClick={() => ws.openEditConnection(c.key)}
-                  />
-                ) : (
-                  <Tooltip label="Defined in the .env file — edit it there" hasArrow>
-                    <Box color="faintText" px={2}>
-                      <LockIcon boxSize={3.5} />
-                    </Box>
-                  </Tooltip>
-                )}
-              </Flex>
-            ))}
-          </VStack>
-        )}
-      </Panel>
+                  ) : (
+                    <VStack align="stretch" spacing={2}>
+                      {ws.connections.map((c) => (
+                        <Flex key={c.key} align="center" gap={3} px={3} py={2} borderRadius="xl" bg="chipBg">
+                          <EngineBadge engine={c.engine} size={30} />
+                          <Box flex={1} minW={0}>
+                            <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+                              {c.label}{' '}
+                              <Text as="span" color="faintText" fontWeight={400} fontFamily="mono" fontSize="xs">
+                                {c.key}
+                              </Text>
+                            </Text>
+                            <Text fontSize="xs" color="mutedText" noOfLines={1}>
+                              {engineMeta(c.engine).label} · {c.database}
+                            </Text>
+                          </Box>
+                          {c.editable ? (
+                            <IconButton
+                              aria-label={`Edit ${c.label}`}
+                              size="sm"
+                              icon={<PencilIcon boxSize={3.5} />}
+                              onClick={() => ws.openEditConnection(c.key)}
+                            />
+                          ) : (
+                            <Tooltip label="Defined in the .env file — edit it there" hasArrow>
+                              <Box color="faintText" px={2}>
+                                <LockIcon boxSize={3.5} />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Flex>
+                      ))}
+                    </VStack>
+                  )}
+                </Panel>
 
-      {ws.connections.length > 0 && (
-        <Panel
-          title="Data model"
-          actions={
-            <Select size="sm" maxW="260px" value={selected} onChange={(e) => setModelKey(e.target.value)}>
-              {ws.connections.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </Select>
-          }
-        >
-          <DataModel key={selected} connectionKey={selected} />
-        </Panel>
-      )}
+                {ws.connections.length > 0 && (
+                  <Panel
+                    title="Data model"
+                    actions={
+                      <Select size="sm" maxW="260px" value={selected} onChange={(e) => setModelKey(e.target.value)}>
+                        {ws.connections.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </Select>
+                    }
+                  >
+                    <DataModel key={selected} connectionKey={selected} />
+                  </Panel>
+                )}
+            </VStack>
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <DeliverySettings />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <SharingSettings />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <UsagePanel />
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
     </VStack>
   );
 }
+
+const TABS = ['databases', 'delivery', 'sharing', 'usage'];

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import {
   Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, Tooltip, useColorMode, useToast,
 } from '@chakra-ui/react';
@@ -11,7 +11,7 @@ import { buildCsvFromArrays, downloadText, safeFilename, saveBlob } from '../lib
 import { chartTheme } from '../viz/palette';
 import { DEFAULT_VIZ, effectiveViz } from '../viz/state';
 import type { VizSpec } from '../viz/types';
-import { useCardRun } from './api';
+import { CardEndpointsContext, useCardRun } from './api';
 import { activeMappings, editorParams } from './logic';
 import type { FilterValues } from './logic';
 import { Markdown } from './Markdown';
@@ -121,9 +121,13 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const q = card.question;
   const runnable = !!q && (q.state === 'ok' || q.state === 'archived');
   const [retry, setRetry] = useState(0);
-  const url = saved ? `/api/dashboards/${dashboardId}/cards/${card.key}/run` : `/api/questions/${card.question_id}/run`;
-  const request = saved ? `{"filters":${runValuesJson}}` : '{"params":{}}';
-  const run = useCardRun(url, request, trigger + retry, refresh || retry > 0, runnable);
+  const endpoints = useContext(CardEndpointsContext); // public links and embeds run elsewhere
+  const url = endpoints ? endpoints.run(card) : saved ? `/api/dashboards/${dashboardId}/cards/${card.key}/run` : `/api/questions/${card.question_id}/run`;
+  const request = saved || endpoints ? `{"filters":${runValuesJson}}` : '{"params":{}}';
+  const tasks = endpoints?.tasks ?? '/api/query';
+  const headersJson = JSON.stringify(endpoints?.headers ?? {});
+  const run = useCardRun(url, request, trigger + retry, refresh || retry > 0, runnable, tasks, headersJson);
+  const canDownload = !endpoints || endpoints.download;
   const navigate = useNavigate();
   const toast = useToast();
   const { colorMode } = useColorMode();
@@ -142,7 +146,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const exportXlsx = async () => {
     if (!run.taskId) return;
     try {
-      const res = await http.get<Blob>(`/api/query/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob' });
+      const res = await http.get<Blob>(`${tasks}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers: endpoints?.headers });
       saveBlob(`${name}.xlsx`, res.data);
     } catch (error) {
       toast({ status: 'error', title: 'Excel export failed', description: await apiErrorMessageAsync(error, 'Refresh the card and retry') });
@@ -183,16 +187,22 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
         <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={() => setRetry((n) => n + 1)}>
           Refresh
         </MenuItem>
-        <MenuItem icon={<CodeIcon boxSize={4} />} onClick={openInEditor} data-testid="card-open">
-          Open in editor
-        </MenuItem>
+        {!endpoints && (
+          <MenuItem icon={<CodeIcon boxSize={4} />} onClick={openInEditor} data-testid="card-open">
+            Open in editor
+          </MenuItem>
+        )}
         <MenuDivider />
-        <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!result} onClick={() => result && downloadText(`${name}.csv`, buildCsvFromArrays(result.columns.map((c) => c.name), result.rows, ';'))}>
-          CSV (for Excel)
-        </MenuItem>
-        <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!run.taskId || !result} onClick={() => void exportXlsx()}>
-          Excel workbook
-        </MenuItem>
+        {canDownload && (
+          <>
+            <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!result} onClick={() => result && downloadText(`${name}.csv`, buildCsvFromArrays(result.columns.map((c) => c.name), result.rows, ';'))}>
+              CSV (for Excel)
+            </MenuItem>
+            <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!run.taskId || !result} onClick={() => void exportXlsx()}>
+              Excel workbook
+            </MenuItem>
+          </>
+        )}
         {spec && !['table', 'kpi', 'pivot'].includes(spec.type) && (
           <MenuItem icon={<DownloadIcon boxSize={4} />} onClick={exportPng}>
             Chart as PNG

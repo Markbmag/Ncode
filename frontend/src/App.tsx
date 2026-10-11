@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Flex, Spinner } from '@chakra-ui/react';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { http, setToken, UNAUTHORIZED_EVENT } from './api';
 import type { User } from './api';
@@ -8,7 +9,27 @@ import Login from './Login';
 import { AppRoutes } from './routes';
 import { WorkspaceProvider } from './workspace/WorkspaceProvider';
 
+// Public links and embeds (M8) open without signing in.
+const PublicPage = lazy(() => import('./public/PublicPage'));
+const SHARED = /^\/(public|embed)\//;
+
+function SharedApp() {
+  return (
+    <Suspense fallback={<Flex minH="100vh" align="center" justify="center"><Spinner color="brand.300" size="xl" /></Flex>}>
+      <Routes>
+        <Route path="/public/:token" element={<PublicPage mode="public" />} />
+        <Route path="/embed/:token" element={<PublicPage mode="embed" />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
 function App() {
+  const shared = SHARED.test(useLocation().pathname);
+  return shared ? <SharedApp /> : <SignedInApp />;
+}
+
+function SignedInApp() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
   const [notice, setNotice] = useState('');

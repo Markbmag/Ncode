@@ -272,3 +272,34 @@ export const UploadIcon = make(
     <path d="M12 3v12" />
   </>,
 );
+
+export const BellIcon = make(
+  <>
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </>,
+);
+
+export const MailIcon = make(
+  <>
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </>,
+);
+
+export const GlobeIcon = make(
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+    <path d="M2 12h20" />
+  </>,
+);
+
+export const ActivityIcon = make(<path d="M22 12h-4l-3 9L9 3l-3 9H2" />);
+
+export const SendIcon = make(
+  <>
+    <path d="m22 2-7 20-4-9-9-4Z" />
+    <path d="M22 2 11 13" />
+  </>,
+);

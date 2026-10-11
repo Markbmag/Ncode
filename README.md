@@ -23,8 +23,11 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   compare with last month / last year, running totals, shares, ranks, outliers, trend lines.
 - **Data model** - friendly column names and formats, dates stored as text read as real dates,
   relationships for databases without foreign keys, and named metrics everyone shares.
+- **Subscriptions and alerts** - dashboards and questions by email, Slack, Teams, Telegram or
+  webhook on a schedule, with CSV / Excel attached; alerts when a number crosses a line.
+- **Share outside Ncode** - public links (password, expiry) and signed embedding in other websites.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
-- **Team ready** - logins, per-user database access, an audit log.
+- **Team ready** - logins, per-user database access, an audit log, usage and slow-query reports.
 
 ## Quick start
 
@@ -342,6 +345,58 @@ Dashboards live in collections and follow their sharing. A dashboard never shows
 viewer may see: a card whose question is not shared with them says so, and running a card still
 needs access to its database. Editors can rearrange cards they cannot see but not add such questions.
 
+## Subscriptions, alerts and sharing
+
+**Subscriptions** send a dashboard or a saved question on a schedule: the bell button on a dashboard
+or question → *New subscription*.
+
+- **When:** every hour (at a minute, on chosen days), daily (on chosen days, e.g. weekdays at 08:00),
+  weekly or monthly (a day of the month or the last day), in your browser's time zone - 08:00 stays
+  08:00 when the clocks change.
+- **To:** Ncode users (their own email address: the envelope button next to your name, bottom
+  left), other addresses, and the chats and webhooks an admin set up (Slack, Microsoft Teams,
+  Telegram, any JSON webhook).
+- **What:** the email shows each card - headline numbers, bar lists for charts, the first rows of
+  tables (*Rows shown per card*) - with links back to Ncode, a note of your own on top, and
+  optionally every result as **CSV or Excel attachments** (scheduled exports). Dashboard filter values
+  or question parameters can be set per subscription. *Preview* shows the email without sending;
+  *Don't send when there are no results* skips empty reports.
+- **Alerts** (a question's ⋯ → *Set up an alert…*) check the question on a schedule and only send
+  when it has results, or when a number (the last row: the latest month) goes above or drops below a
+  value - optionally *only once*.
+- *Send now*, pause, the last sends and what went wrong (per recipient) are in the drawer and on the
+  **Subscriptions** page (admins: *Everyone's*). Recipients who are Ncode users can *Unsubscribe me*.
+
+A subscription runs with **its owner's permissions**: recipients see what the owner sees, like a
+forwarded report. When the owner loses access, is disabled or deleted, it stops. Admins can limit
+typed-in addresses to the company's domains.
+
+**Admin → Delivery** sets the **site address** (links in emails and public links start with it), the
+**email server** (SMTP with STARTTLS / SSL, a *Send test* button) and the **chats and webhooks**
+(each with *Send test*). Passwords, webhook addresses and bot tokens are stored encrypted and never
+shown again (only their last characters).
+
+**Public links and embedding** (admins): a dashboard's or question's ⋯ → *Public link / embed…*,
+after switching them on in **Admin → Sharing**.
+
+- A **public link** opens the results for anyone with the link, without signing in: read-only, no
+  SQL, no table names, no editing; filters can be changed. Optional password, expiry and downloads.
+  Stop a link at any time; switching public links off stops all of them.
+- **Embedding** shows a dashboard or question inside another website. That website's server signs a
+  short token (a standard JWT, HS256, with the embedding key from Admin → Sharing; it must expire,
+  at most after 30 days) naming the dashboard or question and, for **locked** filters, their values -
+  e.g. the customer who is signed in there. Editable filters can be changed by the visitor, the
+  others are off. The share dialog shows the code for Python and Node.js; add
+  `#titled=false&bordered=false&theme=light` to the iframe address to hide the title and margins.
+- Both run with the permissions of the admin who made the link or allowed the embed, under their
+  own name in the audit log (`public#3:mark`, `embed#5:mark`) with their own query slots, and
+  visitors are limited to `NCODE_PUBLIC_RATE_PER_MIN` requests a minute.
+
+**Admin → Usage** shows how much Ncode is used (queries per day, people, sign-ins, failures, the most
+used questions and dashboards, where queries come from) and the **query log** of the slowest and the
+failed queries (slower than `NCODE_SLOW_QUERY_SEC`, also written to the server log as
+`ncode.slow`).
+
 ## Browsing and exporting
 
 **Browse** (in the sidebar): pick a table to page through its rows, click a
@@ -507,6 +562,34 @@ A card is `{"key", "kind": "question"|"text"|"heading", "question_id", "tab", "l
 {"field": "orders.created_at"}}}`; a filter is `{"id", "label", "type":
 "date_range"|"date"|"text"|"category"|"number", "default", "required"}`.
 
+### Subscriptions, sharing, usage
+
+    GET    /api/subscriptions?target_type=&target_id=&all=   yours and the ones you receive (admins: all=true)
+    GET    /api/subscriptions/options                 destinations, people, is email set up
+    POST   /api/subscriptions                         see below;  PUT|DELETE /api/subscriptions/{id};  PATCH {"enabled"}
+    POST   /api/subscriptions/preview                 render without sending -> {"html", "text", "alert"}
+    GET    /api/subscriptions/{id}                    with the latest runs
+    POST   /api/subscriptions/{id}/send               send now;  POST .../unsubscribe (a recipient leaves)
+    PUT    /api/account/email                         {"email"}: your own address
+    GET    /api/admin/settings                        PUT /api/admin/settings/email | general | sharing (admins)
+    POST   /api/admin/settings/email/test             {"to"}
+    GET    /api/admin/destinations                    POST, PUT|DELETE /{id}, POST /{id}/test (admins)
+    GET    /api/share?target_type=&target_id=         POST /api/share/public, PATCH|DELETE /api/share/public/{id},
+                                                      PUT /api/share/embed, POST /api/share/embed/token (admins)
+    GET    /api/admin/settings/embedding-key          POST: a new key (admins)
+    GET    /api/admin/usage?days=30                   GET /api/admin/query-log?kind=slow|errors&days=7 (admins)
+
+    GET    /api/public/{token}                        POST /unlock {"password"}, POST /run, POST /cards/{key}/run,
+                                                      GET|DELETE /tasks/{id}, GET /tasks/{id}/export.csv|xlsx
+    GET    /api/embed/{jwt}                           the same without password and downloads
+
+A subscription is `{"name", "target_type": "dashboard"|"question", "target_id", "schedule": {"every":
+"hour"|"day"|"week"|"month", "hour", "minute", "days": [0..6] (0 = Monday), "monthday": 1..28 | -1,
+"timezone": "Europe/Berlin"}, "recipients": {"users": [...], "emails": [...], "destinations": [ids]},
+"options": {"filters", "attach": "none"|"csv"|"xlsx", "rows", "skip_empty", "message"}, "alert": null |
+{"type": "rows"|"above"|"below", "column", "value", "once"}, "enabled"}`. An embedding token's payload
+is `{"resource": {"dashboard": 12}, "params": {"region": "EU"}, "exp": <unix time>}`.
+
 ### SQL mode
 
 `POST /api/query/sql` runs one read-only query, exactly as written. `{{name}}` placeholders become
@@ -530,6 +613,7 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
     create-user carol --connections mes,les # may only use these connections
     allow alice mes                         # change a user's connections later ("*" = all)
     set-password alice                      # also logs alice out everywhere
+    set-email alice alice@company.com       # where subscriptions go (users can also set it themselves)
     disable alice / enable alice
     delete-user alice
     list-users
@@ -567,6 +651,13 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
   read through the normal, read-only connection with your permissions. Uploaded files are stored
   as Parquet copies under `backend/data/datasets/`; whoever can see a file's collection can read all
   of its rows.
+- **Subscriptions, public links and embeds send data outside the people who may see it**, so:
+  subscriptions run with the owner's permissions and stop when the owner loses them; only admins
+  create public links, allow embedding and set up chats/webhooks; public links and embedding are
+  off until an admin switches them on and stop at once when switched off; visitors get results
+  only (no SQL, no database errors, no table names) and are rate-limited; embedding tokens must be
+  HS256-signed and expire within 30 days. Serve Ncode over HTTPS before using public links outside
+  your network. See `docs/security/M8-review.md`.
 - Searching with `LIKE '%text%'` scans whole tables. On very large databases use
   `include_tables` / `exclude_tables` and the per-query timeout
   (`NCODE_STATEMENT_TIMEOUT_SEC`).

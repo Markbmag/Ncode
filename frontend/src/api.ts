@@ -70,6 +70,7 @@ export type MatchMode = 'contains' | 'exact' | 'starts_with';
 export interface User {
   username: string;
   role: string;
+  email?: string | null;
 }
 
 export interface LoginResponse {
