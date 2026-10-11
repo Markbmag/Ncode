@@ -153,6 +153,14 @@ def test_metrics_in_questions_and_dashboards(env):
     assert run(env, "alice", q["id"])["result"]["rows"][0][1] == 230.0  # archived: hidden from pickers, still defined
 
 
+def test_metric_without_format_keeps_the_column_format(env):
+    call(env, "admin", "PUT", "/api/semantic/shop/fields/q_orders/total", json={"format": {"style": "currency", "currency": "EUR"}})
+    m = call(env, "admin", "POST", "/api/metrics", json={"name": "Revenue", "connection": "shop", "table": "q_orders",
+                                                         "definition": {"fn": "sum", "ref": "q_orders.total"}})
+    out = query(env, "alice", {"connection": "shop", "source": {"table": "q_orders"}, "aggregations": [{"fn": "metric", "metric": m["id"]}]})
+    assert out["result"]["columns"][0]["format"]["currency"] == "EUR" and out["result"]["rows"] == [[465.5]]
+
+
 def test_conditional_aggregation(env):
     spec = {"connection": "shop", "source": {"table": "q_orders"},
             "aggregations": [{"fn": "count", "alias": "paid", "where": PAID}, {"fn": "sum", "ref": "total", "alias": "paid_total", "where": PAID},

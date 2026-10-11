@@ -7,7 +7,7 @@ import {
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { EngineBadge } from '../components/EngineBadge';
-import { ArchiveIcon, ChevronRightIcon, CopyIcon, FolderIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, StarIcon } from '../icons';
+import { ArchiveIcon, ChevronRightIcon, CopyIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
 import { library } from './api';
 import type { QuestionPayload, SavedQuestion } from './api';
 import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
@@ -85,6 +85,21 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     }
   };
 
+  const toggleModel = async () => {
+    if (!saved) return;
+    try {
+      await library.updateQuestion(saved.id, { model: !saved.model });
+      toast({
+        status: 'success',
+        title: saved.model ? 'No longer a model' : 'Now a model',
+        description: saved.model ? undefined : 'New questions and Combine can start from it like from a table.',
+        duration: 3000,
+      });
+    } catch (e) {
+      fail(e, 'Could not change it');
+    }
+  };
+
   const star = async () => {
     if (!saved) return;
     try {
@@ -133,6 +148,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             </Tooltip>
           )}
           {saved && !canEdit && <Badge>view only</Badge>}
+          {saved?.model && <Badge colorScheme="teal">model</Badge>}
           {saved && dirty && <Badge colorScheme="orange">edited</Badge>}
         </HStack>
         {subtitle && (
@@ -184,6 +200,21 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void duplicate()}>
                 Duplicate
               </MenuItem>
+              {saved.kind === 'builder' && (
+                <MenuItem icon={<SparklesIcon boxSize={4} />} onClick={() => navigate(`/xray?question=${saved.id}`)} data-testid="question-xray">
+                  X-ray
+                </MenuItem>
+              )}
+              {saved.kind !== 'federated' && (
+                <MenuItem icon={<MergeIcon boxSize={4} />} onClick={() => navigate(`/combine?question=${saved.id}`)}>
+                  Combine with other sources
+                </MenuItem>
+              )}
+              {canEdit && saved.kind !== 'federated' && (
+                <MenuItem icon={<TableIcon boxSize={4} />} onClick={() => void toggleModel()} data-testid="toggle-model">
+                  {saved.model ? 'Stop using as a model' : 'Use as a model'}
+                </MenuItem>
+              )}
               {canEdit && (
                 <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
                   Move…

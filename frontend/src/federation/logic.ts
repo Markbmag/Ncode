@@ -156,6 +156,7 @@ export function prepareFederated(draft: FederatedSpec, columns: ColumnHint[]): P
     if (!spec.post) delete spec.post;
   }
   if (draft.limit) spec.limit = draft.limit;
+  if (draft.transforms?.length) spec.transforms = draft.transforms;
   if (columns.length) spec.result_columns = columns;
   return { spec, problems };
 }

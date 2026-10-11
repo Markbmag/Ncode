@@ -60,6 +60,8 @@ export interface VizSpec {
   highlight?: string | null;          // emphasis: this series in colour, the others grey
   colors?: Record<string, number>;    // series name -> palette slot (colour follows the entity)
   format?: Record<string, ColumnFormat>;
+  trend?: boolean;                    // line / bar / area: a straight trend line (M7)
+  forecast?: number;                  // ... continued this many periods ahead (dates on the x axis)
 }
 
 export const CHART_TYPES: { type: ChartType; label: string; hint: string }[] = [

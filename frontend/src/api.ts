@@ -217,6 +217,13 @@ export interface SchemaColumn {
   nullable: boolean;
   primary_key: boolean;
   foreign_key: { table: string; column: string } | null;
+  // data model (M7), present when an admin set something
+  display_name?: string | null;
+  description?: string | null;
+  semantic_type?: string | null;
+  format?: Record<string, unknown> | null;
+  hidden?: boolean;
+  parse_as_date?: boolean;
 }
 
 export interface SchemaTable {
@@ -230,6 +237,7 @@ export interface Relationship {
   from_columns: string[];
   to_table: string;
   to_columns: string[];
+  manual?: boolean; // added in the data model (M7)
 }
 
 export interface SchemaV2 {
@@ -245,6 +253,12 @@ export interface ResultColumn {
   name: string;
   type: ColumnType;
   role: 'dimension' | 'measure';
+  // from the data model (M7)
+  display_name?: string | null;
+  description?: string | null;
+  semantic_type?: string | null;
+  format?: Record<string, unknown> | null;
+  generated?: boolean; // added by a calculation (running total ...)
 }
 
 export interface ResultEnvelope {
@@ -253,6 +267,7 @@ export interface ResultEnvelope {
   stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean };
   sql: string | null;
   federation?: FederationInfo | null; // multi-source questions (M6)
+  analysis?: Record<string, unknown> | null; // profiles and X-rays (M7)
 }
 
 /** What a multi-source run reports besides the rows (backend/app/federation/engine.py). */

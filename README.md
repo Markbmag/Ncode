@@ -19,6 +19,10 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   formatting; unsafe statements are refused before they reach the database.
 - **Combine databases and files** - join results from several databases and uploaded CSV / Excel /
   Parquet files on a key (e.g. VIN), with a report of the keys that found no match.
+- **Analyse** - profile any table or result column by column, get an automatic X-ray dashboard,
+  compare with last month / last year, running totals, shares, ranks, outliers, trend lines.
+- **Data model** - friendly column names and formats, dates stored as text read as real dates,
+  relationships for databases without foreign keys, and named metrics everyone shares.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Team ready** - logins, per-user database access, an audit log.
 
@@ -267,6 +271,49 @@ Everything is combined in an in-process **DuckDB** (installed by `requirements.t
 and thread limits (`NCODE_FEDERATION_MEMORY_MB`, `NCODE_FEDERATION_THREADS`) and, before anything you
 wrote runs, no access to files, the network, extensions or its own settings.
 
+## Analysing: profiles, X-ray, calculations
+
+- **Profile** (Browse → a table → *Profile*, or *Profile* above any result): per column the empty
+  values, distinct values, min / median / mean / max, a histogram, the most common values, outliers
+  (beyond 1.5 × the interquartile range), and for text that looks like dates a hint to read it as
+  dates. Numbers get a correlation table ("how they move together"). A table profile reads at most
+  `NCODE_PROFILE_SAMPLE_ROWS` rows (20,000) plus one row count - the cost guard; a result profile
+  uses the rows on screen and runs no query.
+- **X-ray** (Browse → *X-ray*, Admin → Data model, or a saved question's **⋯** → *X-ray*): a first
+  dashboard made from the profile - number of rows, sums of the main numbers, rows and sums over
+  time, rows per category, distributions. For a question it keeps the question's joins and filters.
+  *Save as dashboard* turns every card into a saved question in your collection.
+- **Calculate** (a step in the builder and in Combine, *Calculations* in the SQL editor): on the rows
+  returned - *compare with previous* (the same series one day / week / month / quarter / year earlier,
+  matched by date, so a missing month is not mistaken for the previous one), *% change*, *running
+  total*, *moving average*, *% of total* and *rank* (overall or within a group), *flag outliers*. A
+  series is one value of the other columns (one region), so a running total restarts per region.
+- Charts (line, bar, area) have a **trend line** and an optional **forecast** that continues it a
+  few periods (a straight line, not a prediction model).
+
+## Data model (admins)
+
+**Admin → Data model**, per database:
+
+- Click a column to give it a **display name** and a **description** (shown in the builder, in result
+  headers and tooltips), say **what it is** (money, percentage, category, id ...), set a **format**
+  (money in EUR, percent, decimals - used by tables and charts unless a chart sets its own; sums,
+  averages, minima and maxima of the column keep it), **hide** it (not offered in the builder and not
+  in "all columns"; still usable by name - not a permission) or **read it as dates**: text such as
+  `2026-01-31`, `31.01.2026 08:15` or unix time (seconds or milliseconds) becomes a real date-time
+  in the database's own SQL, so filters and "by month" work; other values become empty. On
+  PostgreSQL an impossible date like `31.02.2026` stops the query; elsewhere it becomes empty
+  (SQLite moves it to 3 March).
+- **Relationships added by hand** for databases without foreign keys: the builder then joins and
+  suggests joins as if they were foreign keys. The database is not changed.
+- **Metrics**: a named calculation on a table - e.g. *Paid revenue* = sum of total where status is
+  paid - picked in Summarise (*★ Saved metric*). Changing a metric changes every question that uses
+  it; archiving hides it from the picker while saved questions keep working.
+- A saved question's **⋯ → Use as a model** makes it a starting point like a table: *New question* →
+  *… or start from a model*, and Combine.
+
+Everyone who may use a database sees its data model; only admins change it.
+
 ## Dashboards
 
 **Dashboards** in the sidebar → **New dashboard** (name and collection) opens it in edit mode:
@@ -426,6 +473,24 @@ Source types: `question`, `builder` (`"spec"`: a question JSON), `sql` and `data
 its own table (the combined rows are the table `result`; columns whose names clash get the source
 name in front, `mes_vin`). The result envelope adds `federation`: rows read per source, per-join
 statistics (`left_unmatched_keys`, `right_repeated_keys`, samples ...) and the combined columns.
+
+### Data model, analysis
+
+    GET    /api/semantic/{conn}/fields            PUT /api/semantic/{conn}/fields/{table}/{column}   (admins)
+           {"display_name", "description", "semantic_type", "format", "hidden", "parse_as_date"}
+    GET    /api/semantic/{conn}/relationships     POST (admins) {"from_table", "from_columns", "to_table", "to_columns"}   DELETE .../{id}
+    GET    /api/metrics?connection=               POST /api/metrics   PUT /api/metrics/{id}   PATCH {"archived": true}   (admins)
+    POST   /api/profile/table                     {"connection", "table"} -> a query task; result.analysis.profile
+    POST   /api/query/tasks/{id}/profile          the profile of a finished result
+    POST   /api/xray                              {"connection", "table"} | {"question_id"} -> a query task; result.analysis.cards
+
+In a question, `{"fn": "metric", "metric": 3}` uses a saved metric and `"where": {...}` on any
+aggregation counts only matching rows (`{"fn": "sum", "ref": "orders.total", "where": {"rules": [...]}}`).
+`"transforms": [{"type": "previous_period", "column": "revenue", "period": "year"}]` works on builder,
+SQL (`/api/query/sql` and saved SQL questions) and multi-source questions; types are `running_total`,
+`moving_average` (`window`), `pct_change`, `previous_period` (`period`), `rank` and `pct_of_total` (`by` =
+group), `outliers` (`method`: `iqr` or `zscore`). Result columns can carry `display_name`, `description`,
+`semantic_type`, `format` (from the data model) and `generated` (added by a calculation).
 
 ### Dashboards
 

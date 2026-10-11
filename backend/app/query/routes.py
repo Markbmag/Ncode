@@ -92,9 +92,9 @@ def column_meta(compiled: Any, fields: dict[str, Any], metric_formats: dict[str,
     """Per output column: what the data model says about the column it comes from."""
     out: list[dict[str, Any] | None] = []
     for col in compiled.columns:
-        if col.name in metric_formats:
+        if metric_formats.get(col.name):
             out.append({"format": metric_formats[col.name]})
-            continue
+            continue  # a metric without its own format keeps its column's (a sum of euros is euros)
         if col.source is None:
             out.append(None)
             continue

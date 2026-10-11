@@ -20,6 +20,7 @@ import type { EChartHandle } from '../viz/EChart';
 import { Visualization } from '../viz/Visualization';
 import { VizSettings } from '../viz/VizSettings';
 import { ResultsTable } from './ResultsTable';
+import { ResultProfileDrawer } from '../../analysis/ResultProfileDrawer';
 
 interface ResultViewProps {
   state: RunState;
@@ -41,6 +42,7 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
   const running = state.phase === 'running';
   const toast = useToast();
   const settings = useDisclosure();
+  const profile = useDisclosure();
   const chartRef = useRef<EChartHandle | null>(null);
   const { colorMode } = useColorMode();
 
@@ -163,6 +165,11 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
         )}
         <Box flex={1} />
         <HStack spacing={2}>
+          <Tooltip label="Statistics per column: empty values, distinct values, ranges, distributions" hasArrow>
+            <Button size="xs" variant="subtle" onClick={profile.onOpen} isDisabled={!result || result.rows.length === 0 || !state.taskId || running} data-testid="profile-result">
+              Profile
+            </Button>
+          </Tooltip>
           <Tooltip label="Show dates stored as text (31.01.2026) or unix time as dates" hasArrow>
             <HStack spacing={1.5}>
               <Switch size="sm" isChecked={smartDates} onChange={(e) => onSmartDates(e.target.checked)} id="smart-dates" />
@@ -236,6 +243,7 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
           </DrawerContent>
         </Drawer>
       )}
+      <ResultProfileDrawer taskId={state.taskId} isOpen={profile.isOpen} onClose={profile.onClose} />
     </Flex>
   );
 }

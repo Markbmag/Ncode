@@ -1,6 +1,6 @@
 /** Multi-source questions and uploaded files (mirrors backend/app/federation/spec.py and datasets.py). */
 import type { ColumnType } from '../api.ts';
-import type { Aggregation, Breakout, CustomColumn, FieldSel, FilterGroup, OrderBy, QuerySpec } from '../query/types.ts';
+import type { Aggregation, Breakout, CustomColumn, FieldSel, FilterGroup, OrderBy, QuerySpec, Transform } from '../query/types.ts';
 
 export type SourceType = 'question' | 'builder' | 'sql' | 'dataset';
 export type JoinType = 'inner' | 'left' | 'right' | 'full';
@@ -55,6 +55,7 @@ export interface FederatedSpec {
   post?: PostSpec | null;
   limit?: number | null;
   result_columns?: ColumnHint[];
+  transforms?: Transform[];
 }
 
 export interface Dataset {

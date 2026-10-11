@@ -58,8 +58,8 @@ def build_cards(base: dict[str, Any], columns: list[dict[str, Any]], title: str)
     cards.append(_card("rows", "Number of rows", q(aggregations=[{"fn": "count", "alias": "rows"}]),
                        {"mode": "chart", "spec": {"version": 1, "type": "kpi", "value": "rows"}}, 3, 4))
     for m in measures[:2]:
-        alias = f"total_{m['name']}"[:60]
-        cards.append(_card(f"total_{m['name']}", f"Total {_label(m).lower()}",
+        alias = f"sum_{m['name']}"[:60]
+        cards.append(_card(f"total_{m['name']}", f"Sum of {_label(m).lower()}",
                            q(aggregations=[{"fn": "sum", "ref": m["ref"], "alias": alias}]),
                            {"mode": "chart", "spec": {"version": 1, "type": "kpi", "value": alias}}, 3, 4))
     if dates:
@@ -71,8 +71,8 @@ def build_cards(base: dict[str, Any], columns: list[dict[str, Any]], title: str)
                            q(breakouts=[{"ref": d["ref"], "bucket": unit, "alias": x}], aggregations=[{"fn": "count", "alias": "rows"}]),
                            line("rows"), 6, 7))
         for m in measures[:2]:
-            alias = f"total_{m['name']}"[:60]
-            cards.append(_card(f"{m['name']}_by_{d['name']}", f"{_label(m)} by {unit}",
+            alias = f"sum_{m['name']}"[:60]
+            cards.append(_card(f"{m['name']}_by_{d['name']}", f"Sum of {_label(m).lower()} by {unit}",
                                q(breakouts=[{"ref": d["ref"], "bucket": unit, "alias": x}],
                                  aggregations=[{"fn": "sum", "ref": m["ref"], "alias": alias}]),
                                line(alias), 6, 7))
