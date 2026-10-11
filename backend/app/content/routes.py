@@ -35,6 +35,8 @@ from pydantic import BaseModel, Field, ValidationError
 from ..appdb import AppDB, User
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.spec import QuerySpec
+from .dashboard_routes import dashboard_summary, register_dashboard_routes
+from .dashboards import DashboardStore, add_conditions
 from .params import (
     ParameterDef, bind_spec, check_builder_params, check_sql_params, resolve, sample_values, sql_bind_values,
 )
@@ -145,6 +147,7 @@ def register_content_routes(
     require_connection: Callable[[str, User], None],
 ) -> ContentStore:
     store = ContentStore(app_db.engine)
+    dashboard_store = DashboardStore(store)
     router = APIRouter(tags=["library"])
 
     def fail(exc: ContentError) -> HTTPException:
@@ -210,6 +213,7 @@ def register_content_routes(
                 if c.parent_id == cid and not c.archived and snap.access(user, c.id) is not None
             ]
             questions = store.list_questions(user, collection_id=cid)
+            dashboards = dashboard_store.list(user, collection_id=cid)
         except ContentError as exc:
             raise fail(exc) from exc
         return {
@@ -217,6 +221,7 @@ def register_content_routes(
             "path": store.breadcrumbs(user, snap, cid),
             "collections": children,
             "questions": [summary_json(q) for q in questions],
+            "dashboards": [dashboard_summary(d) for d in dashboards],
         }
 
     @router.patch("/api/collections/{cid}")
@@ -361,22 +366,31 @@ def register_content_routes(
             q = store.get_question(user, qid)
         except ContentError as exc:
             raise fail(exc) from exc
+        return run_saved(user, q, body.params, [], body.wait_ms, body.refresh, {"question_id": q.id})
+
+    def run_saved(
+        user: User,
+        q: Question,
+        params: dict[str, Any],
+        conditions: list[dict[str, Any]],
+        wait_ms: int,
+        refresh: bool,
+        extra: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run a saved question with parameter values (and, for builder questions, extra conditions)."""
         require_connection(q.connection, user)
-        extra = {"question_id": q.id}
         defs = [ParameterDef(**p) for p in q.parameters]
         try:
             if q.kind == "builder":
-                values = resolve(defs, body.params)
-                spec = bind_spec(QuerySpec.model_validate(q.spec), values)
-                return queries.start_spec(user, spec, body.wait_ms, body.refresh, extra)
+                values = resolve(defs, params)
+                spec = add_conditions(bind_spec(QuerySpec.model_validate(q.spec), values), conditions)
+                return queries.start_spec(user, spec, wait_ms, refresh, extra)
             if q.kind == "sql":
                 sql_spec = SqlSpec.model_validate(q.spec)
                 engine, checked = queries.guard(q.connection, sql_spec.sql, user)
                 defs = check_sql_params(checked.params, defs)
-                values = sql_bind_values(resolve(defs, body.params), defs, engine.dialect.name)
-                return queries.start_sql(
-                    user, q.connection, sql_spec.sql, values, sql_spec.limit, body.wait_ms, body.refresh, extra
-                )
+                values = sql_bind_values(resolve(defs, params), defs, engine.dialect.name)
+                return queries.start_sql(user, q.connection, sql_spec.sql, values, sql_spec.limit, wait_ms, refresh, extra)
         except ContentError as exc:
             raise fail(exc) from exc
         except ValidationError as exc:
@@ -392,6 +406,7 @@ def register_content_routes(
         return {
             "collections": [c for c in store.archived_collections(user) if c["can_manage"]],
             "questions": [summary_json(q) for q in questions],
+            "dashboards": [dashboard_summary(d) for d in dashboard_store.list(user, archived=True, limit=1000) if d.access == "edit"],
         }
 
     @router.get("/api/library/people")
@@ -402,4 +417,7 @@ def register_content_routes(
         }
 
     app.include_router(router)
+    register_dashboard_routes(
+        app, store=dashboard_store, app_db=app_db, current_user=current_user, run_saved=run_saved, fail=fail
+    )
     return store
