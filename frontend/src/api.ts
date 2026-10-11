@@ -9,8 +9,14 @@ export const setToken = (token: string | null): void => {
   else localStorage.removeItem(TOKEN_KEY);
 };
 
+// Development: the API runs on its own port. Docker / behind a proxy: build with VITE_API_URL="" and the
+// API is the same address as the page (https://ncode.company.local/api/...).
 export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
-export const WS_URL: string = API_URL.replace(/^http/, 'ws');
+export const WS_URL: string = API_URL
+  ? API_URL.replace(/^http/, 'ws')
+  : typeof window !== 'undefined'
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+    : '';
 
 export const http = axios.create({ baseURL: API_URL });
 
