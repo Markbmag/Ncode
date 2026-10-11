@@ -34,6 +34,7 @@ export interface Condition {
   op: FilterOp;
   value?: unknown;
   case_sensitive?: boolean;
+  param?: string; // saved questions: the value comes from this parameter (src/library/params.ts)
 }
 
 export interface FilterGroup {

@@ -8,6 +8,8 @@ const SearchPage = lazy(() => import('./pages/SearchPage'));
 const BrowsePage = lazy(() => import('./pages/BrowsePage'));
 const QuestionsPage = lazy(() => import('./pages/QuestionsPage'));
 const SqlPage = lazy(() => import('./pages/SqlPage'));
+const LibraryPage = lazy(() => import('./pages/LibraryPage'));
+const SavedQuestionPage = lazy(() => import('./pages/SavedQuestionPage'));
 const DashboardsPage = lazy(() => import('./pages/DashboardsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const ChartGalleryPage = lazy(() => import('./pages/ChartGalleryPage'));
@@ -19,7 +21,11 @@ export function AppRoutes() {
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="browse" element={<BrowsePage />} />
+        <Route path="library" element={<LibraryPage />} />
+        <Route path="library/c/:id" element={<LibraryPage />} />
+        <Route path="library/archive" element={<LibraryPage archive />} />
         <Route path="questions" element={<QuestionsPage />} />
+        <Route path="questions/:id" element={<SavedQuestionPage />} />
         <Route path="sql" element={<SqlPage />} />
         <Route path="dashboards" element={<DashboardsPage />} />
         <Route path="admin" element={<AdminPage />} />

@@ -16,11 +16,12 @@ function PageFallback() {
 
 /** Sidebar (sections + databases) around the current page. */
 // Work surfaces that use the whole window (editor + results side by side).
-const WIDE_PAGES = ['/questions', '/sql'];
+const WIDE_PAGES = [/^\/questions(\/\d+)?$/, /^\/sql$/];
 
 export default function AppShell() {
   const ws = useWorkspace();
-  const wide = WIDE_PAGES.includes(useLocation().pathname);
+  const path = useLocation().pathname;
+  const wide = WIDE_PAGES.some((re) => re.test(path));
   return (
     <Flex minH="100vh" align="flex-start">
       <Sidebar

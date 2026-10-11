@@ -204,6 +204,10 @@ function cleanGroup(group: FilterGroup | null | undefined, typeOf: (ref: string)
       continue;
     }
     if (!rule.ref) continue;
+    if (rule.param) {
+      rules.push({ ref: rule.ref, op: rule.op, param: rule.param }); // the value is filled in when it runs
+      continue;
+    }
     const info = operatorInfo(typeOf(rule.ref), rule.op);
     if (!valueComplete(info.value, rule.value)) continue; // half-typed filters are ignored, not errors
     rules.push(info.value === 'none' ? { ref: rule.ref, op: rule.op } : rule);

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 import sqlglot
@@ -249,8 +250,9 @@ def bind_params(sql: str, values: dict[str, Any], paramstyle: str) -> tuple[str,
         raise GuardError(f"Give a value for {', '.join('{{' + m + '}}' for m in missing)}")
     for name in names:
         value = values[name]
-        if value is not None and not isinstance(value, (str, int, float, bool)):
-            raise GuardError(f"{{{{{name}}}}} must be text, a number, true/false or null")
+        # dates come from typed parameters of saved questions (app/content/params.py)
+        if value is not None and not isinstance(value, (str, int, float, bool, date)):
+            raise GuardError(f"{{{{{name}}}}} must be text, a number, a date, true/false or null")
 
     if paramstyle in ("pyformat", "format"):
         sql = sql.replace("%", "%%")

@@ -151,3 +151,23 @@ def test_cancel_stops_a_running_query(ncode_engine):
     assert task.status == "cancelled" and time.time() - started < 10
     assert sql(ncode_engine, "SELECT 1 AS one").rows == [[1]]  # the connection still works
     runner.shutdown()
+
+
+def test_saved_question_parameters_bind_on_the_server(ncode_engine, live):
+    """M4: typed parameter values (dates, numbers) work against each server, in SQL and builder questions."""
+    from app.content.params import ParameterDef, bind_spec, resolve, sql_bind_values
+
+    defs = [ParameterDef(name="since", type="date"), ParameterDef(name="min_total", type="number")]
+    values = sql_bind_values(resolve(defs, {"since": "2026-02-01", "min_total": "50"}), defs, ncode_engine.dialect.name)
+    env = sql(ncode_engine, "SELECT id FROM q_orders WHERE paid_on >= {{since}} AND total >= {{min_total}} ORDER BY id", values)
+    assert env.rows == [[3], [6]]
+
+    engine, tables, rels = live
+    spec = QuerySpec.model_validate({
+        "connection": "live", "source": {"table": "q_orders"}, "aggregations": [{"fn": "count", "alias": "n"}],
+        "filters": {"rules": [{"ref": "q_orders.paid_on", "op": "between", "param": "period"}]},
+    })
+    bound = bind_spec(spec, resolve([ParameterDef(name="period", type="date")], {"period": ["2026-01-01", "2026-01-31"]}))
+    compiled = compile_spec(bound, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
+    with engine.connect() as conn:
+        assert norm_rows(conn.execute(compiled.limited(1)).all()) == [(2,)]

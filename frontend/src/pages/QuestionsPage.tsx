@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, AlertIcon, Badge, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
   VStack, Wrap, WrapItem, useBreakpointValue, useDisclosure,
 } from '@chakra-ui/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
 import { NoConnectionsState } from '../components/EmptyStates';
-import { EngineBadge } from '../components/EngineBadge';
 import { Split } from '../components/layout/Split';
 import { CustomColumnsEditor } from '../components/query/CustomColumnsEditor';
 import { FilterEditor } from '../components/query/FilterEditor';
@@ -27,6 +26,11 @@ import { useSchema } from '../query/useSchema';
 import { DEFAULT_VIZ } from '../viz/state';
 import type { VizState } from '../viz/state';
 import { useWorkspace } from '../workspace/useWorkspace';
+import type { SavedQuestion } from '../library/api';
+import { ParametersBar } from '../library/ParametersBar';
+import { bindSpec, shapeOf, specParams, syncBuilderParams, valuesFromSearch, valuesToSearch } from '../library/params';
+import type { ParamShape, ParamValues, ParameterDef } from '../library/params';
+import { QuestionHeader } from '../library/QuestionHeader';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
 const draftKey = (connection: string) => `ncode_question_${connection}`;
@@ -39,11 +43,15 @@ export default function QuestionsPage() {
   return <Builder key={ws.activeKey} connection={ws.activeKey} />;
 }
 
-function Builder({ connection }: { connection: string }) {
+/** The builder, for a new question or (with `saved`) a saved one. */
+export function Builder({ connection, saved = null }: { connection: string; saved?: SavedQuestion | null }) {
   const ws = useWorkspace();
   const navigate = useNavigate();
   const schemaQuery = useSchema(connection);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const conn = ws.connections.find((c) => c.key === connection); // this editor's database (a saved question's own)
   const [draft, setDraft] = useState<QuerySpec | null>(() => {
+    if (saved) return saved.spec as QuerySpec;
     try {
       const raw = sessionStorage.getItem(draftKey(connection));
       return raw ? (JSON.parse(raw) as QuerySpec) : null;
@@ -55,6 +63,7 @@ function Builder({ connection }: { connection: string }) {
   const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
   const [showFields, setShowFields] = useState(false);
   const [viz, setViz] = useState<VizState>(() => {
+    if (saved) return saved.viz ?? DEFAULT_VIZ;
     try {
       const raw = sessionStorage.getItem(`${draftKey(connection)}_viz`);
       return raw ? (JSON.parse(raw) as VizState) : DEFAULT_VIZ;
@@ -62,27 +71,35 @@ function Builder({ connection }: { connection: string }) {
       return DEFAULT_VIZ;
     }
   });
+  const [defs, setDefs] = useState<ParameterDef[]>(() => saved?.parameters ?? []);
+  const [paramValues, setParamValuesState] = useState<ParamValues>(() => valuesFromSearch(searchParams));
+  const setParamValues = (values: ParamValues) => {
+    setParamValuesState(values);
+    setSearchParams((prev) => valuesToSearch(values, prev), { replace: true }); // shareable link with the values
+  };
   const sqlModal = useDisclosure();
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
   useEffect(() => saveJson('ncode_auto_preview', autoPreview), [autoPreview]);
   useEffect(() => {
+    if (saved) return;
     try {
       sessionStorage.setItem(`${draftKey(connection)}_viz`, JSON.stringify(viz));
     } catch {
       // a convenience only
     }
-  }, [viz, connection]);
+  }, [viz, connection, saved]);
   useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
   useEffect(() => {
+    if (saved) return; // a saved question is its own draft
     try {
       if (draft) sessionStorage.setItem(draftKey(connection), JSON.stringify(draft));
       else sessionStorage.removeItem(draftKey(connection));
     } catch {
       // the draft is a convenience
     }
-  }, [draft, connection]);
+  }, [draft, connection, saved]);
 
   const schema: SchemaInfo | null = useMemo(
     () => (schemaQuery.data ? { tables: schemaQuery.data.tables, relationships: schemaQuery.data.relationships } : null),
@@ -91,8 +108,38 @@ function Builder({ connection }: { connection: string }) {
   const tableNames = useMemo(() => (schema ? schema.tables.map((t) => t.name).sort((a, b) => a.localeCompare(b)) : []), [schema]);
   const validDraft = draft && schema && tableNames.includes(draft.source.table) ? draft : null;
 
-  const prepared = useMemo(() => (validDraft && schema ? prepareSpec(validDraft, schema) : null), [validDraft, schema]);
+  const prepared0 = useMemo(() => (validDraft && schema ? prepareSpec(validDraft, schema) : null), [validDraft, schema]);
+  // Parameters: one declaration per filter marked "ask", typed by its column.
+  const typeOfRef = useMemo(() => {
+    const opts = validDraft && schema ? columnOptions(validDraft, schema) : [];
+    return (ref: string) => opts.find((o) => o.ref === ref)?.type ?? 'unknown';
+  }, [validDraft, schema]);
+  const paramDefs = useMemo(() => (validDraft ? syncBuilderParams(validDraft, defs, typeOfRef) : []), [validDraft, defs, typeOfRef]);
+  const paramShapes = useMemo(() => {
+    const out: Record<string, ParamShape> = {};
+    if (validDraft) for (const use of specParams(validDraft)) out[use.name] ??= shapeOf(use.op);
+    return out;
+  }, [validDraft]);
+  // What runs: the prepared spec with the parameter values filled in.
+  const prepared = useMemo(() => {
+    if (!prepared0) return null;
+    const bound = bindSpec(prepared0.spec, paramDefs, paramValues);
+    const problems = [...prepared0.problems, ...bound.missing.map((m) => `Give a value for “${m}”`)];
+    return { spec: bound.value, problems };
+  }, [prepared0, paramDefs, paramValues]);
   const preparedJson = prepared ? JSON.stringify(prepared.spec) : '';
+
+  // Unsaved changes: compare with the saved question, normalised the same way.
+  const baseline = useMemo(() => {
+    if (!saved || !schema) return null;
+    const spec = saved.spec as QuerySpec;
+    if (!schema.tables.some((t) => t.name === spec.source?.table)) return null;
+    const opts = columnOptions(spec, schema);
+    const typeOf = (ref: string) => opts.find((o) => o.ref === ref)?.type ?? 'unknown';
+    return JSON.stringify({ spec: prepareSpec(spec, schema).spec, viz: saved.viz ?? DEFAULT_VIZ, params: syncBuilderParams(spec, saved.parameters, typeOf) });
+  }, [saved, schema]);
+  const current = prepared0 ? JSON.stringify({ spec: prepared0.spec, viz, params: paramDefs }) : null;
+  const dirty = !!saved && baseline !== null && current !== baseline;
 
   const runNow = () => {
     if (!prepared || prepared.problems.length > 0) return;
@@ -109,6 +156,15 @@ function Builder({ connection }: { connection: string }) {
     }, 700);
     return () => window.clearTimeout(timer);
   }, [preparedJson, autoPreview, prepared?.problems.length, run]);
+
+  // A saved question shows its result when opened, even without live preview.
+  const openedRun = useRef(false);
+  useEffect(() => {
+    if (!saved || autoPreview || openedRun.current || !preparedJson || (prepared?.problems.length ?? 0) > 0) return;
+    openedRun.current = true;
+    const spec = JSON.parse(preparedJson) as QuerySpec;
+    void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec, wait_ms: START_WAIT_MS })).data);
+  }, [saved, autoPreview, preparedJson, prepared?.problems.length, run]);
 
   // Ctrl/Cmd+Enter runs now
   useEffect(() => {
@@ -164,7 +220,12 @@ function Builder({ connection }: { connection: string }) {
             </Step>
 
             <Step title="Filter" color="purple.300" testId="step-filter">
-              <FilterEditor group={validDraft.filters ?? EMPTY_GROUP} onChange={(filters) => update({ filters })} options={options} />
+              <FilterEditor
+                group={validDraft.filters ?? EMPTY_GROUP}
+                onChange={(filters) => update({ filters })}
+                options={options}
+                params={{ names: paramDefs.map((d) => d.name), label: (name) => paramDefs.find((d) => d.name === name)?.label || name }}
+              />
             </Step>
 
             <Step title="Summarise" color="green.300" testId="step-summarise">
@@ -252,12 +313,13 @@ function Builder({ connection }: { connection: string }) {
           {prepared.problems.join(' · ')}
         </Alert>
       )}
+      <ParametersBar defs={paramDefs} shapes={paramShapes} values={paramValues} onValues={setParamValues} onDefs={!saved || saved.access === 'edit' ? setDefs : null} />
       <ResultView
         state={state}
         onCancel={cancel}
         smartDates={smartDates}
         onSmartDates={setSmartDates}
-        filename={`${ws.active?.label ?? connection}_${validDraft?.source.table ?? 'question'}`}
+        filename={saved ? saved.name : `${conn?.label ?? connection}_${validDraft?.source.table ?? 'question'}`}
         viz={viz}
         onVizChange={setViz}
         empty={
@@ -271,39 +333,56 @@ function Builder({ connection }: { connection: string }) {
 
   return (
     <Flex direction="column" h="100%" gap={3}>
-      <Flex align="center" gap={3} wrap="wrap">
-        {ws.active && <EngineBadge engine={ws.active.engine} size={32} />}
-        <Box>
-          <Text fontSize="lg" fontWeight={700} lineHeight="1.2">
-            New question
-          </Text>
-          <Text fontSize="xs" color="mutedText">
-            {ws.active?.label}
+      <QuestionHeader
+        engine={conn?.engine}
+        title="New question"
+        subtitle={
+          <>
+            {conn?.label}
             {validDraft && ` · ${humanize(validDraft.source.table)}`}
-          </Text>
-        </Box>
-        <Box flex={1} />
-        <HStack spacing={2}>
-          <Tooltip label="Run automatically after each change" hasArrow>
-            <HStack spacing={1.5}>
-              <Switch size="sm" id="auto-preview" isChecked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
-              <Text as="label" htmlFor="auto-preview" fontSize="xs" color="mutedText">
-                Live preview
-              </Text>
-            </HStack>
-          </Tooltip>
-          {summarised && <Badge colorScheme="green">summarised</Badge>}
-          <Button size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />} onClick={sqlModal.onOpen} isDisabled={!prepared || prepared.problems.length > 0} data-testid="view-sql">
-            View SQL
-          </Button>
-          <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={runNow} isDisabled={!prepared || prepared.problems.length > 0} data-testid="run-question">
-            Run
-          </Button>
+          </>
+        }
+        saved={saved}
+        dirty={dirty}
+        defaultName={validDraft ? humanize(validDraft.source.table) : 'Question'}
+        payload={() => (prepared0 && prepared0.problems.length === 0 ? { kind: 'builder', spec: prepared0.spec, viz, parameters: paramDefs } : null)}
+        onRevert={() => {
+          if (!saved) return;
+          setDraft(saved.spec as QuerySpec);
+          setViz(saved.viz ?? DEFAULT_VIZ);
+          setDefs(saved.parameters);
+        }}
+        onSaved={() => {
+          if (saved) return;
+          try {
+            sessionStorage.removeItem(draftKey(connection));
+            sessionStorage.removeItem(`${draftKey(connection)}_viz`);
+          } catch {
+            // nothing to clean up
+          }
+        }}
+      >
+        <Tooltip label="Run automatically after each change" hasArrow>
+          <HStack spacing={1.5}>
+            <Switch size="sm" id="auto-preview" isChecked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
+            <Text as="label" htmlFor="auto-preview" fontSize="xs" color="mutedText">
+              Live preview
+            </Text>
+          </HStack>
+        </Tooltip>
+        {summarised && <Badge colorScheme="green">summarised</Badge>}
+        <Button size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />} onClick={sqlModal.onOpen} isDisabled={!prepared || prepared.problems.length > 0} data-testid="view-sql">
+          View SQL
+        </Button>
+        <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={runNow} isDisabled={!prepared || prepared.problems.length > 0} data-testid="run-question">
+          Run
+        </Button>
+        {!saved && (
           <Button size="sm" variant="ghost" onClick={() => setDraft(null)} isDisabled={!draft}>
             Start over
           </Button>
-        </HStack>
-      </Flex>
+        )}
+      </QuestionHeader>
 
       <Box flex={1} minH={0} h={{ base: 'auto', lg: undefined }}>
         {vertical ? (
@@ -321,7 +400,7 @@ function Builder({ connection }: { connection: string }) {
           isOpen={sqlModal.isOpen}
           onClose={sqlModal.onClose}
           spec={prepared.spec}
-          engine={ws.active?.engine}
+          engine={conn?.engine}
           onOpenInEditor={(sql) => navigate('/sql', { state: { connection, sql } })}
         />
       )}

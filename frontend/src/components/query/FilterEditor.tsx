@@ -1,6 +1,7 @@
-import { Box, Button, ButtonGroup, Checkbox, Flex, HStack, IconButton, Input, Select, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, ButtonGroup, Checkbox, Flex, HStack, IconButton, Input, Select, Text, Tooltip, VStack } from '@chakra-ui/react';
 import type { ColumnType } from '../../api';
-import { PlusIcon, XIcon } from '../../icons';
+import { PlusIcon, SlidersIcon, XIcon } from '../../icons';
+import { PARAM_OPS, paramName } from '../../library/params';
 import { defaultValue, operatorInfo, operatorsFor } from '../../query/operators';
 import type { Condition, DateUnit, FilterGroup, FilterNode, FilterOp, RelativeDate } from '../../query/types';
 import { isGroup } from '../../query/types';
@@ -17,9 +18,16 @@ interface FilterEditorProps {
   depth?: number;
   emptyText?: string;
   testId?: string;
+  /** set = a filter's value can be asked for when the question runs (a parameter) */
+  params?: FilterParams;
 }
 
-export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 'No filters: every row is used.', testId }: FilterEditorProps) {
+export interface FilterParams {
+  names: string[];
+  label: (name: string) => string;
+}
+
+export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 'No filters: every row is used.', testId, params }: FilterEditorProps) {
   const typeOf = (ref?: string): ColumnType => options.find((o) => o.ref === ref)?.type ?? 'unknown';
 
   const setRule = (index: number, rule: FilterNode | null) => {
@@ -61,7 +69,7 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
         isGroup(rule) ? (
           <Flex key={i} gap={2} align="flex-start">
             <Box flex={1} border="1px dashed" borderColor="lineColor" borderRadius="lg" p={2}>
-              <FilterEditor group={rule} onChange={(g) => setRule(i, g)} options={options} depth={depth + 1} />
+              <FilterEditor group={rule} onChange={(g) => setRule(i, g)} options={options} depth={depth + 1} params={params} />
             </Box>
             <IconButton aria-label="Remove group" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setRule(i, null)} />
           </Flex>
@@ -74,6 +82,7 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
             onChange={(c) => setRule(i, c)}
             onRemove={() => setRule(i, null)}
             joiner={i > 0 ? (group.op === 'and' ? 'and' : 'or') : null}
+            params={params}
           />
         ),
       )}
@@ -98,9 +107,10 @@ interface ConditionRowProps {
   onChange: (c: Condition) => void;
   onRemove: () => void;
   joiner: string | null;
+  params?: FilterParams;
 }
 
-function ConditionRow({ condition, type, options, onChange, onRemove, joiner }: ConditionRowProps) {
+function ConditionRow({ condition, type, options, onChange, onRemove, joiner, params }: ConditionRowProps) {
   const ops = operatorsFor(type);
   const info = operatorInfo(type, condition.op);
 
@@ -114,7 +124,20 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner }: 
   const pickOp = (op: FilterOp) => {
     const next = operatorInfo(type, op);
     const sameKind = next.value === info.value;
-    onChange({ ...condition, op, value: sameKind ? condition.value : defaultValue(next.value) });
+    const keepParam = condition.param && PARAM_OPS.includes(op) ? { param: condition.param } : {};
+    const { param: _dropped, ...rest } = condition; // eslint-disable-line @typescript-eslint/no-unused-vars
+    onChange({ ...rest, ...keepParam, op, value: sameKind ? condition.value : defaultValue(next.value) });
+  };
+
+  const canAsk = !!params && !!condition.ref && PARAM_OPS.includes(condition.op);
+  const toggleAsk = () => {
+    if (!params || !condition.ref) return;
+    if (condition.param) {
+      const { param: _dropped, ...rest } = condition; // eslint-disable-line @typescript-eslint/no-unused-vars
+      onChange({ ...rest, value: defaultValue(info.value) });
+    } else {
+      onChange({ ref: condition.ref, op: condition.op, param: paramName(condition.ref, params.names) });
+    }
   };
 
   return (
@@ -134,8 +157,29 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner }: 
           ))}
         </Select>
       )}
-      {condition.ref && <ValueInput kind={info.value} type={type} value={condition.value} onChange={(value) => onChange({ ...condition, value })} />}
-      <IconButton aria-label="Remove filter" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} ml="auto" />
+      {condition.ref && condition.param && params ? (
+        <Badge colorScheme="purple" textTransform="none" fontWeight={500} data-testid="asked-filter">
+          asks “{params.label(condition.param)}”
+        </Badge>
+      ) : (
+        condition.ref && <ValueInput kind={info.value} type={type} value={condition.value} onChange={(value) => onChange({ ...condition, value })} />
+      )}
+      <HStack spacing={0} ml="auto">
+        {canAsk && (
+          <Tooltip label={condition.param ? 'Use a fixed value again' : 'Ask for this value when the question runs (a parameter)'} hasArrow>
+            <IconButton
+              aria-label={condition.param ? 'Use a fixed value' : 'Ask for the value'}
+              size="xs"
+              variant={condition.param ? 'subtle' : 'ghost'}
+              color={condition.param ? 'purple.300' : undefined}
+              icon={<SlidersIcon boxSize={3} />}
+              onClick={toggleAsk}
+              data-testid="ask-filter"
+            />
+          </Tooltip>
+        )}
+        <IconButton aria-label="Remove filter" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} />
+      </HStack>
     </Flex>
   );
 }

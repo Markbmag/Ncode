@@ -126,7 +126,7 @@ Binary columns (BLOBs) are never searched or returned.
 
 ## Questions (no SQL needed)
 
-**Questions** in the sidebar is a step-by-step builder for the database selected in the sidebar:
+**New question** in the sidebar is a step-by-step builder for the database selected in the sidebar:
 
 1. **Data** - the table to start from.
 2. **Join** - *Join data* lists the tables related by foreign keys (also through tables in
@@ -142,7 +142,44 @@ Binary columns (BLOBs) are never searched or returned.
 
 The result updates as you build (*Live preview*; turn it off for slow databases and press **Run**
 or Ctrl/Cmd+Enter). **View SQL** shows the exact SQL; **Open in SQL editor** continues there.
-The question is kept while the browser tab is open; saving questions comes with milestone M4.
+An unsaved question is kept while the browser tab is open; **Save** puts it in the library.
+
+## Library: saving and sharing
+
+**Save** (builder or SQL editor) stores the question, its chart and its parameters in a
+**collection**. **Library** in the sidebar lists them:
+
+- *Start*: your favourites (the star) and recently changed questions; the search box finds
+  questions by name or description.
+- *My collection* is private: only you (and admins) see it. Create other collections (and
+  collections inside them) with **+**; a new top-level collection is yours.
+- **Share** (on a collection you own) gives people *Can view* or *Can edit*, by name or to
+  *Everyone*. Access covers the collections inside it too. Editors can save, move and archive
+  questions; only the owner and admins can share, move or archive the collection itself. Running a
+  question still needs access to its database (`python -m app.manage allow ...`).
+- An opened question shows *edited* when it differs from what is saved: **Save** updates it,
+  the **⋯** menu has *Save as new question*, *Discard changes*, *Rename*, *Duplicate*, *Move* and
+  *Archive*. People with view access can only *Save as new* (into a collection of theirs).
+- **Archive** keeps archived questions and collections; restore them or delete them for good.
+
+**Parameters** let one question answer many variants. In SQL, every `{{name}}` becomes an input
+(the ⚙ next to it sets label, type text/number/date, default and *required*). In the builder,
+the sliders button on a filter (*Ask for the value*) turns it into a parameter: its value is asked for above the result, and
+without a value the filter is left out. The values are part of the link (`?p.region=EU`), so a
+link opens the question with the same values. Dashboard filters (M5) will set them.
+
+### Importing from DataDesk
+
+    cd backend
+    python -m app.manage import-datadesk path/to/app-data.sqlite --map db1=mes,db2=crm --dry-run
+    python -m app.manage import-datadesk path/to/app-data.sqlite --map db1=mes,db2=crm --report import.md
+
+`--map` says which Ncode connection each DataDesk database is. The dry run only prints the report;
+without it, everything goes into a collection **DataDesk import** owned by `--owner` (default: the
+first admin), with one sub-collection per dashboard. Single-table reports become builder questions,
+SQL reports SQL questions (only if they pass the read-only check), multi-database reports wait for
+the federated workspace (M6). The report lists every report and why something was not converted.
+DataDesk's file is only read; running the import again skips what was imported before.
 
 ## SQL editor
 
@@ -153,7 +190,7 @@ name, *SELECT* to insert a query), the editor, and the result below.
 - Autocomplete knows your tables and columns; *Format* tidies the SQL; *History* keeps your last
   queries (in this browser only).
 - `{{name}}` in the SQL becomes an input field; values are sent as parameters, never pasted into
-  the SQL. Choose *Number* for numeric values.
+  the SQL. Its ⚙ sets the type (text, number, date), a default and a label.
 - A badge says whether the query passes the read-only check before you run it.
 
 Both pages share the result grid: it scrolls smoothly through thousands of rows, columns can be
@@ -267,6 +304,28 @@ questions and SQL: `columns` (name, type, role), `rows` as arrays, `stats` (dura
 identical runs within `NCODE_QUERY_CACHE_TTL_SEC` are served from a short cache (`"refresh": true`
 skips it).
 
+### Library
+
+    GET    /api/collections                       visible collections (flat tree) + your own collection's id
+    POST   /api/collections                       {"name", "description", "parent_id"}
+    GET    /api/collections/{id}                  the collection, its path, sub-collections and questions
+    PATCH  /api/collections/{id}                  rename / move ("parent_id") / archive ("archived": true)
+    DELETE /api/collections/{id}                  an archived collection with everything in it
+    GET    /api/collections/{id}/permissions      own and inherited grants (owner and admins)
+    PUT    /api/collections/{id}/permissions      {"grants": [{"user": "bob", "level": "view"}, {"role": "all", "level": "edit"}]}
+    GET    /api/questions?q=&favorites=&collection=
+    POST   /api/questions                         {"name", "collection_id", "kind": "builder"|"sql", "spec", "viz", "parameters"}
+    GET    /api/questions/{id}   PATCH /api/questions/{id}   DELETE /api/questions/{id} (archived only)
+    POST   /api/questions/{id}/duplicate
+    POST   /api/questions/{id}/run                {"params": {"region": "EU"}} -> a query task, as above
+    PUT    /api/questions/{id}/favorite           (DELETE to remove the star)
+    GET    /api/library/archive                   GET /api/library/people
+
+A builder question's `spec` is the question JSON above; a filter rule with `"param": "region"` takes
+its value from the parameter. A SQL question's `spec` is `{"sql": "...", "limit": 2000}`. Parameters
+are `[{"name", "label", "type": "text"|"number"|"date", "default", "required"}]`. Questions are
+checked when saved (unknown columns, SQL that is not read-only are refused).
+
 ### SQL mode
 
 `POST /api/query/sql` runs one read-only query, exactly as written. `{{name}}` placeholders become
@@ -294,13 +353,16 @@ Everything is managed from the `backend` folder with `python -m app.manage`:
     delete-user alice
     list-users
     audit --limit 50                        # who searched what, when, how long
+    import-datadesk app-data.sqlite --map db1=mes --dry-run   # see "Importing from DataDesk"
 
 - Passwords are stored as scrypt hashes; sessions last `NCODE_SESSION_TTL_HOURS` (12 by default).
 - 5 wrong passwords lock that user+IP for 5 minutes.
 - Each user can run at most 3 searches at once (protects your production databases).
 - Users only see their own searches; admins see all.
 - **The audit log records every search phrase.** Tell your team.
-- Users, sessions and the audit log live in `backend/data/ncode.sqlite` (git-ignored; back it up).
+- Users, sessions, the audit log and the library (saved questions, collections, sharing) live in
+  `backend/data/ncode.sqlite` (git-ignored; back it up).
+- Deleting a user keeps their questions; their own collection becomes an admin-only collection.
 
 ## Security notes
 

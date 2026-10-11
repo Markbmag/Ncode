@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, ButtonGroup, Flex, HStack, Input, Menu, MenuButton, MenuItem, MenuList, Select, Skeleton, Text, Tooltip,
-  VStack, useBreakpointValue,
+  Badge, Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Select, Skeleton, Text, Tooltip, VStack, useBreakpointValue,
 } from '@chakra-ui/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
 import { NoConnectionsState } from '../components/EmptyStates';
-import { EngineBadge } from '../components/EngineBadge';
 import { Split } from '../components/layout/Split';
 import { CodeEditor } from '../components/sql/CodeEditor';
 import type { CodeEditorHandle } from '../components/sql/CodeEditor';
@@ -25,6 +23,11 @@ import { useSchema } from '../query/useSchema';
 import { DEFAULT_VIZ } from '../viz/state';
 import type { VizState } from '../viz/state';
 import { useWorkspace } from '../workspace/useWorkspace';
+import type { SavedQuestion, SqlQuestionSpec } from '../library/api';
+import { ParametersBar } from '../library/ParametersBar';
+import { sqlValues, syncSqlParams, valuesFromSearch, valuesToSearch } from '../library/params';
+import type { ParamValues, ParameterDef } from '../library/params';
+import { QuestionHeader } from '../library/QuestionHeader';
 
 interface Incoming {
   connection?: string;
@@ -51,20 +54,29 @@ export default function SqlPage() {
   return <SqlWorkbench key={activeKey} connection={activeKey} initialSql={initial} />;
 }
 
-function SqlWorkbench({ connection, initialSql }: { connection: string; initialSql: string | null }) {
+/** The SQL editor, for a new query or (with `saved`) a saved SQL question. */
+export function SqlWorkbench({ connection, initialSql, saved = null }: { connection: string; initialSql: string | null; saved?: SavedQuestion | null }) {
   const ws = useWorkspace();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const engine = ws.active?.engine;
+  const conn = ws.connections.find((c) => c.key === connection); // this editor's database (a saved question's own)
+  const engine = conn?.engine;
   const schemaQuery = useSchema(connection);
   const editor = useRef<CodeEditorHandle | null>(null);
-  const [text, setText] = useState(() => initialSql ?? loadJson<string>(draftKey(connection), ''));
-  const [params, setParams] = useState<Record<string, { value: string; number: boolean }>>({});
-  const [limit, setLimit] = useState(() => loadJson<number>('ncode_sql_limit', 2000));
+  const savedSpec = saved ? (saved.spec as SqlQuestionSpec) : null;
+  const [text, setText] = useState(() => savedSpec?.sql ?? initialSql ?? loadJson<string>(draftKey(connection), ''));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [defs, setDefs] = useState<ParameterDef[]>(() => saved?.parameters ?? []);
+  const [paramValues, setParamValuesState] = useState<ParamValues>(() => valuesFromSearch(searchParams));
+  const setParamValues = (values: ParamValues) => {
+    setParamValuesState(values);
+    setSearchParams((prev) => valuesToSearch(values, prev), { replace: true });
+  };
+  const [limit, setLimit] = useState(() => savedSpec?.limit ?? loadJson<number>('ncode_sql_limit', 2000));
   const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
   const [check, setCheck] = useState<{ ok: boolean; error: string | null } | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
-  const [viz, setViz] = useState<VizState>(() => loadJson<VizState>(`${draftKey(connection)}_viz`, DEFAULT_VIZ));
+  const [viz, setViz] = useState<VizState>(() => saved?.viz ?? loadJson<VizState>(`${draftKey(connection)}_viz`, DEFAULT_VIZ));
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
@@ -72,9 +84,15 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
   useEffect(() => {
     if (initialSql) navigate('.', { replace: true, state: null });
   }, [initialSql, navigate]);
-  useEffect(() => saveJson(draftKey(connection), text), [connection, text]);
-  useEffect(() => saveJson('ncode_sql_limit', limit), [limit]);
-  useEffect(() => saveJson(`${draftKey(connection)}_viz`, viz), [connection, viz]);
+  useEffect(() => {
+    if (!saved) saveJson(draftKey(connection), text); // a saved question is its own draft
+  }, [connection, text, saved]);
+  useEffect(() => {
+    if (!saved) saveJson('ncode_sql_limit', limit);
+  }, [limit, saved]);
+  useEffect(() => {
+    if (!saved) saveJson(`${draftKey(connection)}_viz`, viz);
+  }, [connection, viz, saved]);
   useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
 
   // Ask the server's guard whether this SQL may run (shown before running).
@@ -90,6 +108,12 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
   }, [text, connection]);
 
   const paramNames = useMemo(() => findParams(text), [text]);
+  const paramDefs = useMemo(() => syncSqlParams(paramNames, defs), [paramNames, defs]);
+  const baseline = useMemo(
+    () => (saved && savedSpec ? JSON.stringify({ sql: savedSpec.sql, limit: savedSpec.limit ?? null, viz: saved.viz ?? DEFAULT_VIZ, params: syncSqlParams(findParams(savedSpec.sql), saved.parameters) }) : null),
+    [saved, savedSpec],
+  );
+  const dirty = !!saved && JSON.stringify({ sql: text, limit, viz, params: paramDefs }) !== baseline;
   const autocomplete = useMemo(() => {
     const out: Record<string, string[]> = {};
     for (const t of schemaQuery.data?.tables ?? []) out[t.name] = t.columns.map((c) => c.name);
@@ -100,17 +124,22 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
   const execute = useCallback(
     (sql: string) => {
       if (!sql.trim()) return;
-      const values: Record<string, string | number | null> = {};
-      for (const name of findParams(sql)) {
-        const p = params[name];
-        values[name] = p ? (p.number && p.value.trim() !== '' && !Number.isNaN(Number(p.value)) ? Number(p.value) : p.value) : null;
-      }
+      const names = findParams(sql);
+      const { value } = sqlValues(paramDefs.filter((d) => names.includes(d.name)), paramValues);
       addHistory(connection, sql);
       setHistoryVersion((v) => v + 1);
-      void run(async () => (await http.post<TaskSnapshot>('/api/query/sql', { connection, sql, params: values, limit, wait_ms: START_WAIT_MS })).data);
+      void run(async () => (await http.post<TaskSnapshot>('/api/query/sql', { connection, sql, params: value, limit, wait_ms: START_WAIT_MS })).data);
     },
-    [connection, params, limit, run],
+    [connection, paramDefs, paramValues, limit, run],
   );
+
+  // A saved question shows its result when opened.
+  const openedRun = useRef(false);
+  useEffect(() => {
+    if (!saved || openedRun.current || !text.trim()) return;
+    openedRun.current = true;
+    execute(text);
+  }, [saved, text, execute]);
 
   const onRun = useCallback((sql: string) => execute(sql), [execute]);
 
@@ -143,33 +172,7 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
       <Box flex={1} minH="140px">
         <CodeEditor value={text} onChange={setText} onRun={onRun} engine={engine} schema={autocomplete} editorRef={editor} />
       </Box>
-      {paramNames.length > 0 && (
-        <Flex gap={3} px={3} py={2} borderTop="1px solid" borderColor="lineColor" wrap="wrap" data-testid="sql-params">
-          {paramNames.map((name) => {
-            const p = params[name] ?? { value: '', number: false };
-            return (
-              <HStack key={name} spacing={1}>
-                <Text fontSize="xs" fontFamily="mono" color="mutedText">{`{{${name}}}`}</Text>
-                <Input
-                  size="xs"
-                  maxW="140px"
-                  value={p.value}
-                  onChange={(e) => setParams((prev) => ({ ...prev, [name]: { ...p, value: e.target.value } }))}
-                  aria-label={`Value of ${name}`}
-                />
-                <ButtonGroup size="xs" isAttached>
-                  <Button variant={p.number ? 'subtle' : 'brand'} onClick={() => setParams((prev) => ({ ...prev, [name]: { ...p, number: false } }))}>
-                    Text
-                  </Button>
-                  <Button variant={p.number ? 'brand' : 'subtle'} onClick={() => setParams((prev) => ({ ...prev, [name]: { ...p, number: true } }))}>
-                    Number
-                  </Button>
-                </ButtonGroup>
-              </HStack>
-            );
-          })}
-        </Flex>
-      )}
+      <ParametersBar defs={paramDefs} values={paramValues} onValues={setParamValues} onDefs={!saved || saved.access === 'edit' ? setDefs : null} typeEditable />
       <Flex align="center" gap={2} px={3} py={2} borderTop="1px solid" borderColor="lineColor" wrap="wrap">
         <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={() => execute(text)} isDisabled={!text.trim()} data-testid="run-sql">
           Run
@@ -228,7 +231,7 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
         onCancel={cancel}
         smartDates={smartDates}
         onSmartDates={setSmartDates}
-        filename={`${ws.active?.label ?? connection}_sql`}
+        filename={saved ? saved.name : `${conn?.label ?? connection}_sql`}
         viz={viz}
         onVizChange={setViz}
         empty={
@@ -242,17 +245,22 @@ function SqlWorkbench({ connection, initialSql }: { connection: string; initialS
 
   return (
     <Flex direction="column" h="100%" gap={3}>
-      <Flex align="center" gap={3}>
-        {engine && <EngineBadge engine={engine} size={32} />}
-        <Box>
-          <Text fontSize="lg" fontWeight={700} lineHeight="1.2">
-            SQL editor
-          </Text>
-          <Text fontSize="xs" color="mutedText">
-            {ws.active?.label} · read-only
-          </Text>
-        </Box>
-      </Flex>
+      <QuestionHeader
+        engine={engine}
+        title="SQL editor"
+        subtitle={`${conn?.label ?? connection} · read-only`}
+        saved={saved}
+        dirty={dirty}
+        defaultName="SQL query"
+        payload={() => (text.trim() ? { kind: 'sql', connection, spec: { sql: text, limit }, viz, parameters: paramDefs } : null)}
+        onRevert={() => {
+          if (!saved || !savedSpec) return;
+          editor.current?.setText(savedSpec.sql);
+          setLimit(savedSpec.limit ?? 2000);
+          setViz(saved.viz ?? DEFAULT_VIZ);
+          setDefs(saved.parameters);
+        }}
+      />
       <Box flex={1} minH={0}>
         {vertical ? (
           <VStack align="stretch" spacing={3}>
