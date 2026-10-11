@@ -16,7 +16,7 @@ function PageFallback() {
 
 /** Sidebar (sections + databases) around the current page. */
 // Work surfaces that use the whole window (editor + results side by side).
-const WIDE_PAGES = [/^\/questions(\/\d+)?$/, /^\/sql$/];
+const WIDE_PAGES = [/^\/questions(\/\d+)?$/, /^\/sql$/, /^\/combine$/];
 
 export default function AppShell() {
   const ws = useWorkspace();

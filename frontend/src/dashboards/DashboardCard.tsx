@@ -119,7 +119,7 @@ function Message({ children, tone = 'muted', action }: { children: React.ReactNo
 
 function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved, trigger, refresh, editing, onEdit, onRemove, onChange }: Props) {
   const q = card.question;
-  const runnable = !!q && (q.state === 'ok' || q.state === 'archived') && q.kind !== 'federated';
+  const runnable = !!q && (q.state === 'ok' || q.state === 'archived');
   const [retry, setRetry] = useState(0);
   const url = saved ? `/api/dashboards/${dashboardId}/cards/${card.key}/run` : `/api/questions/${card.question_id}/run`;
   const request = saved ? `{"filters":${runValuesJson}}` : '{"params":{}}';
@@ -205,7 +205,6 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   let body: React.ReactNode;
   if (!q || q.state === 'hidden') body = <Message>This question is not shared with you.</Message>;
   else if (q.state === 'deleted') body = <Message>The question on this card was deleted.</Message>;
-  else if (q.kind === 'federated') body = <Message>Multi-source questions run once federation arrives (M6).</Message>;
   else if (run.status === 'error')
     body = (
       <Message tone="error" action={<Button size="xs" variant="subtle" onClick={() => setRetry((n) => n + 1)}>Try again</Button>}>

@@ -456,11 +456,16 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
 
 /** What the server says about a question on a card (dashboard_routes._question_info). */
 function cardQuestion(q: SavedQuestion): DashCard['question'] {
-  const spec = q.spec as { source?: { table?: string; alias?: string }; joins?: { table?: string; alias?: string }[] };
+  const spec = q.spec as {
+    source?: { table?: string; alias?: string };
+    joins?: { table?: string; alias?: string }[];
+    result_columns?: { name: string; type: string }[];
+  };
   const tables = q.kind === 'builder' ? [spec.source, ...(spec.joins ?? [])].map((t) => t?.alias || t?.table).filter((t): t is string => !!t) : [];
+  const fields = q.kind === 'federated' ? spec.result_columns ?? [] : [];
   return {
     state: q.archived ? 'archived' : 'ok', id: q.id, name: q.name, kind: q.kind, connection: q.connection,
-    parameters: q.parameters, viz: q.viz, tables,
+    parameters: q.parameters, viz: q.viz, tables, fields,
   };
 }
 

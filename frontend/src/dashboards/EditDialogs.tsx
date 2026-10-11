@@ -329,6 +329,7 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
   const schema = useSchema(q.kind === 'builder' && q.connection ? q.connection : '');
   const params = fittingParams(filter.type, q);
   const columns = useMemo(() => {
+    if (q.kind === 'federated') return (q.fields ?? []).filter((c) => c.type !== 'binary').map((c) => ({ ref: c.name, label: humanize(c.name) }));
     if (q.kind !== 'builder' || !schema.data) return [];
     const out: { ref: string; label: string }[] = [];
     const several = (q.tables ?? []).length > 1;

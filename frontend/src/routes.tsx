@@ -12,6 +12,8 @@ const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SavedQuestionPage = lazy(() => import('./pages/SavedQuestionPage'));
 const DashboardsPage = lazy(() => import('./pages/DashboardsPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const CombinePage = lazy(() => import('./pages/CombinePage'));
+const DatasetsPage = lazy(() => import('./pages/DatasetsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const ChartGalleryPage = lazy(() => import('./pages/ChartGalleryPage'));
 
@@ -28,6 +30,8 @@ export function AppRoutes() {
         <Route path="questions" element={<QuestionsPage />} />
         <Route path="questions/:id" element={<SavedQuestionPage />} />
         <Route path="sql" element={<SqlPage />} />
+        <Route path="combine" element={<CombinePage />} />
+        <Route path="datasets" element={<DatasetsPage />} />
         <Route path="dashboards" element={<DashboardsPage />} />
         <Route path="dashboards/:id" element={<DashboardPage />} />
         <Route path="admin" element={<AdminPage />} />

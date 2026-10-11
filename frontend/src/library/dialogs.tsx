@@ -94,6 +94,7 @@ export function DialogShell({ isOpen, onClose, title, children, submitLabel, onS
         as="form"
         onSubmit={(e) => {
           e.preventDefault();
+          e.stopPropagation(); // a dialog opened from another dialog: React events bubble through portals
           if (canSubmit && !busy) void submit();
         }}
       >

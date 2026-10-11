@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Alert, AlertDescription, AlertIcon, AlertTitle, Box, Button, Code, Skeleton, Text, VStack } from '@chakra-ui/react';
+import { Alert, AlertDescription, AlertIcon, AlertTitle, Button, Skeleton, VStack } from '@chakra-ui/react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { useQuestion } from '../library/api';
@@ -7,6 +7,7 @@ import type { SavedQuestion } from '../library/api';
 import { QuestionHeader } from '../library/QuestionHeader';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Builder } from './QuestionsPage';
+import { CombineWorkspace } from './CombinePage';
 import { SqlWorkbench } from './SqlPage';
 
 /** /questions/:id - a saved question, opened in the builder or the SQL editor. */
@@ -38,7 +39,7 @@ export default function SavedQuestionPage() {
         </Button>
       </Alert>
     );
-  if (q.kind === 'federated') return <FederatedQuestion q={q} />;
+  if (q.kind === 'federated') return <CombineWorkspace key={q.id} saved={q} />;
   if (!usable) return <NoDatabase q={q} />;
   return q.kind === 'sql' ? (
     <SqlWorkbench key={q.id} connection={q.connection} initialSql={null} saved={q} />
@@ -55,32 +56,6 @@ function NoDatabase({ q }: { q: SavedQuestion }) {
         <AlertIcon />
         This question uses the database “{q.connection}”, which you do not have access to. Ask an admin for access to run it.
       </Alert>
-    </VStack>
-  );
-}
-
-function FederatedQuestion({ q }: { q: SavedQuestion }) {
-  return (
-    <VStack align="stretch" spacing={4}>
-      <QuestionHeader title={q.name} saved={q} dirty={false} payload={() => null} defaultName={q.name} />
-      <Alert status="info" borderRadius="xl" alignItems="flex-start">
-        <AlertIcon />
-        <Box>
-          <AlertTitle>Multi-source question (imported from DataDesk)</AlertTitle>
-          <AlertDescription fontSize="sm">
-            It combines several databases, which Ncode can run once the federated workspace arrives (roadmap M6). Its definition is kept as it was
-            imported.
-          </AlertDescription>
-        </Box>
-      </Alert>
-      <Box bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" p={4}>
-        <Text fontSize="sm" fontWeight={600} mb={2}>
-          Definition
-        </Text>
-        <Code display="block" whiteSpace="pre" overflowX="auto" fontSize="xs" p={3} borderRadius="md">
-          {JSON.stringify(q.spec, null, 2)}
-        </Code>
-      </Box>
     </VStack>
   );
 }
