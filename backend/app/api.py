@@ -18,6 +18,8 @@
     GET    /api/connections/{key}/structure?table=...
     GET    /api/connections/{key}/export?table=...   CSV stream (all rows or only matches)
     GET    /api/limits
+    POST   /api/query, /api/query/compile, /api/query/sql, /api/query/sql/check, /api/query/tasks/{id}
+                                        questions and SQL mode, see app/query/routes.py
     POST   /api/search                  -> {"task_id": ...}
     GET    /api/search/{task_id}        -> progress (+ results when finished)
     DELETE /api/search/{task_id}        -> cancel
@@ -48,6 +50,9 @@ from .config import ENGINES, ConnectionConfig, Settings, driver_available, norma
 from .crypto import CipherError
 from .db import ConnectionRegistry, describe_error, probe
 from .explore import browse_table, csv_stream, table_structure
+from .content.routes import register_content_routes
+from .query.routes import register_query_routes
+from .query.runner import QueryRunner
 from .schema_graph import describe_schema
 from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, MatchMode, SearchRequest
 from .search import SearchOptions, classify_type, start_search_thread
@@ -73,6 +78,11 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             continue
         registry.set_config(stored)
     store = TaskStore(ttl_sec=settings.task_ttl_sec)
+    runner = QueryRunner(
+        workers=settings.query_workers,
+        timeout_sec=settings.statement_timeout_sec,
+        cache_ttl_sec=settings.query_cache_ttl_sec,
+    )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
     bearer = HTTPBearer(auto_error=False)
 
@@ -85,6 +95,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 "No users exist yet. Create the first admin with:  python -m app.manage create-user <name> --admin"
             )
         yield
+        runner.shutdown()
         registry.dispose_all()
         app_db.dispose()
 
@@ -93,7 +104,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["*"],
         expose_headers=["Retry-After"],  # lets the login screen show the lockout countdown
     )
@@ -361,6 +372,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         if not found:
             raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
         registry.set_config(cfg)
+        runner.cache.drop_connection(key)
         app_db.audit(admin.username, "connection_edit", connection=key, status="ok")
         return details_of(cfg, admin)
 
@@ -369,6 +381,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         get_ui_connection(key)
         app_db.delete_connection(key)
         registry.remove(key)
+        runner.cache.drop_connection(key)
         app_db.audit(admin.username, "connection_delete", connection=key, status="ok")
         return {"ok": True}
 
@@ -445,7 +458,12 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
 
     @app.get("/api/limits")
     def limits(_user: User = Depends(current_user)):
-        return {"max_row_limit": settings.max_row_limit, "max_export_rows": settings.max_export_rows}
+        return {
+            "max_row_limit": settings.max_row_limit,
+            "max_export_rows": settings.max_export_rows,
+            "query_default_rows": settings.query_default_rows,
+            "query_max_rows": settings.query_max_rows,
+        }
 
     @app.get("/api/connections/{key}/browse")
     def browse(
@@ -648,4 +666,16 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             except RuntimeError:
                 pass  # already closed
 
+    queries = register_query_routes(
+        app,
+        registry=registry,
+        settings=settings,
+        app_db=app_db,
+        runner=runner,
+        current_user=current_user,
+        require_connection=require_connection,
+    )
+    register_content_routes(
+        app, app_db=app_db, queries=queries, current_user=current_user, require_connection=require_connection
+    )
     return app

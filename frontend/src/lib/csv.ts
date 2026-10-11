@@ -58,3 +58,10 @@ export function safeFilename(...parts: string[]): string {
     .join('_');
   return (name || 'export').slice(0, 120);
 }
+
+/** CSV from a result envelope (rows as arrays; duplicate column names are fine). */
+export function buildCsvFromArrays(columns: string[], rows: unknown[][], delimiter: CsvDelimiter): string {
+  const lines = [columns.map((c) => escapeCell(c, delimiter)).join(delimiter)];
+  for (const row of rows) lines.push(row.map((v) => escapeCell(cellToString(v), delimiter)).join(delimiter));
+  return lines.join('\r\n') + '\r\n';
+}

@@ -196,6 +196,8 @@ export interface ColumnInfo {
 export interface Limits {
   max_row_limit: number;
   max_export_rows: number;
+  query_default_rows?: number;
+  query_max_rows?: number;
 }
 
 // ---------------------------------------------------------------- schema v2

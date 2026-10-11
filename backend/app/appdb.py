@@ -1,4 +1,4 @@
-"""Ncode's own small database (SQLite): users, login sessions and the audit log.
+"""Ncode's own small database (SQLite): users, login sessions, the audit log and (app/content) the library.
 
 This is NOT one of the databases you search; it only stores who may use Ncode
 and who searched for what.
@@ -205,6 +205,9 @@ class AppDB:
                 return False
             conn.execute(delete(sessions_table).where(sessions_table.c.user_id == uid))
             conn.execute(delete(users_table).where(users_table.c.id == uid))
+            from .content.store import forget_user  # the library imports this module
+
+            forget_user(conn, uid, username)
         return True
 
     # -- sessions ------------------------------------------------------------
@@ -270,6 +273,11 @@ class AppDB:
             except CipherError as exc:
                 logger.error("Connection %r skipped: %s", row.slug, exc)
         return configs
+
+    def connection_engines(self) -> dict[str, str]:
+        """key -> engine of the UI-created connections, without decrypting anything."""
+        with self.engine.connect() as conn:
+            return {r.slug: r.engine for r in conn.execute(select(connections_table.c.slug, connections_table.c.engine))}
 
     def get_connection(self, slug: str) -> ConnectionConfig | None:
         with self.engine.connect() as conn:
