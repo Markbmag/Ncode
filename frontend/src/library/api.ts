@@ -62,6 +62,7 @@ export interface SavedQuestion extends QuestionSummary {
 
 export interface Grant {
   user: string | null;
+  group?: string | null; // M9
   role: string | null;
   level: Access;
   inherited_from?: { id: number; name: string } | null;
@@ -148,7 +149,7 @@ export function usePeople() {
   return useQuery({
     queryKey: libraryKeys.people,
     staleTime: 5 * 60_000,
-    queryFn: async () => (await http.get<{ users: string[]; roles: string[] }>('/api/library/people')).data,
+    queryFn: async () => (await http.get<{ users: string[]; groups?: string[]; roles: string[] }>('/api/library/people')).data,
   });
 }
 
@@ -167,7 +168,7 @@ export const library = {
   deleteCollection: (id: number) => after(http.delete(`/api/collections/${id}`)),
   grants: async (id: number) => (await http.get<{ grants: Grant[] }>(`/api/collections/${id}/permissions`)).data.grants,
   setGrants: (id: number, grants: Grant[]) =>
-    after(http.put<{ grants: Grant[] }>(`/api/collections/${id}/permissions`, { grants: grants.map(({ user, role, level }) => ({ user, role, level })) })),
+    after(http.put<{ grants: Grant[] }>(`/api/collections/${id}/permissions`, { grants: grants.map(({ user, group, role, level }) => ({ user, group: group ?? null, role, level })) })),
 
   createQuestion: async (body: QuestionPayload & { name: string; description?: string | null; collection_id: number | null }) => {
     const q = await after(http.post<SavedQuestion>('/api/questions', body));

@@ -141,6 +141,10 @@ class Settings:
     scheduler_workers: int = 2           # subscriptions sent at the same time
     slow_query_sec: int = 5              # queries slower than this show in Admin → Usage → Slow queries
     public_rate_per_min: int = 120       # requests per minute per visitor on public links and embeds
+    # --- operations (M9) ---
+    backup_hour: int = 2                 # automatic daily backup at this hour (server time); -1 = off
+    backup_keep: int = 7                 # automatic backups kept
+    metrics_token: str = field(default="", repr=False)  # lets Prometheus read /metrics without signing in
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
 
@@ -204,6 +208,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         scheduler_workers=max(1, _int(env, "NCODE_SCHEDULER_WORKERS", defaults.scheduler_workers)),
         slow_query_sec=max(1, _int(env, "NCODE_SLOW_QUERY_SEC", defaults.slow_query_sec)),
         public_rate_per_min=max(10, _int(env, "NCODE_PUBLIC_RATE_PER_MIN", defaults.public_rate_per_min)),
+        backup_hour=min(23, max(-1, _int(env, "NCODE_BACKUP_HOUR", defaults.backup_hour))),
+        backup_keep=max(1, _int(env, "NCODE_BACKUP_KEEP", defaults.backup_keep)),
+        metrics_token=(env.get("NCODE_METRICS_TOKEN") or "").strip(),
     )
 
 

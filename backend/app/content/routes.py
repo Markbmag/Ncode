@@ -71,6 +71,7 @@ class CollectionPatch(BaseModel):
 
 class GrantIn(BaseModel):
     user: str | None = Field(default=None, max_length=64)
+    group: str | None = Field(default=None, max_length=64)
     role: str | None = Field(default=None, max_length=16)
     level: Literal["view", "edit"]
 
@@ -196,7 +197,7 @@ def register_content_routes(
                 raise fail(exc) from exc
             try:
                 # unknown columns etc. are refused now, not at the next run (sample values stand in for parameters)
-                queries.compile_for(bind_spec(parsed, sample_values(clean_defs)))
+                queries.compile_for(bind_spec(parsed, sample_values(clean_defs)), user=user)
             except HTTPException as exc:
                 if exc.status_code != 502:  # database unreachable: save anyway
                     raise
@@ -286,7 +287,10 @@ def register_content_routes(
             grants = store.set_grants(user, cid, [g.model_dump() for g in body.grants])
         except ContentError as exc:
             raise fail(exc) from exc
-        summary = ", ".join(f"{g['user'] or 'role:' + g['role']}={g['level']}" for g in grants if not g["inherited_from"])
+        summary = ", ".join(
+            f"{g['user'] or ('group:' + g['group'] if g['group'] else 'role:' + g['role'])}={g['level']}"
+            for g in grants if not g["inherited_from"]
+        )
         app_db.audit(user.username, "permissions", phrase=f"collection {cid}: {summary or 'none'}", status="ok")
         return {"grants": grants}
 
@@ -453,6 +457,7 @@ def register_content_routes(
     def people(user: User = Depends(current_user)):
         return {
             "users": [u.username for u in app_db.list_users() if u.is_active and u.id != user.id],
+            "groups": [g["name"] for g in app_db.list_groups()],
             "roles": list(ROLES),
         }
 

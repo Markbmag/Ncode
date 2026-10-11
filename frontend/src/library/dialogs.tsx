@@ -252,7 +252,7 @@ function CollectionForm({ isOpen, onClose, collection, parentId, onDone }: Colle
 
 // ---------------------------------------------------------------- sharing
 
-const who = (g: Grant) => (g.user ? g.user : g.role === 'all' ? 'Everyone' : `All with role "${g.role}"`);
+const who = (g: Grant) => (g.user ? g.user : g.group ? `Group “${g.group}”` : g.role === 'all' ? 'Everyone' : `All with role "${g.role}"`);
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -278,7 +278,11 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
   const setOwn = (next: Grant[]) => setGrants([...next, ...inherited]);
   const add = () => {
     if (!pick) return;
-    const grant: Grant = pick.startsWith('role:') ? { user: null, role: pick.slice(5), level } : { user: pick, role: null, level };
+    const grant: Grant = pick.startsWith('role:')
+      ? { user: null, role: pick.slice(5), level }
+      : pick.startsWith('group:')
+        ? { user: null, group: pick.slice(6), role: null, level }
+        : { user: pick, role: null, level };
     setOwn([...own.filter((g) => who(g) !== who(grant)), grant]);
     setPick('');
   };
@@ -336,8 +340,15 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
             </Flex>
           ))}
           <HStack pt={2} borderTop="1px solid" borderColor="lineColor">
-            <Select size="sm" value={pick} onChange={(e) => setPick(e.target.value)} placeholder="Add a person or everyone…" aria-label="Person to add" data-testid="share-pick">
+            <Select size="sm" value={pick} onChange={(e) => setPick(e.target.value)} placeholder="Add a person, a group or everyone…" aria-label="Person to add" data-testid="share-pick">
               {!taken.has('Everyone') && <option value="role:all">Everyone (all signed-in users)</option>}
+              {(people.data?.groups ?? [])
+                .filter((g) => !taken.has(`Group “${g}”`))
+                .map((g) => (
+                  <option key={`g-${g}`} value={`group:${g}`}>
+                    Group: {g}
+                  </option>
+                ))}
               {(people.data?.users ?? [])
                 .filter((u) => !taken.has(u))
                 .map((u) => (

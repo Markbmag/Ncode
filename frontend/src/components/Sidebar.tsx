@@ -5,7 +5,7 @@ import {
 import { NavLink } from 'react-router-dom';
 import type { Connection, User } from '../api';
 import { LockIcon, LogOutIcon, MailIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
-import { AccountEmailDialog } from '../automation/AccountEmailDialog';
+import { AccountDialog } from '../account/AccountDialog';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 
@@ -224,15 +224,15 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
             {user.role === 'admin' ? 'Administrator' : 'User'}
           </Text>
         </Box>
-        <Tooltip label={email ? `Your email: ${email}` : 'Add your email address (for subscriptions)'} hasArrow>
-          <IconButton aria-label="Your email address" size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
+        <Tooltip label={email ? `Your account (${email})` : 'Your account: add your email address for subscriptions'} hasArrow>
+          <IconButton aria-label="Your account" size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
         </Tooltip>
         <ColorModeButton />
         <Tooltip label="Sign out" hasArrow>
           <IconButton aria-label="Sign out" size="sm" icon={<LogOutIcon boxSize={4} />} onClick={onLogout} />
         </Tooltip>
       </Flex>
-      {editingEmail && <AccountEmailDialog current={email} onClose={() => setEditingEmail(false)} onSaved={setEmail} />}
+      {editingEmail && <AccountDialog username={user.username} email={email} onClose={() => setEditingEmail(false)} onEmail={setEmail} />}
     </Flex>
   );
 }

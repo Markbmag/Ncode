@@ -44,6 +44,7 @@ class SearchOptions:
     exclude_tables: list[str] = field(default_factory=list)  # glob patterns
     schema: str | None = None
     refresh_schema: bool = False
+    denied_tables: frozenset[str] = frozenset()  # lower-case names never searched (row-level security, M9)
 
 
 @dataclass
@@ -99,7 +100,7 @@ def filter_tables(names: list[str], opts: SearchOptions) -> list[str]:
     exact = {t.lower() for t in opts.tables}
     selected = [n for n in names if not exact or n.lower() in exact]
     selected = [n for n in selected if not opts.include_tables or hit(n, opts.include_tables)]
-    return [n for n in selected if not hit(n, opts.exclude_tables)]
+    return [n for n in selected if not hit(n, opts.exclude_tables) and n.lower() not in opts.denied_tables]
 
 
 def _predicate(expr: Any, opts: SearchOptions) -> Any:

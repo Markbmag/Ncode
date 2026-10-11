@@ -39,11 +39,15 @@ def _primary_key(engine: Engine, table_name: str, schema: str | None) -> list[st
 
 
 def _build_select(
-    table_name: str, selected: list[str], schema: str | None, columns: list[dict[str, Any]], search: SearchOptions | None
+    table_name: str, selected: list[str], schema: str | None, columns: list[dict[str, Any]], search: SearchOptions | None,
+    row_filter: Any = None,
 ) -> tuple[Any, bool]:
-    """(statement, can_search). can_search is False when a filter was asked for but nothing is searchable."""
+    """(statement, can_search). can_search is False when a filter was asked for but nothing is searchable.
+    row_filter: the viewer's row-level security condition (app/rowsec.py), always applied."""
     tbl = sa_table(table_name, *[column(n) for n in selected], schema=schema)
     stmt = select(*[tbl.c[n] for n in selected])
+    if row_filter is not None:
+        stmt = stmt.where(row_filter)
     if search is not None:
         conditions = build_conditions(columns, search)
         if not conditions:
@@ -63,6 +67,7 @@ def browse_table(
     sort: str | None,
     descending: bool,
     search: SearchOptions | None,
+    row_filter: Any = None,
 ) -> dict[str, Any]:
     schema = cfg.schema
     selected, omitted = split_columns(columns)
@@ -82,7 +87,7 @@ def browse_table(
         result["note"] = "This table only has binary columns, which are not shown."
         return result
 
-    stmt, can_search = _build_select(table_name, selected, schema, columns, search)
+    stmt, can_search = _build_select(table_name, selected, schema, columns, search, row_filter)
     if not can_search:
         result["note"] = "None of this table's columns can be searched for this phrase."
         return result
@@ -150,10 +155,11 @@ def csv_stream(
     sort: str | None,
     descending: bool,
     search: SearchOptions | None,
+    row_filter: Any = None,
 ) -> Iterator[str]:
     """Yields the CSV in chunks so big exports never sit in memory."""
     selected, _omitted = split_columns(columns)
-    stmt, can_search = _build_select(table_name, selected, cfg.schema, columns, search)
+    stmt, can_search = _build_select(table_name, selected, cfg.schema, columns, search, row_filter)
 
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=delimiter, lineterminator="\r\n")

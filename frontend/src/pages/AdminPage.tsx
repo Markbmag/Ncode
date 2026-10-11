@@ -9,6 +9,9 @@ import { Panel } from '../admin/Panel';
 import { DeliverySettings } from '../admin/DeliverySettings';
 import { SharingSettings } from '../admin/SharingSettings';
 import { UsagePanel } from '../admin/UsagePanel';
+import { PeopleSettings } from '../admin/PeopleSettings';
+import { AuditPanel } from '../admin/AuditPanel';
+import { SystemPanel } from '../admin/SystemPanel';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
@@ -164,7 +167,7 @@ export default function AdminPage() {
     <VStack align="stretch" spacing={6}>
       <PageHeader
         title="Admin"
-        subtitle="Databases and their data model, delivery of subscriptions, sharing outside Ncode and usage. Users and permissions get a screen in M9."
+        subtitle="Databases and their data model, people and groups, delivery, sharing, usage, the audit log and backups."
         actions={
           <Button as={RouterLink} to="/admin/charts" size="sm" variant="subtle">
             Chart gallery
@@ -175,9 +178,12 @@ export default function AdminPage() {
       <Tabs index={tabIndex} onChange={setTab} size="sm" variant="soft-rounded" colorScheme="purple" isLazy>
         <TabList flexWrap="wrap" gap={1}>
           <Tab data-testid="admin-tab-databases">Databases</Tab>
+          <Tab data-testid="admin-tab-people">People</Tab>
           <Tab data-testid="admin-tab-delivery">Delivery</Tab>
           <Tab data-testid="admin-tab-sharing">Sharing</Tab>
           <Tab data-testid="admin-tab-usage">Usage</Tab>
+          <Tab data-testid="admin-tab-audit">Audit</Tab>
+          <Tab data-testid="admin-tab-system">System</Tab>
         </TabList>
         <TabPanels>
           <TabPanel px={0} pt={5}>
@@ -249,6 +255,9 @@ export default function AdminPage() {
             </VStack>
           </TabPanel>
           <TabPanel px={0} pt={5}>
+            <PeopleSettings />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
             <DeliverySettings />
           </TabPanel>
           <TabPanel px={0} pt={5}>
@@ -257,10 +266,16 @@ export default function AdminPage() {
           <TabPanel px={0} pt={5}>
             <UsagePanel />
           </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <AuditPanel />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <SystemPanel />
+          </TabPanel>
         </TabPanels>
       </Tabs>
     </VStack>
   );
 }
 
-const TABS = ['databases', 'delivery', 'sharing', 'usage'];
+const TABS = ['databases', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system'];

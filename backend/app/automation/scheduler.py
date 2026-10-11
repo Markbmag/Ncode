@@ -30,6 +30,7 @@ class Scheduler:
         self._thread: threading.Thread | None = None
         self._running: set[int] = set()
         self._lock = threading.Lock()
+        self.chores: list = []  # other periodic jobs (the daily backup, M9), called on every tick
 
     def start(self) -> None:
         if self._thread is None:
@@ -43,12 +44,20 @@ class Scheduler:
             self._thread.join(timeout=5)
         self.pool.shutdown(wait=False, cancel_futures=True)
 
+    def alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def _loop(self) -> None:
         while not self._stop.wait(self.interval):
             try:
                 self.tick()
             except Exception:  # a broken tick must not end the loop
                 logger.exception("scheduler tick failed")
+            for chore in self.chores:
+                try:
+                    chore()
+                except Exception:
+                    logger.exception("scheduled chore failed")
 
     def tick(self, now: float | None = None) -> list[int]:
         """Start every due subscription; returns their ids (tests call this directly)."""

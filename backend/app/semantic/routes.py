@@ -117,7 +117,7 @@ def register_semantic_routes(
             "connection": body.connection, "source": {"table": body.table},
             "aggregations": [{**body.definition.model_dump(mode="json", by_alias=True, exclude_none=True), "alias": "value"}],
         })
-        queries.compile_for(spec)  # unknown columns, sum of text ... are refused here
+        queries.compile_for(spec, user=admin)  # unknown columns, sum of text ... are refused here
 
     @router.post("/api/metrics")
     def create_metric(body: MetricIn, admin: User = Depends(require_admin)):
