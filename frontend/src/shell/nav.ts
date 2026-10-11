@@ -18,6 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/library', label: 'Library', icon: FolderIcon },
   { to: '/questions', label: 'New question', icon: ChartIcon, end: true },
   { to: '/sql', label: 'SQL editor', icon: CodeIcon },
-  { to: '/dashboards', label: 'Dashboards', icon: LayoutIcon, milestone: 'M5' },
+  { to: '/dashboards', label: 'Dashboards', icon: LayoutIcon },
   { to: '/admin', label: 'Admin', icon: ShieldIcon, adminOnly: true },
 ];

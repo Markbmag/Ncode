@@ -47,7 +47,7 @@ def test_dry_run_reports_and_writes_nothing(env, datadesk):
     assert "read-only guard" in notes[3]
     assert "'regex' is not known" in notes[5]
     assert "db9" in notes[7]
-    assert report.dashboards == [("Sales", 2), ("Operations", 2)]
+    assert report.dashboards == [("Sales", 2), ("Operations", 2)] and report.dashboard_outcomes == ["new", "new"]
     assert any("99" in w for w in report.warnings)
     text = report.text()
     assert "DRY RUN" in text and "| 3 | Cleanup | sql | skipped |" in text
@@ -79,6 +79,16 @@ def test_import_creates_questions_in_dashboard_collections(env, datadesk):
     assert starts["spec"]["filters"]["rules"][0]["op"] == "starts_with"
     assert starts["viz"]["spec"]["type"] == "kpi"
 
+    boards = {d["name"]: d for d in call(env, "admin", "GET", "/api/dashboards")["dashboards"]}
+    assert set(boards) == {"Sales", "Operations"} and boards["Sales"]["imported"]
+    sales = call(env, "admin", "GET", f"/api/dashboards/{boards['Sales']['id']}")
+    assert sales["collection"]["name"] == "Sales"
+    assert [(c["question"]["name"], c["layout"]) for c in sales["cards"]] == [
+        ("Revenue by region", {"x": 0, "y": 0, "w": 6, "h": 8}),
+        ("Orders per status", {"x": 6, "y": 0, "w": 6, "h": 8}),
+    ]
+    assert run(env, "admin", revenue["id"])["status"] == "completed"
+
     federated = questions["Orders vs tickets"]
     assert federated["kind"] == "federated"
     assert "M6" in run(env, "admin", federated["id"], status=409)["detail"]
@@ -91,6 +101,8 @@ def test_import_twice_skips_what_exists(env, datadesk):
     names = [c["name"] for c in call(env, "admin", "GET", "/api/collections")["collections"]]
     assert names.count("DataDesk import") == 1 and names.count("Sales") == 1
     assert len(call(env, "admin", "GET", "/api/questions")["questions"]) == 4
+    assert again.dashboard_outcomes == ["exists", "exists"]
+    assert len(call(env, "admin", "GET", "/api/dashboards")["dashboards"]) == 2
 
 
 def test_imported_content_is_private_to_the_owner_until_shared(env, datadesk):

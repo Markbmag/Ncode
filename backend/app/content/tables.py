@@ -58,3 +58,38 @@ favorites_table = Table(
     Column("item_id", Integer, primary_key=True),
     Column("created_at", Float, nullable=False),
 )
+
+dashboards_table = Table(
+    "dashboards",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(200), nullable=False),
+    Column("description", Text),
+    Column("collection_id", Integer, ForeignKey("collections.id"), nullable=False, index=True),
+    Column("owner_id", Integer),
+    Column("archived", Boolean, nullable=False, default=False),
+    Column("filters", Text, nullable=False, default="[]"),
+    Column("tabs", Text, nullable=False, default="[]"),
+    Column("settings", Text, nullable=False, default="{}"),
+    Column("import_key", String(120), unique=True),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+)
+
+dashboard_cards_table = Table(
+    "dashboard_cards",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("dashboard_id", Integer, ForeignKey("dashboards.id"), nullable=False, index=True),
+    Column("card_key", String(40), nullable=False),
+    Column("tab", String(40)),
+    Column("kind", String(16), nullable=False),
+    Column("question_id", Integer, ForeignKey("questions.id"), index=True),
+    Column("layout", Text, nullable=False),
+    Column("viz", Text),
+    Column("mappings", Text, nullable=False, default="{}"),
+    Column("text", Text),
+    Column("title", String(200)),
+    Column("position", Integer, nullable=False),
+)

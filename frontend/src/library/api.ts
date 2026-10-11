@@ -4,6 +4,7 @@ import { http } from '../api';
 import { queryClient } from '../lib/queryClient';
 import type { QuerySpec } from '../query/types';
 import type { VizState } from '../viz/state';
+import type { DashboardSummary } from '../dashboards/types';
 import type { ParameterDef } from './params';
 
 export { flattenTree } from './tree.ts';
@@ -98,7 +99,13 @@ export function useCollection(id: number | null) {
     enabled: id !== null,
     queryFn: async () =>
       (
-        await http.get<{ collection: CollectionInfo; path: { id: number; name: string }[]; collections: CollectionInfo[]; questions: QuestionSummary[] }>(
+        await http.get<{
+          collection: CollectionInfo;
+          path: { id: number; name: string }[];
+          collections: CollectionInfo[];
+          questions: QuestionSummary[];
+          dashboards: DashboardSummary[];
+        }>(
           `/api/collections/${id}`,
         )
       ).data,
@@ -123,7 +130,8 @@ export function useQuestion(id: number) {
 export function useArchive() {
   return useQuery({
     queryKey: libraryKeys.archive,
-    queryFn: async () => (await http.get<{ collections: CollectionInfo[]; questions: QuestionSummary[] }>('/api/library/archive')).data,
+    queryFn: async () =>
+      (await http.get<{ collections: CollectionInfo[]; questions: QuestionSummary[]; dashboards: DashboardSummary[] }>('/api/library/archive')).data,
   });
 }
 

@@ -29,7 +29,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from ..appdb import User, users_table
-from .tables import collections_table, favorites_table, permissions_table, questions_table
+from .tables import (
+    collections_table, dashboard_cards_table, dashboards_table, favorites_table, permissions_table, questions_table,
+)
 
 Level = Literal["view", "edit"]
 _RANK = {None: 0, "view": 1, "edit": 2}
@@ -361,7 +363,14 @@ class ContentStore:
             qids = [r.id for r in conn.execute(select(questions_table.c.id).where(questions_table.c.collection_id.in_(ids)))]
             if qids:
                 conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "question", favorites_table.c.item_id.in_(qids)))
+                # cards elsewhere that showed these questions say "deleted" from now on
+                conn.execute(update(dashboard_cards_table).where(dashboard_cards_table.c.question_id.in_(qids)).values(question_id=None))
                 conn.execute(delete(questions_table).where(questions_table.c.id.in_(qids)))
+            dids = [r.id for r in conn.execute(select(dashboards_table.c.id).where(dashboards_table.c.collection_id.in_(ids)))]
+            if dids:
+                conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "dashboard", favorites_table.c.item_id.in_(dids)))
+                conn.execute(delete(dashboard_cards_table).where(dashboard_cards_table.c.dashboard_id.in_(dids)))
+                conn.execute(delete(dashboards_table).where(dashboards_table.c.id.in_(dids)))
             conn.execute(delete(permissions_table).where(permissions_table.c.collection_id.in_(ids)))
             # children first: parent_id is a foreign key
             for dead in sorted(ids, key=lambda i: -len(snap.chain(i))):
@@ -571,6 +580,7 @@ class ContentStore:
             raise ContentError("Archive the question first; only archived questions can be deleted", 409)
         with self.engine.begin() as conn:
             conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "question", favorites_table.c.item_id == qid))
+            conn.execute(update(dashboard_cards_table).where(dashboard_cards_table.c.question_id == qid).values(question_id=None))
             conn.execute(delete(questions_table).where(questions_table.c.id == qid))
 
     def question_by_import_key(self, key: str) -> int | None:
@@ -607,3 +617,4 @@ def forget_user(conn: Any, user_id: int, username: str) -> None:
     )
     conn.execute(update(collections_table).where(collections_table.c.owner_id == user_id).values(owner_id=None))
     conn.execute(update(questions_table).where(questions_table.c.owner_id == user_id).values(owner_id=None))
+    conn.execute(update(dashboards_table).where(dashboards_table.c.owner_id == user_id).values(owner_id=None))

@@ -463,6 +463,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             "max_export_rows": settings.max_export_rows,
             "query_default_rows": settings.query_default_rows,
             "query_max_rows": settings.query_max_rows,
+            "max_concurrent_queries": settings.max_concurrent_queries,  # dashboards queue their cards below it
         }
 
     @app.get("/api/connections/{key}/browse")

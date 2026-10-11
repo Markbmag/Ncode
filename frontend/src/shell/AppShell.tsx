@@ -22,21 +22,24 @@ export default function AppShell() {
   const ws = useWorkspace();
   const path = useLocation().pathname;
   const wide = WIDE_PAGES.some((re) => re.test(path));
+  const fullWidth = wide || /^\/dashboards\/\d+$/.test(path); // dashboards use the whole width but scroll
   return (
     <Flex minH="100vh" align="flex-start">
-      <Sidebar
-        connections={ws.connections}
-        activeKey={ws.activeKey}
-        onSelect={ws.selectConnection}
-        isAdmin={ws.isAdmin}
-        onAdd={ws.openAddConnection}
-        onEdit={ws.openEditConnection}
-        user={ws.user}
-        onLogout={ws.onLogout}
-      />
+      <Box display="contents" data-print-hide>
+        <Sidebar
+          connections={ws.connections}
+          activeKey={ws.activeKey}
+          onSelect={ws.selectConnection}
+          isAdmin={ws.isAdmin}
+          onAdd={ws.openAddConnection}
+          onEdit={ws.openEditConnection}
+          user={ws.user}
+          onLogout={ws.onLogout}
+        />
+      </Box>
 
       <Box flex={1} minW={0}>
-        <Box display={{ base: 'block', md: 'none' }} bg="sidebarBg" borderBottom="1px solid" borderColor="lineColor">
+        <Box display={{ base: 'block', md: 'none' }} bg="sidebarBg" borderBottom="1px solid" borderColor="lineColor" data-print-hide>
           <Flex align="center" justify="space-between" px={4} py={3}>
             <Logo />
             <HStack>
@@ -50,9 +53,9 @@ export default function AppShell() {
         </Box>
 
         <Box
-          maxW={wide ? 'none' : '1180px'}
+          maxW={fullWidth ? 'none' : '1180px'}
           mx="auto"
-          px={wide ? { base: 3, md: 4 } : { base: 4, md: 8 }}
+          px={wide ? { base: 3, md: 4 } : fullWidth ? { base: 3, md: 6 } : { base: 4, md: 8 }}
           py={wide ? 3 : { base: 5, md: 8 }}
           h={wide ? { base: 'auto', md: '100vh' } : undefined}
         >

@@ -8,12 +8,13 @@ What becomes what:
 * "single" reports -> builder questions (QuerySpec v1)
 * "sql" reports    -> SQL questions, if they pass Ncode's read-only guard
 * "multi" reports  -> "federated" questions that wait for the federation engine (M6)
-* dashboards       -> one collection per dashboard holding its reports (real dashboards
-                      arrive in M5; the import can then be re-run to create them)
+* dashboards       -> dashboards (M5), each in a collection of the same name that also
+                      holds its reports; cards are laid out two per row
 
 Everything lands in a collection "DataDesk import" owned by --owner. The importer reads
 the DataDesk file read-only, never touches it, and can be run again: reports imported
-before are recognised (by their DataDesk id) and skipped.
+before are recognised (by their DataDesk id) and skipped. A dashboard that was imported as
+a collection only (before M5) is created by re-running the import.
 
 DataDesk's tables are read by looking at the columns that exist, so small differences
 between DataDesk versions do not matter; whatever cannot be converted is listed in the
@@ -35,6 +36,7 @@ from sqlalchemy import select
 from ..appdb import User
 from ..query.spec import QuerySpec
 from ..query.sqlguard import GuardError, check_sql
+from .dashboards import Card, DashboardStore, Definition, Layout
 from .store import ContentStore
 from .tables import collections_table
 
@@ -87,6 +89,7 @@ class Item:
 class ImportReport:
     items: list[Item] = field(default_factory=list)
     dashboards: list[tuple[str, int]] = field(default_factory=list)
+    dashboard_outcomes: list[str] = field(default_factory=list)  # "new" | "exists", per dashboard
     warnings: list[str] = field(default_factory=list)
     dry_run: bool = True
 
@@ -101,7 +104,8 @@ class ImportReport:
             f"Reports: {len(self.items)} · builder questions: {self.count('builder')} · SQL questions: {self.count('sql')}"
             f" · multi-source (waiting for M6): {self.count('federated')} · already imported: {self.count('exists')}"
             f" · could not be converted: {self.count('skipped')}",
-            f"Dashboards: {len(self.dashboards)} (each becomes a collection until dashboards arrive in M5)",
+            f"Dashboards: {len(self.dashboards)} · new: {self.dashboard_outcomes.count('new')}"
+            f" · already imported: {self.dashboard_outcomes.count('exists')}",
             "",
         ]
         for w in self.warnings:
@@ -448,12 +452,17 @@ def run_import(
 
     # where each report goes: its first dashboard, else the loose collection
     home: dict[Any, str] = {}
+    dashboard_store = DashboardStore(store)
+    named: list[tuple[dict[str, Any], str]] = []
     for d in dashboards:
         name = str(_pick(d, "name", "title", default=f"Dashboard {d.get('id')}"))[:120]
         missing = [i for i in d["report_ids"] if i not in by_id]
         if missing:
             report.warnings.append(f"dashboard {name!r} refers to reports that do not exist: {missing}")
         report.dashboards.append((name, len(d["report_ids"])))
+        exists = dashboard_store.by_import_key(f"datadesk:dashboard:{d.get('id')}") is not None
+        report.dashboard_outcomes.append("exists" if exists else "new")
+        named.append((d, name))
         for rid in d["report_ids"]:
             home.setdefault(rid, name)
 
@@ -523,6 +532,21 @@ def run_import(
         store.create_question(
             owner, collection_id=folders[item.collection], import_key=f"datadesk:report:{item.source_id}", **values
         )
+    for (d, name), outcome in zip(named, report.dashboard_outcomes):
+        if outcome == "exists":
+            continue
+        if name not in folders:
+            folders[name] = _collection(store, owner, name, root)
+        cards: list[Card] = []
+        for rid in dict.fromkeys(d["report_ids"]):  # in order, without repeats
+            qid = store.question_by_import_key(f"datadesk:report:{rid}")
+            if qid is None:
+                continue
+            i = len(cards)
+            cards.append(Card(key=f"r{i + 1}", kind="question", question_id=qid,
+                              layout=Layout(x=(i % 2) * 6, y=(i // 2) * 8, w=6, h=8)))
+        dashboard_store.create(owner, name=name, collection_id=folders[name], definition=Definition(cards=cards),
+                               description="Imported from DataDesk", import_key=f"datadesk:dashboard:{d.get('id')}")
     return report
 
 

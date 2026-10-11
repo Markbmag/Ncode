@@ -171,3 +171,20 @@ def test_saved_question_parameters_bind_on_the_server(ncode_engine, live):
     compiled = compile_spec(bound, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
     with engine.connect() as conn:
         assert norm_rows(conn.execute(compiled.limited(1)).all()) == [(2,)]
+
+
+def test_dashboard_date_range_on_a_timestamp_column(live):
+    """M5: a dashboard date range applied to a datetime column counts the whole last day, on every server."""
+    from app.content.dashboards import Card, DashboardFilter, add_conditions, apply_filters, filter_values
+
+    engine, tables, rels = live
+    period = DashboardFilter(id="period", label="Period", type="date_range")
+    card = Card.model_validate({"key": "c", "kind": "question", "question_id": 1, "layout": {"x": 0, "y": 0, "w": 6, "h": 4},
+                                "mappings": {"period": {"field": "q_orders.created_at"}}})
+    values = filter_values([period], {"period": ["2026-01-01", "2026-01-11"]})
+    _params, conditions = apply_filters(card, [period], values, "builder")
+    spec = add_conditions(QuerySpec.model_validate({"connection": "live", "source": {"table": "q_orders"},
+                                                    "aggregations": [{"fn": "count", "alias": "n"}]}), conditions)
+    compiled = compile_spec(spec, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
+    with engine.connect() as conn:
+        assert norm_rows(conn.execute(compiled.limited(1)).all()) == [(2,)]  # 2026-01-05 and 2026-01-11 23:59
