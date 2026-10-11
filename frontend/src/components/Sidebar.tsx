@@ -6,6 +6,7 @@ import { NavLink } from 'react-router-dom';
 import type { Connection, User } from '../api';
 import { LockIcon, LogOutIcon, MailIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
 import { AccountDialog } from '../account/AccountDialog';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 
@@ -227,6 +228,7 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
         <Tooltip label={email ? `Your account (${email})` : 'Your account: add your email address for subscriptions'} hasArrow>
           <IconButton aria-label="Your account" size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
         </Tooltip>
+        <LanguageSwitch />
         <ColorModeButton />
         <Tooltip label="Sign out" hasArrow>
           <IconButton aria-label="Sign out" size="sm" icon={<LogOutIcon boxSize={4} />} onClick={onLogout} />

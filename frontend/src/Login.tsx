@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LanguageSwitch } from './i18n/LanguageSwitch';
 import type { FormEvent } from 'react';
 import { Alert, AlertIcon, Box, Button, Flex, FormControl, FormLabel, Input, Text, VStack } from '@chakra-ui/react';
 import axios from 'axios';
@@ -49,7 +50,8 @@ function Login({ onLoggedIn, notice }: LoginProps) {
       position="relative"
       bgGradient="radial(circle at 20% 10%, rgba(99,102,241,0.22), transparent 45%), radial(circle at 85% 90%, rgba(56,189,248,0.12), transparent 40%)"
     >
-      <Box position="absolute" top={4} right={4}>
+      <Box position="absolute" top={4} right={4} display="flex" gap={1}>
+        <LanguageSwitch />
         <ColorModeButton />
       </Box>
       <Box
