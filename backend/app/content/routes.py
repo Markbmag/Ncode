@@ -36,7 +36,7 @@ from ..appdb import AppDB, User
 from ..config import Settings
 from ..federation.routes import register_federation_routes
 from ..query.routes import MAX_WAIT_MS, QueryService
-from ..query.spec import QuerySpec
+from ..query.spec import QuerySpec, Transform
 from .dashboard_routes import dashboard_summary, register_dashboard_routes
 from .dashboards import DashboardStore, add_conditions
 from .params import (
@@ -91,6 +91,7 @@ class QuestionPatch(BaseModel):
     viz: dict[str, Any] | None = None
     parameters: list[ParameterDef] | None = Field(default=None, max_length=50)
     archived: bool | None = None
+    model: bool | None = None  # usable as a source in Combine / New question (M7)
 
 
 class DuplicateIn(BaseModel):
@@ -107,6 +108,7 @@ class RunIn(BaseModel):
 class SqlSpec(BaseModel):
     sql: str = Field(min_length=1, max_length=100_000)
     limit: int | None = Field(default=None, ge=1)
+    transforms: list[Transform] = Field(default_factory=list, max_length=20)
 
 
 def question_json(q: Question) -> dict[str, Any]:
@@ -127,6 +129,7 @@ def question_json(q: Question) -> dict[str, Any]:
         "favorite": q.favorite,
         "access": q.access,
         "imported": q.import_key is not None,
+        "model": q.model,
         "created_at": q.created_at,
         "updated_at": q.updated_at,
         "updated_by": q.updated_by,
@@ -197,7 +200,10 @@ def register_content_routes(
             raise HTTPException(status_code=400, detail="A SQL question needs a connection")
         require_connection(connection, user)
         _engine, checked = queries.guard(connection, parsed_sql.sql, user)
-        return connection, parsed_sql.model_dump(exclude_none=True), check_sql_params(checked.params, defs)
+        clean_sql = parsed_sql.model_dump(mode="json", exclude_none=True)
+        if not clean_sql.get("transforms"):
+            clean_sql.pop("transforms", None)
+        return connection, clean_sql, check_sql_params(checked.params, defs)
 
     def check_viz(viz: dict[str, Any] | None) -> None:
         if viz is not None and len(json.dumps(viz)) > MAX_VIZ_BYTES:
@@ -281,13 +287,16 @@ def register_content_routes(
         q: str | None = Query(None, max_length=200),
         favorites: bool = False,
         collection: int | None = None,
+        models: bool = False,
         limit: int = Query(200, ge=1, le=1000),
         user: User = Depends(current_user),
     ):
         try:
-            found = store.list_questions(user, collection_id=collection, text=q, favorites=favorites, limit=limit)
+            found = store.list_questions(user, collection_id=collection, text=q, favorites=favorites, limit=1000 if models else limit)
         except ContentError as exc:
             raise fail(exc) from exc
+        if models:
+            found = [x for x in found if x.model][:limit]
         return {"questions": [summary_json(x) for x in found]}
 
     @router.post("/api/questions")
@@ -409,7 +418,9 @@ def register_content_routes(
                 engine, checked = queries.guard(q.connection, sql_spec.sql, user)
                 defs = check_sql_params(checked.params, defs)
                 values = sql_bind_values(resolve(defs, params), defs, engine.dialect.name)
-                return queries.start_sql(user, q.connection, sql_spec.sql, values, sql_spec.limit, wait_ms, refresh, extra)
+                return queries.start_sql(
+                    user, q.connection, sql_spec.sql, values, sql_spec.limit, wait_ms, refresh, extra, transforms=sql_spec.transforms
+                )
         except ContentError as exc:
             raise fail(exc) from exc
         except ValidationError as exc:

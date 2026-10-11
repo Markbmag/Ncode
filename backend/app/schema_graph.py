@@ -171,10 +171,20 @@ def describe_schema(
     columns: dict[str, list[dict[str, Any]]],
     primary_keys: dict[str, list[str]],
     foreign_keys: dict[str, list[dict[str, Any]]],
+    fields: dict[str, dict[str, dict[str, Any]]] | None = None,
+    manual: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """The JSON body of GET /api/connections/{key}/schema."""
+    """The JSON body of GET /api/connections/{key}/schema.
+
+    `fields` (column metadata) and `manual` (relationships added by an admin) come from
+    the semantic layer (M7); a column read as a date is typed "datetime".
+    """
     names = set(columns)
-    rels = relationships(foreign_keys, names)
+    fields = fields or {}
+    manual = manual or {}
+    merged = {t: list(foreign_keys.get(t, [])) + list(manual.get(t, [])) for t in set(foreign_keys) | set(manual)}
+    rels = relationships(merged, names)
+    manual_rels = set(relationships(manual, names))
     fk_of: dict[tuple[str, str], dict[str, str]] = {}
     for rel in rels:
         for a, b in zip(rel.from_columns, rel.to_columns):
@@ -187,20 +197,30 @@ def describe_schema(
             {
                 "name": name,
                 "primary_key": pk,
-                "columns": [
-                    {
-                        "name": col["name"],
-                        "type": normalize_type(col["type"]),
-                        "db_type": _db_type(col["type"]),
-                        "nullable": bool(col.get("nullable", True)),
-                        "primary_key": col["name"] in pk,
-                        "foreign_key": fk_of.get((name, col["name"])),
-                    }
-                    for col in columns[name]
-                ],
+                "columns": [_column_json(name, col, pk, fk_of, fields.get(name, {}).get(col["name"])) for col in columns[name]],
             }
         )
-    return {"version": 2, "tables": tables, "relationships": [r.to_dict() for r in rels]}
+    return {
+        "version": 2,
+        "tables": tables,
+        "relationships": [{**r.to_dict(), "manual": r in manual_rels} for r in rels],
+    }
+
+
+def _column_json(table: str, col: dict[str, Any], pk: list[str], fk_of: dict, meta: dict[str, Any] | None) -> dict[str, Any]:
+    out = {
+        "name": col["name"],
+        "type": normalize_type(col["type"]),
+        "db_type": _db_type(col["type"]),
+        "nullable": bool(col.get("nullable", True)),
+        "primary_key": col["name"] in pk,
+        "foreign_key": fk_of.get((table, col["name"])),
+    }
+    if meta:
+        out.update({k: meta.get(k) for k in ("display_name", "description", "semantic_type", "format", "hidden", "parse_as_date")})
+        if meta.get("parse_as_date"):
+            out["type"] = "datetime"
+    return out
 
 
 def _db_type(col_type: Any) -> str:

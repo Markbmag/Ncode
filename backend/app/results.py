@@ -28,6 +28,12 @@ class ResultColumn(BaseModel):
     name: str
     type: str          # see schema_graph.TYPES
     role: ColumnRole
+    # from the data model (M7), when the column is a table column or a sum/min/max/avg of one
+    display_name: str | None = None
+    description: str | None = None
+    semantic_type: str | None = None
+    format: dict[str, Any] | None = None
+    generated: bool = False  # added by a transform (running total ...)
 
 
 class ResultStats(BaseModel):
@@ -43,6 +49,7 @@ class ResultEnvelope(BaseModel):
     stats: ResultStats
     sql: str | None = None
     federation: dict[str, Any] | None = None  # multi-source questions: sources read, join statistics (M6)
+    analysis: dict[str, Any] | None = None    # profiles and X-rays (M7)
 
 
 def column_role(name: str, type_: str) -> ColumnRole:

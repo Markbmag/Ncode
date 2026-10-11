@@ -134,6 +134,7 @@ class Settings:
     uploads_enabled: bool = True         # users may upload CSV / Excel / Parquet files
     dataset_max_mb: int = 100            # largest file that can be uploaded
     dataset_max_rows: int = 1_000_000    # rows kept per uploaded file
+    profile_sample_rows: int = 20_000    # rows read to profile / X-ray a table (M7)
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
 
@@ -191,6 +192,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         uploads_enabled=_bool(env, "NCODE_UPLOADS_ENABLED", defaults.uploads_enabled),
         dataset_max_mb=max(1, _int(env, "NCODE_DATASET_MAX_MB", defaults.dataset_max_mb)),
         dataset_max_rows=max(1, _int(env, "NCODE_DATASET_MAX_ROWS", defaults.dataset_max_rows)),
+        profile_sample_rows=max(100, _int(env, "NCODE_PROFILE_SAMPLE_ROWS", defaults.profile_sample_rows)),
     )
 
 

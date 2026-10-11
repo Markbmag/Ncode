@@ -253,3 +253,32 @@ def test_federated_join_across_servers():
     finally:
         for e in engines:
             e.dispose()
+
+
+def test_text_dates_and_conditional_sums_on_the_server(live):
+    """M7: "parse as date" on a text column (ISO, dotted, unix) and aggregations with a condition, per server."""
+    from sqlalchemy import Column, Integer, MetaData, String, Table
+
+    engine, tables, rels = live
+    md = MetaData()
+    events = Table("q_text_dates", md, Column("id", Integer, primary_key=True, autoincrement=False), Column("happened", String(40)))
+    md.drop_all(engine)
+    md.create_all(engine)
+    values = ["2026-01-05", "07.01.2026 08:30", "1769904000", "1770076800000", "garbage", None, "2026-02-14T12:00:00"]
+    with engine.begin() as conn:
+        conn.execute(events.insert(), [{"id": i + 1, "happened": v} for i, v in enumerate(values)])
+    try:
+        schema = {**tables, "q_text_dates": [{"name": c.name, "type": c.type} for c in events.columns]}
+        fields = {"q_text_dates": {"happened": {"parse_as_date": True}}}
+        spec = QuerySpec.model_validate({
+            "connection": "live", "source": {"table": "q_text_dates"},
+            "breakouts": [{"ref": "happened", "bucket": "month", "alias": "month"}],
+            "aggregations": [{"fn": "count", "alias": "n"},
+                             {"fn": "count", "alias": "late", "where": {"rules": [{"ref": "happened", "op": ">=", "value": "2026-02-01"}]}}],
+        })
+        compiled = compile_spec(spec, dialect=engine.dialect, tables=schema, relationships=rels, now=NOW, fields=fields)
+        with engine.connect() as conn:
+            rows = {str(r[0])[:10] if r[0] is not None else None: (r[1], r[2]) for r in conn.execute(compiled.limited(1)).all()}
+        assert rows == {None: (2, 0), "2026-01-01": (2, 0), "2026-02-01": (3, 3)}
+    finally:
+        md.drop_all(engine)

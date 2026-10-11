@@ -25,7 +25,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..query.spec import Aggregation, Breakout, CustomColumn, Field_, FilterGroup, OrderBy, QuerySpec
+from ..query.spec import Aggregation, Breakout, CustomColumn, Field_, FilterGroup, OrderBy, QuerySpec, Transform
 
 ALIAS_RE = r"^[a-z_][a-z0-9_]{0,31}$"
 RESULT_TABLE = "result"
@@ -117,6 +117,7 @@ class FederatedSpec(_Model):
     # The combined columns as of the last run, saved by the editor: dashboards offer them
     # for filter mappings without running the question. Not used to run it.
     result_columns: list[ColumnHint] = Field(default_factory=list, max_length=500)
+    transforms: list[Transform] = Field(default_factory=list, max_length=20)  # on the final rows (M7)
 
     @model_validator(mode="after")
     def _shape(self) -> "FederatedSpec":
