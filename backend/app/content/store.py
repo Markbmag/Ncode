@@ -97,6 +97,7 @@ class Question:
     updated_at: float
     updated_by: str | None
     favorite: bool = False
+    model: bool = False
     access: Level | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -188,6 +189,7 @@ def _question(row: Any) -> Question:
         connection=row.connection, kind=row.kind, spec=json.loads(row.spec),
         viz=json.loads(row.viz) if row.viz else None, parameters=json.loads(row.parameters or "[]"),
         owner_id=row.owner_id, owner=row.owner, archived=bool(row.archived), import_key=row.import_key,
+        model=bool(getattr(row, "model", False)),
         created_at=row.created_at, updated_at=row.updated_at, updated_by=row.updated_by,
     )
 
@@ -574,6 +576,8 @@ class ContentStore:
             values["kind"] = changes["kind"]
         if "archived" in changes:
             values["archived"] = bool(changes["archived"])
+        if changes.get("model") is not None:
+            values["model"] = bool(changes["model"])
         if values:
             values.update(updated_at=time.time(), updated_by=user.username)
             with self.engine.begin() as conn:

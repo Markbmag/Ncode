@@ -52,6 +52,9 @@ from .db import ConnectionRegistry, describe_error, probe
 from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
 from .query.routes import register_query_routes
+from .analysis.routes import register_analysis_routes
+from .semantic.routes import register_semantic_routes, schema_extras
+from .semantic.store import SemanticStore
 from .query.runner import QueryRunner
 from .schema_graph import describe_schema
 from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, MatchMode, SearchRequest
@@ -84,6 +87,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         cache_ttl_sec=settings.query_cache_ttl_sec,
     )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
+    semantic = SemanticStore(app_db.engine)
     bearer = HTTPBearer(auto_error=False)
 
     @asynccontextmanager
@@ -424,7 +428,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         except Exception as exc:
             detail = describe_error(exc, registry.get_config(key).engine)
             raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
-        return {"connection": key, **describe_schema(columns, primary, foreign)}
+        return {"connection": key, **describe_schema(columns, primary, foreign, **schema_extras(semantic, key))}
 
     # ------------------------------------------------------------------
     # explorer: browse one table, see its structure, export it
@@ -679,9 +683,18 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         runner=runner,
         current_user=current_user,
         require_connection=require_connection,
+        semantic=semantic,
     )
-    register_content_routes(
+    register_semantic_routes(
+        app, semantic=semantic, registry=registry, queries=queries, current_user=current_user,
+        require_admin=require_admin, require_connection=require_connection,
+    )
+    content = register_content_routes(
         app, app_db=app_db, settings=settings, queries=queries, current_user=current_user,
         require_connection=require_connection,
+    )
+    register_analysis_routes(
+        app, registry=registry, settings=settings, runner=runner, queries=queries, content=content, semantic=semantic,
+        current_user=current_user, require_connection=require_connection,
     )
     return app

@@ -14,9 +14,10 @@ import { FilterEditor } from '../components/query/FilterEditor';
 import { SortEditor } from '../components/query/SortEditor';
 import { Step } from '../components/query/Step';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
+import { TransformsEditor } from '../components/query/TransformsEditor';
 import { CodeEditor } from '../components/sql/CodeEditor';
 import { ChartIcon, CodeIcon, MergeIcon, PencilIcon, PlusIcon, RefreshIcon, TableIcon, UploadIcon, XIcon } from '../icons';
-import { libraryKeys } from '../library/api';
+import { libraryKeys, useQuestion } from '../library/api';
 import type { SavedQuestion } from '../library/api';
 import { ParametersBar } from '../library/ParametersBar';
 import { shapeOf, specParams, valuesFromSearch, valuesToSearch } from '../library/params';
@@ -46,12 +47,16 @@ const DRAFT_KEY = 'ncode_combine_draft';
 export default function CombinePage() {
   const [search] = useSearchParams();
   const dataset = Number(search.get('dataset')) || null;
+  const questionId = Number(search.get('question')) || null;
   const file = useDataset(dataset);
-  if (dataset && file.isPending) return <Spinner />;
+  const question = useQuestion(questionId ?? 0, !!questionId);
+  if ((dataset && file.isPending) || (questionId && question.isPending)) return <Spinner />;
   const start: FederatedSpec | null = file.data
     ? { ...emptySpec(), sources: [{ alias: aliasFor(file.data.name, []), label: file.data.name, type: 'dataset', dataset_id: file.data.id }] }
-    : null;
-  return <CombineWorkspace key={dataset ?? 'draft'} start={start} />;
+    : question.data
+      ? { ...emptySpec(), sources: [{ alias: aliasFor(question.data.name, []), label: question.data.name, type: 'question', question_id: question.data.id }] }
+      : null;
+  return <CombineWorkspace key={dataset ?? questionId ?? 'draft'} start={start} />;
 }
 
 function loadDraft(): FederatedSpec {
@@ -372,6 +377,9 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
             )}
             <Step title="Sort" color="orange.300">
               <SortEditor order={postSpec.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => updatePost({ order })} />
+            </Step>
+            <Step title="Calculate" color="teal.200" hint="On the rows returned: vs. last year, running totals, shares, ranks, outliers.">
+              <TransformsEditor transforms={draft.transforms ?? []} columns={state.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
             </Step>
             <Step title="Row limit" color="gray.400">
               <HStack>

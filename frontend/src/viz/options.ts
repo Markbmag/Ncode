@@ -11,6 +11,7 @@ import type { SeriesData, Table } from './data.ts';
 import { dateStyleFromName, formatAxisNumber, formatCell, formatDate, formatNumber } from './format.ts';
 import { MAX_SCATTER_SERIES, OTHER, assignColors } from './palette.ts';
 import type { ChartTheme } from './palette.ts';
+import { nextDates, trendValues } from './stats.ts';
 import type { ColumnFormat, VizSpec } from './types.ts';
 
 type AnyRecord = Record<string, unknown>;
@@ -154,10 +155,36 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
     };
   }
 
-  const labels = data.categories.map((c) => categoryLabel(t, viz, c));
-  const longest = Math.max(0, ...labels.map((l) => l.length));
   const xType = t.columns[colIndex(t, viz.x)]?.type;
   const timeAxis = xType === 'date' || xType === 'datetime';
+
+  // Trend line (and forecast along it) for one measure, M7
+  let categories = data.categories;
+  if ((viz.trend || (viz.forecast ?? 0) > 0) && !viz.breakout && !percent && !horizontal && series.length > 0) {
+    const future = timeAxis && viz.forecast ? nextDates(data.categories, Math.min(viz.forecast, 36)) ?? [] : [];
+    const trend = trendValues(values[0], future.length);
+    if (trend) {
+      if (future.length) {
+        categories = [...categories, ...future];
+        for (const s of series as AnyRecord[]) s.data = [...(s.data as unknown[]), ...future.map(() => null)];
+      }
+      (series as AnyRecord[]).push({
+        name: future.length ? 'Trend and forecast' : 'Trend',
+        type: 'line',
+        data: trend,
+        symbol: 'none',
+        silent: true,
+        z: 1,
+        lineStyle: { width: 1.5, type: 'dashed', color: theme.textSecondary },
+        itemStyle: { color: theme.textSecondary },
+        ...(future.length
+          ? { markArea: { silent: true, itemStyle: { color: theme.axis, opacity: 0.15 }, data: [[{ xAxis: data.categories.length - 0.5 }, { xAxis: categories.length - 0.5 }]] } }
+          : {}),
+      });
+    }
+  }
+  const labels = categories.map((c) => categoryLabel(t, viz, c));
+  const longest = Math.max(0, ...labels.map((l) => l.length));
   const categoryAxis = {
     type: 'category',
     data: labels,
@@ -443,8 +470,17 @@ export function scaleWarning(t: Table, viz: VizSpec): string | null {
   return 'These series differ a lot in size and share one axis, so the small one looks flat. Two separate charts show both better.';
 }
 
+/** Formats from the data model (sent with the result columns) under the chart's own formats. */
+export function withColumnFormats(viz: VizSpec, t: Table): VizSpec {
+  const defaults: Record<string, ColumnFormat> = {};
+  for (const c of t.columns) if (c.format) defaults[c.name] = c.format as ColumnFormat;
+  if (Object.keys(defaults).length === 0) return viz;
+  return { ...viz, format: { ...defaults, ...(viz.format ?? {}) } };
+}
+
 /** null for the types rendered by React (table, kpi, pivot). */
-export function buildOption(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption | null {
+export function buildOption(t: Table, spec: VizSpec, theme: ChartTheme): EChartsOption | null {
+  const viz = withColumnFormats(spec, t);
   switch (viz.type) {
     case 'bar':
     case 'line':

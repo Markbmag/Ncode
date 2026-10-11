@@ -172,7 +172,15 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
               <HStack><Switch size="sm" isChecked={!!spec.horizontal} onChange={(e) => set({ horizontal: e.target.checked })} id="viz-h" /><FormLabel htmlFor="viz-h" m={0} fontSize="sm">Horizontal</FormLabel></HStack>
             )}
             <HStack><Switch size="sm" isChecked={!!spec.labels} onChange={(e) => set({ labels: e.target.checked })} id="viz-l" /><FormLabel htmlFor="viz-l" m={0} fontSize="sm">Value labels</FormLabel></HStack>
+            {!spec.breakout && (
+              <HStack><Switch size="sm" isChecked={!!spec.trend} onChange={(e) => set({ trend: e.target.checked })} id="viz-trend" data-testid="viz-trend" /><FormLabel htmlFor="viz-trend" m={0} fontSize="sm">Trend line</FormLabel></HStack>
+            )}
           </HStack>
+          {!spec.breakout && (spec.trend || spec.forecast) && (
+            <Field label="Forecast" hint="Continue the trend line this many periods (dates on the x axis). A straight line, not a prediction model.">
+              <Input size="sm" type="number" min={0} max={36} value={spec.forecast ?? ''} placeholder="none" onChange={(e) => set({ forecast: e.target.value ? Math.min(36, Math.max(0, Number(e.target.value))) : undefined })} data-testid="viz-forecast" />
+            </Field>
+          )}
           <SimpleGrid columns={2} spacing={2}>
             <Field label="Goal line">
               <Input size="sm" type="number" value={spec.goal?.value ?? ''} placeholder="none" onChange={(e) => set({ goal: e.target.value === '' ? null : { value: Number(e.target.value), label: spec.goal?.label } })} />

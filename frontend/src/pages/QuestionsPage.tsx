@@ -15,9 +15,11 @@ import { SortEditor } from '../components/query/SortEditor';
 import { SqlPreviewModal } from '../components/query/SqlPreviewModal';
 import { Step } from '../components/query/Step';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
+import { TransformsEditor } from '../components/query/TransformsEditor';
+import { useMetrics } from '../semantic/api';
 import { CodeIcon, RefreshIcon } from '../icons';
 import { loadJson, saveJson } from '../lib/storage';
-import { columnOptions, humanize, isSummarised, newSpec, prepareSpec, summaryOutputs } from '../query/draft';
+import { columnOptions, humanize, isSummarised, newSpec, prepareSpec, queryTables, summaryOutputs } from '../query/draft';
 import type { SchemaInfo } from '../query/draft';
 import type { FilterGroup, QuerySpec } from '../query/types';
 import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
@@ -26,6 +28,7 @@ import { useSchema } from '../query/useSchema';
 import { DEFAULT_VIZ } from '../viz/state';
 import type { VizState } from '../viz/state';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { useQuestions } from '../library/api';
 import type { SavedQuestion } from '../library/api';
 import { ParametersBar } from '../library/ParametersBar';
 import { bindSpec, shapeOf, specParams, syncBuilderParams, valuesFromSearch, valuesToSearch } from '../library/params';
@@ -79,6 +82,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
   };
   const sqlModal = useDisclosure();
   const { state, run, cancel } = useQueryRun();
+  const metricsQuery = useMetrics(connection);
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
   useEffect(() => saveJson('ncode_auto_preview', autoPreview), [autoPreview]);
@@ -195,6 +199,8 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const outputs = validDraft && summarised ? summaryOutputs(validDraft, options) : [];
   const outputOptions = outputs.map((o) => ({ ref: o.name, label: o.name, type: o.type }));
   const baseOptions = validDraft ? columnOptions({ ...validDraft, expressions: [] }, schema) : [];
+  const inQuery = validDraft ? new Set(queryTables(validDraft, schema).map((t) => t.table)) : new Set<string>();
+  const metrics = (metricsQuery.data ?? []).filter((m) => inQuery.has(m.table));
 
   const builder = (
     <Box h="100%" overflowY="auto" pr={{ base: 0, lg: 3 }} pb={6} data-testid="builder">
@@ -207,6 +213,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
               </option>
             ))}
           </Select>
+          {!saved && <ModelPicker onPick={(id) => navigate(`/combine?question=${id}`)} />}
         </Step>
 
         {validDraft && (
@@ -233,6 +240,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
                 aggregations={validDraft.aggregations ?? []}
                 breakouts={validDraft.breakouts ?? []}
                 options={options}
+                metrics={metrics}
                 onChange={(aggregations, breakouts) => update({ aggregations, breakouts, ...(isSummarised({ ...validDraft, aggregations, breakouts }) ? {} : { having: null }) })}
               />
             </Step>
@@ -279,6 +287,10 @@ export function Builder({ connection, saved = null }: { connection: string; save
 
             <Step title="Sort" color="orange.300">
               <SortEditor order={validDraft.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => update({ order })} />
+            </Step>
+
+            <Step title="Calculate" color="teal.200" testId="step-calculate" hint="On the rows returned: vs. last year, running totals, shares, ranks, outliers.">
+              <TransformsEditor transforms={validDraft.transforms ?? []} columns={state.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
             </Step>
 
             <Step title="Row limit" color="gray.400">
@@ -405,5 +417,21 @@ export function Builder({ connection, saved = null }: { connection: string; save
         />
       )}
     </Flex>
+  );
+}
+
+/** "or start from a model": a saved question marked as a model, opened as a source in Combine. */
+function ModelPicker({ onPick }: { onPick: (id: number) => void }) {
+  const models = useQuestions({ models: true, limit: 100 });
+  if (!models.data?.length) return null;
+  return (
+    <Select size="sm" mt={2} value="" onChange={(e) => e.target.value && onPick(Number(e.target.value))} aria-label="Start from a model" data-testid="model-picker">
+      <option value="">… or start from a model</option>
+      {models.data.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.name}
+        </option>
+      ))}
+    </Select>
   );
 }

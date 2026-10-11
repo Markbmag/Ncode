@@ -46,6 +46,7 @@ class CompileError(ValueError):
 class OutputColumn:
     name: str
     type: str  # normalised, see schema_graph.TYPES
+    source: tuple[str, str] | None = None  # (table, column) whose metadata (format, display name) applies
 
 
 @dataclass
@@ -53,6 +54,7 @@ class Compiled:
     statement: Select          # without LIMIT; the runner adds limit + 1 to detect truncation
     columns: list[OutputColumn]
     limit: int
+    meta: list[Any] = field(default_factory=list)  # data-model metadata per column (set by the API)
 
     def limited(self, extra: int = 0) -> Select:
         return self.statement.limit(self.limit + extra)
@@ -62,6 +64,7 @@ class Compiled:
 class _Typed:
     expr: Any
     type: str
+    source: tuple[str, str] | None = None  # a plain table column (not an expression)
 
 
 @dataclass
@@ -94,6 +97,7 @@ class SpecCompiler:
         default_limit: int = 2000,
         max_limit: int = 10_000,
         now: dt.datetime | None = None,
+        fields: dict[str, dict[str, dict[str, Any]]] | None = None,
     ):
         self.spec = spec
         self.dialect = dialect if isinstance(dialect, str) else dialect.name
@@ -103,6 +107,8 @@ class SpecCompiler:
         self.default_limit = default_limit
         self.max_limit = max_limit
         self.now = now or _now()
+        # semantic layer (M7): {table: {column: {"parse_as_date": bool, "hidden": bool}}}
+        self.fields = fields or {}
         self.tables: dict[str, _Table] = {}          # alias -> table in the query
         self.custom: dict[str, _Typed] = {}          # custom expression name -> compiled
         self.outputs: dict[str, _Typed] = {}         # output name -> underlying (unlabelled) expression
@@ -133,7 +139,14 @@ class SpecCompiler:
         real = name if name in tbl.columns else next((c for c in tbl.columns if c.lower() == name.lower()), None)
         if real is None:
             return None
-        return _Typed(tbl.clause.c[real], normalize_type(tbl.columns[real]))
+        expr = tbl.clause.c[real]
+        if self.fields.get(tbl.name, {}).get(real, {}).get("parse_as_date"):
+            # text holding dates (several formats): a real date-time for filters and "by month"
+            try:
+                return _Typed(dialects.parse_text_date(expr, self.dialect), "datetime", (tbl.name, real))
+            except dialects.UnsupportedFeature as exc:
+                raise CompileError(str(exc)) from None
+        return _Typed(expr, normalize_type(tbl.columns[real]), (tbl.name, real))
 
     def _resolve_column(self, ref: str) -> _Typed | None:
         # "alias.column" - try the longest matching alias first ("a.b" table names exist).
@@ -372,7 +385,7 @@ class SpecCompiler:
             unique = _unique(name, names)
             names.append(unique)
             selected.append(typed.expr.label(unique))
-            columns.append(OutputColumn(unique, typed.type))
+            columns.append(OutputColumn(unique, typed.type, typed.source))
             self.outputs[unique] = typed
 
         group_by: list[Any] = []
@@ -392,10 +405,13 @@ class SpecCompiler:
                 add_output(f.alias or default_name, typed)
         else:  # every column (except binary blobs) of every table in the query
             for tbl in self.tables.values():
-                for col_name, col_type in tbl.columns.items():
-                    kind = normalize_type(col_type)
-                    if kind != "binary":
-                        add_output(col_name, _Typed(tbl.clause.c[col_name], kind))
+                hidden = {c for c, info in self.fields.get(tbl.name, {}).items() if info.get("hidden")}
+                for col_name in tbl.columns:
+                    if col_name in hidden:
+                        continue  # hidden in the data model: still usable by name, not shown by default
+                    typed = self._column(tbl, col_name)
+                    if typed is not None and typed.type != "binary":
+                        add_output(col_name, typed)
             for name, typed in self.custom.items():
                 add_output(name, typed)
 
@@ -498,7 +514,7 @@ class SpecCompiler:
                 expr, out_type = dialects.date_bucket(typed.expr, b.bucket, self.dialect)
             except dialects.UnsupportedFeature as exc:
                 raise CompileError(str(exc)) from None
-            return _Typed(expr, out_type), f"{base}_{b.bucket}"
+            return _Typed(expr, out_type), f"{base}_{b.bucket}"  # no source: a month is not the column's format
         if b.bin_width is not None:
             if typed.type not in ("number", "unknown"):
                 raise CompileError(f"Binning needs a number column; {b.ref} is {typed.type}")
@@ -508,9 +524,16 @@ class SpecCompiler:
         return typed, base
 
     def _aggregation(self, a: Aggregation) -> tuple[_Typed, str]:
+        if a.fn == "metric":
+            raise CompileError(f"Metric {a.metric} is not available")  # expanded by the API before compiling
+        condition = self._condition_tree(a.where) if a.where is not None and a.where.rules else None
         if a.ref is None and a.expr is None:
+            if condition is not None:  # count of the matching rows
+                return _Typed(func.count(case((condition, literal_column("1")))), "number"), "count"
             return _Typed(func.count(), "number"), "count"
         typed = self._resolve(a.ref) if a.ref is not None else self._expr(a.expr)
+        if condition is not None:
+            typed = _Typed(case((condition, typed.expr)), typed.type, typed.source)
         base = (a.ref or "expression").split(".")[-1]
         if a.fn in ("sum", "avg") and typed.type not in ("number", "unknown"):
             raise CompileError(f"{a.fn} needs a number column; {a.ref or 'the expression'} is {typed.type}")
@@ -521,11 +544,12 @@ class SpecCompiler:
             return _Typed(func.count(x), "number"), f"count_{base}"
         if a.fn == "count_distinct":
             return _Typed(func.count(distinct(x)), "number"), f"distinct_{base}"
+        # sum / avg / min / max keep the column's format (a sum of euros is euros)
         if a.fn == "sum":
-            return _Typed(func.sum(_numeric(x)), "number"), f"sum_{base}"
+            return _Typed(func.sum(_numeric(x)), "number", typed.source), f"sum_{base}"
         if a.fn == "avg":
-            return _Typed(dialects.avg(_numeric(x), self.dialect), "number"), f"avg_{base}"
-        return _Typed(getattr(func, a.fn)(x, type_=x.type), typed.type), f"{a.fn}_{base}"
+            return _Typed(dialects.avg(_numeric(x), self.dialect), "number", typed.source), f"avg_{base}"
+        return _Typed(getattr(func, a.fn)(x, type_=getattr(x, "type", None)), typed.type, typed.source), f"{a.fn}_{base}"
 
 
 # ---------------------------------------------------------------------- helpers

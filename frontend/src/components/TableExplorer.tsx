@@ -9,6 +9,8 @@ import type { BrowseResponse, BrowseRow, ColumnInfo, Limits, MatchMode, SearchHi
 import { saveBlob, safeFilename } from '../lib/csv';
 import type { ExplorerTarget } from '../lib/explorer';
 import { ChevronDownIcon, DownloadIcon, SearchIcon, TableIcon } from '../icons';
+import { Link as RouterLink } from 'react-router-dom';
+import { TableProfile } from '../analysis/TableProfile';
 import { Highlight } from './Highlight';
 import { RowDrawer } from './RowDrawer';
 
@@ -64,7 +66,7 @@ export function TableExplorer({
 }: TableExplorerProps) {
   const toast = useToast();
   const [table, setTable] = useState<string | null>(target.table);
-  const [tab, setTab] = useState<'data' | 'structure'>('data');
+  const [tab, setTab] = useState<'data' | 'structure' | 'profile'>('data');
   const [listFilter, setListFilter] = useState('');
   const [filterText, setFilterText] = useState(target.q);
   const [applied, setApplied] = useState<FilterState>({
@@ -322,7 +324,13 @@ export function TableExplorer({
                   <Button variant={tab === 'structure' ? 'brand' : 'subtle'} onClick={() => setTab('structure')}>
                     Structure
                   </Button>
+                  <Button variant={tab === 'profile' ? 'brand' : 'subtle'} onClick={() => setTab('profile')} data-testid="tab-profile">
+                    Profile
+                  </Button>
                 </ButtonGroup>
+                <Button as={RouterLink} to={`/xray?connection=${encodeURIComponent(connectionKey)}&table=${encodeURIComponent(table)}`} size="xs" variant="ghost" data-testid="xray-table">
+                  X-ray
+                </Button>
               </HStack>
               {tab === 'data' && (
                 <Menu placement="bottom-end">
@@ -565,6 +573,8 @@ export function TableExplorer({
                 )}
               </>
             )}
+
+            {tab === 'profile' && <TableProfile key={table} connection={connectionKey} table={table} />}
 
             {tab === 'structure' && (
               <Box bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="auto" maxH="640px">

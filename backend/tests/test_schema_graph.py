@@ -92,7 +92,7 @@ def test_describe_schema_marks_keys():
     assert cols["customer_id"]["foreign_key"] == {"table": "customers", "column": "id"}
     assert cols["total"]["type"] == "number" and cols["total"]["db_type"] == "NUMERIC(10, 2)"
     assert out["relationships"] == [
-        {"from_table": "orders", "from_columns": ["customer_id"], "to_table": "customers", "to_columns": ["id"]}
+        {"from_table": "orders", "from_columns": ["customer_id"], "to_table": "customers", "to_columns": ["id"], "manual": False}
     ]
 
 

@@ -28,6 +28,8 @@ import { ParametersBar } from '../library/ParametersBar';
 import { sqlValues, syncSqlParams, valuesFromSearch, valuesToSearch } from '../library/params';
 import type { ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
+import { TransformsEditor } from '../components/query/TransformsEditor';
+import type { Transform } from '../query/types';
 
 interface Incoming {
   connection?: string;
@@ -77,6 +79,8 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
   const [check, setCheck] = useState<{ ok: boolean; error: string | null } | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [viz, setViz] = useState<VizState>(() => saved?.viz ?? loadJson<VizState>(`${draftKey(connection)}_viz`, DEFAULT_VIZ));
+  const [transforms, setTransforms] = useState<Transform[]>(() => savedSpec?.transforms ?? []);
+  const [showCalc, setShowCalc] = useState(() => (savedSpec?.transforms?.length ?? 0) > 0);
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
 
@@ -110,10 +114,13 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
   const paramNames = useMemo(() => findParams(text), [text]);
   const paramDefs = useMemo(() => syncSqlParams(paramNames, defs), [paramNames, defs]);
   const baseline = useMemo(
-    () => (saved && savedSpec ? JSON.stringify({ sql: savedSpec.sql, limit: savedSpec.limit ?? null, viz: saved.viz ?? DEFAULT_VIZ, params: syncSqlParams(findParams(savedSpec.sql), saved.parameters) }) : null),
+    () =>
+      saved && savedSpec
+        ? JSON.stringify({ sql: savedSpec.sql, limit: savedSpec.limit ?? null, viz: saved.viz ?? DEFAULT_VIZ, params: syncSqlParams(findParams(savedSpec.sql), saved.parameters), transforms: savedSpec.transforms ?? [] })
+        : null,
     [saved, savedSpec],
   );
-  const dirty = !!saved && JSON.stringify({ sql: text, limit, viz, params: paramDefs }) !== baseline;
+  const dirty = !!saved && JSON.stringify({ sql: text, limit, viz, params: paramDefs, transforms }) !== baseline;
   const autocomplete = useMemo(() => {
     const out: Record<string, string[]> = {};
     for (const t of schemaQuery.data?.tables ?? []) out[t.name] = t.columns.map((c) => c.name);
@@ -128,9 +135,9 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
       const { value } = sqlValues(paramDefs.filter((d) => names.includes(d.name)), paramValues);
       addHistory(connection, sql);
       setHistoryVersion((v) => v + 1);
-      void run(async () => (await http.post<TaskSnapshot>('/api/query/sql', { connection, sql, params: value, limit, wait_ms: START_WAIT_MS })).data);
+      void run(async () => (await http.post<TaskSnapshot>('/api/query/sql', { connection, sql, params: value, limit, transforms, wait_ms: START_WAIT_MS })).data);
     },
-    [connection, paramDefs, paramValues, limit, run],
+    [connection, paramDefs, paramValues, limit, transforms, run],
   );
 
   // A saved question shows its result when opened.
@@ -173,6 +180,11 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
         <CodeEditor value={text} onChange={setText} onRun={onRun} engine={engine} schema={autocomplete} editorRef={editor} />
       </Box>
       <ParametersBar defs={paramDefs} values={paramValues} onValues={setParamValues} onDefs={!saved || saved.access === 'edit' ? setDefs : null} typeEditable />
+      {showCalc && (
+        <Box px={3} py={2} borderTop="1px solid" borderColor="lineColor" maxH="160px" overflowY="auto">
+          <TransformsEditor transforms={transforms} columns={state.result?.columns ?? []} onChange={setTransforms} />
+        </Box>
+      )}
       <Flex align="center" gap={2} px={3} py={2} borderTop="1px solid" borderColor="lineColor" wrap="wrap">
         <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={() => execute(text)} isDisabled={!text.trim()} data-testid="run-sql">
           Run
@@ -200,6 +212,9 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
         </Select>
         <Button size="xs" variant="subtle" leftIcon={<SparklesIcon boxSize={3} />} onClick={format} isDisabled={!text.trim()}>
           Format
+        </Button>
+        <Button size="xs" variant={showCalc ? 'brand' : 'subtle'} onClick={() => setShowCalc((v) => !v)} data-testid="toggle-calculations">
+          Calculations{transforms.length ? ` (${transforms.length})` : ''}
         </Button>
         <Menu isLazy>
           <MenuButton as={Button} size="xs" variant="subtle" rightIcon={<ChevronDownIcon boxSize={3} />} isDisabled={history.length === 0}>
@@ -252,13 +267,14 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
         saved={saved}
         dirty={dirty}
         defaultName="SQL query"
-        payload={() => (text.trim() ? { kind: 'sql', connection, spec: { sql: text, limit }, viz, parameters: paramDefs } : null)}
+        payload={() => (text.trim() ? { kind: 'sql', connection, spec: { sql: text, limit, ...(transforms.length ? { transforms } : {}) }, viz, parameters: paramDefs } : null)}
         onRevert={() => {
           if (!saved || !savedSpec) return;
           editor.current?.setText(savedSpec.sql);
           setLimit(savedSpec.limit ?? 2000);
           setViz(saved.viz ?? DEFAULT_VIZ);
           setDefs(saved.parameters);
+          setTransforms(savedSpec.transforms ?? []);
         }}
       />
       <Box flex={1} minH={0}>

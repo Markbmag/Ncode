@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
 import { queryClient } from '../lib/queryClient';
-import type { QuerySpec } from '../query/types';
+import type { QuerySpec, Transform } from '../query/types';
 import type { VizState } from '../viz/state';
 import type { DashboardSummary } from '../dashboards/types';
 import type { Dataset, FederatedSpec } from '../federation/types';
@@ -41,6 +41,7 @@ export interface QuestionSummary {
   favorite: boolean;
   access: Access | null;
   imported: boolean;
+  model?: boolean; // usable as a source (M7)
   created_at: number;
   updated_at: number;
   updated_by: string | null;
@@ -49,6 +50,7 @@ export interface QuestionSummary {
 export interface SqlQuestionSpec {
   sql: string;
   limit?: number | null;
+  transforms?: Transform[];
 }
 
 export interface SavedQuestion extends QuestionSummary {
@@ -114,7 +116,7 @@ export function useCollection(id: number | null) {
   });
 }
 
-export function useQuestions(params: { q?: string; favorites?: boolean; limit?: number }, enabled = true) {
+export function useQuestions(params: { q?: string; favorites?: boolean; limit?: number; models?: boolean }, enabled = true) {
   return useQuery({
     queryKey: libraryKeys.questions(params),
     enabled,
@@ -122,9 +124,10 @@ export function useQuestions(params: { q?: string; favorites?: boolean; limit?: 
   });
 }
 
-export function useQuestion(id: number) {
+export function useQuestion(id: number, enabled = true) {
   return useQuery({
     queryKey: libraryKeys.question(id),
+    enabled,
     queryFn: async () => (await http.get<SavedQuestion>(`/api/questions/${id}`)).data,
   });
 }
@@ -171,7 +174,10 @@ export const library = {
     queryClient.setQueryData(libraryKeys.question(q.id), q);
     return q;
   },
-  updateQuestion: async (id: number, body: Partial<QuestionPayload & { name: string; description: string | null; collection_id: number; archived: boolean }>) => {
+  updateQuestion: async (
+    id: number,
+    body: Partial<QuestionPayload & { name: string; description: string | null; collection_id: number; archived: boolean; model: boolean }>,
+  ) => {
     const q = await after(http.patch<SavedQuestion>(`/api/questions/${id}`, body));
     queryClient.setQueryData(libraryKeys.question(q.id), q);
     return q;

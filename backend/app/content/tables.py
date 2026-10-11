@@ -1,8 +1,8 @@
-"""Table definitions for the library. They mirror migrations 0002-0004 (app/migrations/versions)."""
+"""Table definitions for the library and the semantic layer. They mirror migrations 0002-0005 (app/migrations/versions)."""
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 
 from ..appdb import metadata  # one MetaData for the whole app DB (the migration test compares it)
 
@@ -38,6 +38,7 @@ questions_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+    Column("model", Boolean, nullable=False, default=False),  # usable as a source like a table (M7)
 )
 
 permissions_table = Table(
@@ -109,6 +110,55 @@ datasets_table = Table(
     Column("size_bytes", Integer, nullable=False),
     Column("source_name", String(255)),
     Column("source_format", String(16), nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+)
+
+# ---------------------------------------------------------------- semantic layer (M7)
+
+field_metadata_table = Table(
+    "field_metadata",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("connection", String(64), nullable=False),
+    Column("table_name", String(255), nullable=False),
+    Column("column_name", String(255), nullable=False),
+    Column("display_name", String(200)),
+    Column("description", Text),
+    Column("semantic_type", String(32)),
+    Column("format", Text),
+    Column("hidden", Boolean, nullable=False, default=False),
+    Column("parse_as_date", Boolean, nullable=False, default=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+    UniqueConstraint("connection", "table_name", "column_name", name="uq_field_metadata_column"),
+)
+
+relationships_table = Table(
+    "relationships",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("connection", String(64), nullable=False, index=True),
+    Column("from_table", String(255), nullable=False),
+    Column("from_columns", Text, nullable=False),
+    Column("to_table", String(255), nullable=False),
+    Column("to_columns", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("created_by", String(64)),
+)
+
+metrics_table = Table(
+    "metrics",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("description", Text),
+    Column("connection", String(64), nullable=False, index=True),
+    Column("table_name", String(255), nullable=False),
+    Column("definition", Text, nullable=False),
+    Column("format", Text),
+    Column("archived", Boolean, nullable=False, default=False),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),

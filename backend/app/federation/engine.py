@@ -224,6 +224,10 @@ class FederatedRun:
             names, rows[: compiled.limit], column_types=[c.type for c in compiled.columns],
             duration_ms=(time.perf_counter() - started) * 1000, truncated=truncated, sql="\n".join(script),
         )
+        if plan.spec.transforms:
+            from ..query.routes import finish_envelope
+
+            finish_envelope(envelope, [], plan.spec.transforms)
         envelope.federation = {
             "sources": [loaded[s.alias][0].as_dict() for s in plan.sources],
             "joins": joins,

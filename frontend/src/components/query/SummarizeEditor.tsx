@@ -1,4 +1,4 @@
-import { Box, Button, Flex, IconButton, Input, Select, SimpleGrid, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, IconButton, Input, Select, SimpleGrid, Text, VStack } from '@chakra-ui/react';
 import type { ColumnType } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
 import { AGGREGATES, BUCKETS, aggregationName } from '../../query/draft';
@@ -13,7 +13,16 @@ const TYPES_FOR: Record<Aggregation['fn'], ColumnType[] | undefined> = {
   avg: ['number'],
   min: ['number', 'date', 'datetime', 'string', 'time'],
   max: ['number', 'date', 'datetime', 'string', 'time'],
+  metric: undefined,
 };
+
+/** A saved metric of the data model that fits the question (its table is in it). */
+export interface MetricOption {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+}
 const BINS = [1, 5, 10, 50, 100, 1000];
 
 interface SummarizeEditorProps {
@@ -21,9 +30,10 @@ interface SummarizeEditorProps {
   breakouts: Breakout[];
   options: PickOption[];
   onChange: (aggregations: Aggregation[], breakouts: Breakout[]) => void;
+  metrics?: MetricOption[];
 }
 
-export function SummarizeEditor({ aggregations, breakouts, options, onChange }: SummarizeEditorProps) {
+export function SummarizeEditor({ aggregations, breakouts, options, onChange, metrics = [] }: SummarizeEditorProps) {
   const typeOf = (ref?: string) => options.find((o) => o.ref === ref)?.type ?? 'unknown';
   const setAgg = (i: number, a: Aggregation | null) => onChange(a === null ? aggregations.filter((_, k) => k !== i) : aggregations.map((x, k) => (k === i ? a : x)), breakouts);
   const setBrk = (i: number, b: Breakout | null) => onChange(aggregations, b === null ? breakouts.filter((_, k) => k !== i) : breakouts.map((x, k) => (k === i ? b : x)));
@@ -42,6 +52,18 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange }: 
           Metrics
         </Text>
         {aggregations.map((a, i) => {
+          if (a.fn === 'metric') {
+            const m = metrics.find((x) => x.id === a.metric);
+            return (
+              <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="metric-row">
+                <Badge colorScheme="green" variant="subtle" textTransform="none" fontSize="xs" px={2} py={1} title={m?.description ?? undefined}>
+                  ★ {m?.name ?? `Metric ${a.metric} (not available)`}
+                </Badge>
+                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label="Result column name" />
+                <IconButton aria-label="Remove metric" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
+              </Flex>
+            );
+          }
           const info = AGGREGATES.find((x) => x.fn === a.fn)!;
           return (
             <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="metric-row">
@@ -60,9 +82,31 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange }: 
             </Flex>
           );
         })}
-        <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} alignSelf="flex-start" onClick={() => onChange([...aggregations, { fn: aggregations.length ? 'sum' : 'count' }], breakouts)} data-testid="add-metric">
-          Metric
-        </Button>
+        <Flex gap={2} wrap="wrap">
+          <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => onChange([...aggregations, { fn: aggregations.length ? 'sum' : 'count' }], breakouts)} data-testid="add-metric">
+            Metric
+          </Button>
+          {metrics.length > 0 && (
+            <Select
+              size="xs"
+              maxW="200px"
+              value=""
+              onChange={(e) => {
+                const m = metrics.find((x) => String(x.id) === e.target.value);
+                if (m) onChange([...aggregations, { fn: 'metric', metric: m.id, alias: m.slug }], breakouts);
+              }}
+              aria-label="Add a saved metric"
+              data-testid="add-saved-metric"
+            >
+              <option value="">★ Saved metric…</option>
+              {metrics.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Flex>
       </VStack>
 
       <VStack align="stretch" spacing={2} data-testid="group-by">

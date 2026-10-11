@@ -30,9 +30,12 @@ from ..config import Settings
 from ..db import ConnectionRegistry, describe_error
 from ..schema_graph import relationships
 from .compiler import CompileError, compile_spec, render_sql
+from ..content.store import ContentError
+from ..results import ResultEnvelope
 from .runner import QueryRunner, QueryTask, ResultCache, run_sql, run_statement
-from .spec import QuerySpec
+from .spec import QuerySpec, Transform
 from .sqlguard import GuardError, check_sql
+from .transforms import TransformError, apply_transforms
 from .xlsx import xlsx_stream
 
 MAX_WAIT_MS = 15_000
@@ -56,6 +59,22 @@ class RunSqlRequest(BaseModel):
     limit: int | None = Field(default=None, ge=1)
     wait_ms: int = Field(default=2000, ge=0, le=MAX_WAIT_MS)
     refresh: bool = False
+    transforms: list[Transform] = Field(default_factory=list, max_length=20)
+
+
+def finish_envelope(env: ResultEnvelope, meta: list[dict[str, Any] | None], transforms: list[Transform]) -> ResultEnvelope:
+    """Column metadata from the data model, then the transforms (running totals ...)."""
+    for col, m in zip(env.columns, meta):
+        if m:
+            for key in ("display_name", "description", "semantic_type", "format"):
+                if m.get(key) is not None:
+                    setattr(col, key, m[key])
+    if transforms:
+        try:
+            apply_transforms(env, transforms)
+        except TransformError as exc:
+            raise ValueError(str(exc)) from None
+    return env
 
 
 @dataclass(frozen=True)
@@ -67,6 +86,30 @@ class QueryService:
     guard: Callable[..., Any]
     compile_for: Callable[..., Any]
     start_task: Callable[..., dict[str, Any]]  # any other work (multi-source questions) with the same limits and audit
+
+
+def column_meta(compiled: Any, fields: dict[str, Any], metric_formats: dict[str, Any]) -> list[dict[str, Any] | None]:
+    """Per output column: what the data model says about the column it comes from."""
+    out: list[dict[str, Any] | None] = []
+    for col in compiled.columns:
+        if metric_formats.get(col.name):
+            out.append({"format": metric_formats[col.name]})
+            continue  # a metric without its own format keeps its column's (a sum of euros is euros)
+        if col.source is None:
+            out.append(None)
+            continue
+        info = fields.get(col.source[0], {}).get(col.source[1])
+        if not info:
+            out.append(None)
+            continue
+        same = col.name.lower() == col.source[1].lower()  # the column itself, not e.g. its sum
+        out.append({
+            "display_name": info.get("display_name") if same else None,
+            "description": info.get("description") if same else None,
+            "semantic_type": info.get("semantic_type"),
+            "format": info.get("format"),
+        })
+    return out
 
 
 class CheckSqlRequest(BaseModel):
@@ -83,6 +126,7 @@ def register_query_routes(
     runner: QueryRunner,
     current_user: Callable[..., User],
     require_connection: Callable[[str, User], None],
+    semantic: Any = None,
 ) -> "QueryService":
     router = APIRouter(prefix="/api/query", tags=["query"])
 
@@ -103,6 +147,17 @@ def register_query_routes(
             detail = describe_error(exc, registry.get_config(key).engine)
             raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
         engine = registry.get_engine(key)
+        fields: dict[str, Any] = {}
+        metric_formats: dict[str, Any] = {}
+        if semantic is not None:
+            try:
+                spec, metric_formats = semantic.expand_metrics(spec)
+            except ContentError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            fields = semantic.fields(key)
+            manual = semantic.foreign_keys(key)
+            if manual:
+                foreign = {t: list(foreign.get(t, [])) + manual.get(t, []) for t in set(foreign) | set(manual)}
         try:
             compiled = compile_spec(
                 spec,
@@ -112,9 +167,11 @@ def register_query_routes(
                 db_schema=registry.get_config(key).schema,
                 default_limit=default_limit or settings.query_default_rows,
                 max_limit=max_limit or settings.query_max_rows,
+                fields=fields,
             )
         except CompileError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        compiled.meta = column_meta(compiled, fields, metric_formats)
         return engine, compiled, render_sql(compiled.limited(), engine.dialect)
 
     def audit_start(user: User, action: str, connection: str, sql: str, options: dict[str, Any]) -> int:
@@ -154,10 +211,12 @@ def register_query_routes(
         task = QueryTask(owner=user.username, connection=spec.connection, kind="builder")
         options = {"spec": spec.model_dump(mode="json", by_alias=True), **(extra or {})}
         audit_id = audit_start(user, "query", spec.connection, sql, options)
+        meta, transforms = compiled.meta, spec.transforms
         runner.submit(
             task,
-            lambda t: run_statement(engine, t, statement, compiled.limit, types, sql),
-            cache_key=ResultCache.key("builder", spec.model_dump(mode="json"), compiled.limit),
+            lambda t: finish_envelope(run_statement(engine, t, statement, compiled.limit, types, sql), meta, transforms),
+            # the SQL is part of the key: a changed metric or data-model setting changes it
+            cache_key=ResultCache.key("builder", spec.model_dump(mode="json"), compiled.limit, sql),
             read_cache=not refresh,
             on_finish=audit_finish(audit_id),
         )
@@ -203,10 +262,12 @@ def register_query_routes(
         wait_ms: int,
         refresh: bool,
         extra: dict[str, Any] | None = None,
+        transforms: list[Transform] | None = None,
     ):
         require_connection(connection, user)
         check_capacity(user)
         engine, checked = guard(connection, sql, user)
+        transforms = transforms or []
         missing = [p for p in checked.params if p not in params]
         if missing:
             raise HTTPException(status_code=400, detail=f"Give a value for {', '.join('{{' + m + '}}' for m in missing)}")
@@ -216,8 +277,8 @@ def register_query_routes(
         audit_id = audit_start(user, "sql", connection, sql, {"params": params, "limit": limit, **(extra or {})})
         runner.submit(
             task,
-            lambda t: run_sql(engine, t, sql, params, limit),
-            cache_key=ResultCache.key("sql", connection, sql, params, limit),
+            lambda t: finish_envelope(run_sql(engine, t, sql, params, limit), [], transforms),
+            cache_key=ResultCache.key("sql", connection, sql, params, limit, [t.model_dump() for t in transforms]),
             read_cache=not refresh,
             on_finish=audit_finish(audit_id),
         )
@@ -243,7 +304,7 @@ def register_query_routes(
 
     @router.post("/sql")
     def run_sql_query(body: RunSqlRequest, user: User = Depends(current_user)):
-        return start_sql(user, body.connection, body.sql, body.params, body.limit, body.wait_ms, body.refresh)
+        return start_sql(user, body.connection, body.sql, body.params, body.limit, body.wait_ms, body.refresh, transforms=body.transforms)
 
     # ------------------------------------------------------------------ tasks
     @router.get("/tasks/{task_id}")

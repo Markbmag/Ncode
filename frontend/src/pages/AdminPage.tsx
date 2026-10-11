@@ -7,10 +7,11 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
-import type { SchemaTable, SchemaV2 } from '../api';
+import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
+import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
 import { EngineBadge } from '../components/EngineBadge';
 import { PageHeader } from '../components/PageHeader';
-import { KeyIcon, LinkIcon, LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icons';
+import { LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icons';
 import { engineMeta } from '../lib/engines';
 import { queryKeys } from '../lib/queryClient';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -27,51 +28,27 @@ function Panel({ title, children, actions }: { title: string; children: ReactNod
   );
 }
 
-function TableCard({ table }: { table: SchemaTable }) {
+function TableCard({ table, connection }: { table: SchemaTable; connection: string }) {
+  const [editing, setEditing] = useState<SchemaColumn | null>(null);
   return (
-    <Box border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden">
+    <Box border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden" data-testid="model-table">
       <Flex px={3} py={2} bg="chipBg" align="center" justify="space-between">
         <Text fontWeight={700} fontSize="sm" noOfLines={1}>
           {table.name}
         </Text>
-        <Text fontSize="xs" color="mutedText">
-          {table.columns.length} columns
-        </Text>
+        <HStack spacing={2}>
+          <Text fontSize="xs" color="mutedText">
+            {table.columns.length} columns
+          </Text>
+          <Button as={RouterLink} to={`/xray?connection=${encodeURIComponent(connection)}&table=${encodeURIComponent(table.name)}`} size="xs" variant="ghost">
+            X-ray
+          </Button>
+        </HStack>
       </Flex>
-      <Table size="sm">
-        <Tbody>
-          {table.columns.map((col) => (
-            <Tr key={col.name}>
-              <Td py={1.5} px={3} fontFamily="mono" fontSize="xs">
-                <HStack spacing={1.5}>
-                  {col.primary_key && (
-                    <Tooltip label="Primary key" hasArrow>
-                      <Box color="yellow.400" display="flex">
-                        <KeyIcon boxSize={3} />
-                      </Box>
-                    </Tooltip>
-                  )}
-                  {col.foreign_key && (
-                    <Tooltip label={`References ${col.foreign_key.table}.${col.foreign_key.column}`} hasArrow>
-                      <Box color="brand.300" display="flex">
-                        <LinkIcon boxSize={3} />
-                      </Box>
-                    </Tooltip>
-                  )}
-                  <Text as="span">{col.name}</Text>
-                </HStack>
-              </Td>
-              <Td py={1.5} px={3} textAlign="right">
-                <Tooltip label={col.db_type} hasArrow>
-                  <Badge fontSize="0.6rem" bg="chipBg" color="mutedText" textTransform="none">
-                    {col.type}
-                  </Badge>
-                </Tooltip>
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+      <Box maxH="320px" overflowY="auto">
+        <EditableColumns connection={connection} table={table.name} columns={table.columns} onEdit={setEditing} />
+      </Box>
+      <FieldDialog connection={connection} table={table.name} column={editing} onClose={() => setEditing(null)} />
     </Box>
   );
 }
@@ -144,6 +121,11 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
                   <Tr key={`${r.from_table}.${r.from_columns.join(',')}->${r.to_table}`}>
                     <Td>
                       {r.from_table}.{r.from_columns.join(', ')}
+                      {r.manual && (
+                        <Badge ml={2} fontSize="0.6rem" colorScheme="teal">
+                          added by hand
+                        </Badge>
+                      )}
                     </Td>
                     <Td>
                       {r.to_table}.{r.to_columns.join(', ')}
@@ -155,15 +137,19 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
           </Box>
         </Box>
       )}
-      {data && data.relationships.length === 0 && (
-        <Text fontSize="sm" color="mutedText">
-          This database declares no foreign keys. Manual relationships arrive with the semantic layer (M7).
-        </Text>
+      {data && (
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
+          <ManualRelationships connection={connectionKey} schema={data} />
+          <MetricsPanel connection={connectionKey} schema={data} />
+        </SimpleGrid>
       )}
 
+      <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText">
+        TABLES · click a column to name, describe, format, hide it or read it as dates
+      </Text>
       <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={3}>
         {shown.map((t) => (
-          <TableCard key={t.name} table={t} />
+          <TableCard key={t.name} table={t} connection={connectionKey} />
         ))}
       </SimpleGrid>
     </VStack>
@@ -180,7 +166,7 @@ export default function AdminPage() {
     <VStack align="stretch" spacing={6}>
       <PageHeader
         title="Admin"
-        subtitle="Databases and their data model. Users and permissions get a screen in M9."
+        subtitle="Databases and their data model: names, formats, relationships and metrics everyone uses. Users and permissions get a screen in M9."
         actions={
           <Button as={RouterLink} to="/admin/charts" size="sm" variant="subtle">
             Chart gallery

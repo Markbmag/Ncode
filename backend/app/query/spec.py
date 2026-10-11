@@ -121,7 +121,7 @@ class FilterGroup(_Model):
 # ---------------------------------------------------------------- the question
 
 JoinType = Literal["inner", "left", "full"]
-AggregateFn = Literal["count", "count_distinct", "sum", "avg", "min", "max"]
+AggregateFn = Literal["count", "count_distinct", "sum", "avg", "min", "max", "metric"]
 Bucket = Literal["minute", "hour", "day", "week", "month", "quarter", "year"]
 
 
@@ -164,9 +164,19 @@ class Aggregation(_Model):
     ref: str | None = Field(default=None, min_length=1, max_length=300)
     expr: Expr | None = None
     alias: str | None = Field(default=None, min_length=1, max_length=64)
+    # only rows matching this count ("revenue of paid orders"); M7
+    where: "FilterGroup | None" = None
+    # {"fn": "metric", "metric": 3}: a saved metric (app/semantic), expanded before compiling
+    metric: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _target(self) -> "Aggregation":
+        if self.fn == "metric":
+            if self.metric is None or self.ref is not None or self.expr is not None:
+                raise ValueError("a metric aggregation names only the metric")
+            return self
+        if self.metric is not None:
+            raise ValueError("metric goes with fn 'metric'")
         if self.ref is not None and self.expr is not None:
             raise ValueError("an aggregation takes ref or expr, not both")
         if self.ref is None and self.expr is None and self.fn != "count":
@@ -190,6 +200,23 @@ class Breakout(_Model):
         return self
 
 
+TransformType = Literal[
+    "running_total", "moving_average", "pct_change", "previous_period", "rank", "pct_of_total", "outliers",
+]
+
+
+class Transform(_Model):
+    """A calculation on the result rows (app/query/transforms.py), e.g. revenue vs. the same month last year."""
+
+    type: TransformType
+    column: str = Field(min_length=1, max_length=128)     # the value column of the result
+    by: str | None = Field(default=None, max_length=128)  # order (time) column; for rank / % of total: the group
+    window: int = Field(default=3, ge=2, le=365)          # moving_average
+    period: Literal["day", "week", "month", "quarter", "year"] | None = None  # previous_period
+    method: Literal["iqr", "zscore"] = "iqr"              # outliers
+    alias: str | None = Field(default=None, min_length=1, max_length=64)
+
+
 class OrderBy(_Model):
     ref: str = Ref
     dir: Literal["asc", "desc"] = "asc"
@@ -208,6 +235,7 @@ class QuerySpec(_Model):
     having: FilterGroup | None = None
     order: list[OrderBy] = Field(default_factory=list, max_length=20)
     limit: int | None = Field(default=None, ge=1)
+    transforms: list[Transform] = Field(default_factory=list, max_length=20)
 
     @field_validator("having", mode="before")
     @classmethod
@@ -229,6 +257,7 @@ class QuerySpec(_Model):
         return self
 
 
+Aggregation.model_rebuild()
 CaseWhen.model_rebuild()
 Expr.model_rebuild()
 FilterGroup.model_rebuild()

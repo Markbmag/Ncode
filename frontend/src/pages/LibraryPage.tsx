@@ -166,6 +166,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
         </Text>
       </Box>
       {q.imported && <Badge fontSize="2xs">DataDesk</Badge>}
+      {q.model && <Badge fontSize="2xs" colorScheme="teal">model</Badge>}
       {q.access === 'view' && <Badge fontSize="2xs">view only</Badge>}
       <IconButton
         aria-label={q.favorite ? 'Remove from favourites' : 'Add to favourites'}

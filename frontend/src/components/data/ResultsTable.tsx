@@ -4,6 +4,8 @@ import { Box, Flex, Text, Tooltip, useToast } from '@chakra-ui/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ColumnType, ResultColumn } from '../../api';
 import { formatValue } from '../../lib/format';
+import { formatNumber } from '../../viz/format';
+import type { ColumnFormat } from '../../viz/types';
 import { cellToString } from '../../lib/csv';
 
 const ROW_HEIGHT = 32;
@@ -122,13 +124,17 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
               position="relative"
               justify={col.type === 'number' ? 'flex-end' : 'flex-start'}
             >
-              <Tooltip label={`${col.type}${col.role === 'measure' ? ' · measure' : ''}`} hasArrow openDelay={400}>
+              <Tooltip
+                label={`${col.display_name ? `${col.name} · ` : ''}${col.type}${col.role === 'measure' ? ' · measure' : ''}${col.description ? ` — ${col.description}` : ''}`}
+                hasArrow
+                openDelay={400}
+              >
                 <Text as="span" fontSize="2xs" color="faintText" fontFamily="mono">
                   {TYPE_MARK[col.type] ?? '?'}
                 </Text>
               </Tooltip>
-              <Text as="span" fontWeight={700} fontSize="xs" noOfLines={1} title={col.name}>
-                {col.name}
+              <Text as="span" fontWeight={700} fontSize="xs" noOfLines={1} title={col.name} color={col.generated ? 'teal.300' : undefined}>
+                {col.display_name || col.name}
               </Text>
               <Box
                 position="absolute"
@@ -195,7 +201,9 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
                           null
                         </Text>
                       ) : (
-                        formatValue(value, col.type, col.role, { smartDates })
+                        typeof value === 'number' && col.format
+                          ? formatNumber(value, col.format as ColumnFormat)
+                          : formatValue(value, col.type, col.role, { smartDates })
                       )}
                     </Box>
                   );

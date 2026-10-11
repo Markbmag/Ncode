@@ -47,7 +47,7 @@ export type FilterNode = FilterGroup | Condition;
 export const isGroup = (node: FilterNode): node is FilterGroup => 'rules' in node;
 
 export type JoinType = 'inner' | 'left' | 'full';
-export type AggregateFn = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max';
+export type AggregateFn = 'count' | 'count_distinct' | 'sum' | 'avg' | 'min' | 'max' | 'metric';
 export type Bucket = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export interface Join {
@@ -71,6 +71,21 @@ export interface Aggregation {
   fn: AggregateFn;
   ref?: string;
   alias?: string;
+  metric?: number;              // fn "metric": a saved metric (data model, M7)
+  where?: FilterGroup | null;   // only the matching rows count
+}
+
+export type TransformType = 'running_total' | 'moving_average' | 'pct_change' | 'previous_period' | 'rank' | 'pct_of_total' | 'outliers';
+
+/** A calculation on the result rows (backend/app/query/transforms.py). */
+export interface Transform {
+  type: TransformType;
+  column: string;
+  by?: string | null;
+  window?: number;
+  period?: 'day' | 'week' | 'month' | 'quarter' | 'year' | null;
+  method?: 'iqr' | 'zscore';
+  alias?: string | null;
 }
 
 export interface Breakout {
@@ -98,4 +113,5 @@ export interface QuerySpec {
   having?: FilterGroup | null;
   order?: OrderBy[];
   limit?: number | null;
+  transforms?: Transform[];
 }

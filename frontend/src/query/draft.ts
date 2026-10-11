@@ -95,10 +95,11 @@ export function columnOptions(spec: QuerySpec, schema: SchemaInfo, upToCustom?: 
     const table = byName.get(qt.table);
     if (!table) continue;
     for (const col of table.columns) {
-      if (col.type === 'binary') continue;
+      if (col.type === 'binary' || col.hidden) continue; // hidden in the data model
+      const name = col.display_name || humanize(col.name);
       out.push({
         ref: `${qt.alias}.${col.name}`,
-        label: multi ? `${humanize(qt.alias)} → ${humanize(col.name)}` : humanize(col.name),
+        label: multi ? `${humanize(qt.alias)} → ${name}` : name,
         table: qt.alias,
         column: col.name,
         type: col.type,
@@ -148,6 +149,7 @@ export function breakoutName(b: Breakout): string {
 
 export function aggregationName(a: Aggregation): string {
   if (a.alias) return a.alias;
+  if (a.fn === 'metric') return `metric_${a.metric ?? ''}`;
   if (!a.ref) return 'count';
   const base = lastPart(a.ref);
   if (a.fn === 'count_distinct') return `distinct_${base}`;
@@ -233,7 +235,7 @@ export function prepareSpec(spec: QuerySpec, schema: SchemaInfo): Prepared {
 
   // Summary rows still missing their column are left out until they are complete.
   const usedBreakouts = (spec.breakouts ?? []).filter((b) => b.ref);
-  const usedAggregations = (spec.aggregations ?? []).filter((a) => a.fn === 'count' || a.ref);
+  const usedAggregations = (spec.aggregations ?? []).filter((a) => a.fn === 'count' || a.fn === 'metric' || a.ref);
   const summarised = usedBreakouts.length + usedAggregations.length > 0;
   const outputs = summaryOutputs({ ...spec, breakouts: usedBreakouts, aggregations: usedAggregations }, options);
   let i = 0;
@@ -252,6 +254,7 @@ export function prepareSpec(spec: QuerySpec, schema: SchemaInfo): Prepared {
   } else if (spec.fields?.length) {
     out.fields = spec.fields;
   }
+  if (spec.transforms?.length) out.transforms = spec.transforms;
   const filters = cleanGroup(spec.filters, typeOf);
   if (filters) out.filters = filters;
   const validOrder = (spec.order ?? []).filter((o) => (summarised ? outputs.some((x) => x.name === o.ref) : known.has(o.ref)));
