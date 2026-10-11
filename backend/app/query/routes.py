@@ -17,6 +17,7 @@ that is not read-only ...) are 400 errors with a readable `detail`.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -39,6 +40,7 @@ from .transforms import TransformError, apply_transforms
 from .xlsx import xlsx_stream
 
 MAX_WAIT_MS = 15_000
+slow_log = logging.getLogger("ncode.slow")
 ParamValue = str | int | float | bool | None
 
 
@@ -183,10 +185,11 @@ def register_query_routes(
     def audit_finish(audit_id: int) -> Callable[[QueryTask], None]:
         def finish(task: QueryTask) -> None:
             rows = task.result.stats.row_count if task.result is not None else 0
-            app_db.audit_finish(
-                audit_id, task.status, rows, 1 if task.status == "error" else 0,
-                (task.finished_at or time.time()) - task.created_at,
-            )
+            duration = (task.finished_at or time.time()) - task.created_at
+            app_db.audit_finish(audit_id, task.status, rows, 1 if task.status == "error" else 0, duration)
+            if duration >= settings.slow_query_sec:  # also in Admin → Usage → Slow queries
+                slow_log.warning("slow query (%.1fs, %s, %s on %s): %s", duration, task.status, task.owner, task.connection,
+                                 (task.result.sql if task.result is not None and task.result.sql else "")[:300])
 
         return finish
 

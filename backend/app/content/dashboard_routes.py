@@ -125,7 +125,7 @@ def register_dashboard_routes(
     current_user: Callable[..., User],
     run_saved: Callable[..., dict[str, Any]],
     fail: Callable[[ContentError], HTTPException],
-) -> None:
+) -> Callable[..., dict[str, Any]]:
     router = APIRouter(tags=["dashboards"])
 
     def full(user: User, d: Dashboard) -> dict[str, Any]:
@@ -212,10 +212,12 @@ def register_dashboard_routes(
             raise fail(exc) from exc
         return {"favorite": False}
 
-    @router.post("/api/dashboards/{did}/cards/{key}/run")
-    def run_card(did: int, key: str, body: CardRunIn, user: User = Depends(current_user)):
+    def start_card(
+        user: User, d: Dashboard, key: str, given: dict[str, Any], wait_ms: int, refresh: bool, extra: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Run one question card of a dashboard the user may see, with the dashboard's filter values.
+        Also used by subscriptions and public links (M8), always with the permissions of `user`."""
         try:
-            d = store.get(user, did)
             raw = next((c for c in d.cards if c["key"] == key), None)
             if raw is None or raw["kind"] != "question":
                 raise ContentError("No such question card on this dashboard", 404)
@@ -227,10 +229,19 @@ def register_dashboard_routes(
                 raise ContentError("This question is not shared with you", 403) from None
             card = Card.model_validate(raw)
             filters = [DashboardFilter.model_validate(f) for f in d.filters]
-            values = filter_values(filters, body.filters)
+            values = filter_values(filters, given)
             params, conditions = apply_filters(card, filters, values, q.kind, param_shapes(q.kind, q.spec))
         except ContentError as exc:
             raise fail(exc) from exc
-        return run_saved(user, q, params, conditions, body.wait_ms, body.refresh, {"question_id": q.id, "dashboard_id": d.id})
+        return run_saved(user, q, params, conditions, wait_ms, refresh, {"question_id": q.id, "dashboard_id": d.id, **extra})
+
+    @router.post("/api/dashboards/{did}/cards/{key}/run")
+    def run_card(did: int, key: str, body: CardRunIn, user: User = Depends(current_user)):
+        try:
+            d = store.get(user, did)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        return start_card(user, d, key, body.filters, body.wait_ms, body.refresh, {})
 
     app.include_router(router)
+    return start_card

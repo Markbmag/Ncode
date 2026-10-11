@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import {
   Avatar, Badge, Box, Button, Flex, HStack, IconButton, Text, Tooltip, VStack, useColorMode,
 } from '@chakra-ui/react';
 import { NavLink } from 'react-router-dom';
 import type { Connection, User } from '../api';
-import { LockIcon, LogOutIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
+import { LockIcon, LogOutIcon, MailIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
+import { AccountEmailDialog } from '../automation/AccountEmailDialog';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 
@@ -108,6 +110,8 @@ export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compa
 }
 
 export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEdit, user, onLogout }: SidebarProps) {
+  const [email, setEmail] = useState<string | null>(user.email ?? null);
+  const [editingEmail, setEditingEmail] = useState(false);
   return (
     <Flex
       as="aside"
@@ -220,11 +224,15 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
             {user.role === 'admin' ? 'Administrator' : 'User'}
           </Text>
         </Box>
+        <Tooltip label={email ? `Your email: ${email}` : 'Add your email address (for subscriptions)'} hasArrow>
+          <IconButton aria-label="Your email address" size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
+        </Tooltip>
         <ColorModeButton />
         <Tooltip label="Sign out" hasArrow>
           <IconButton aria-label="Sign out" size="sm" icon={<LogOutIcon boxSize={4} />} onClick={onLogout} />
         </Tooltip>
       </Flex>
+      {editingEmail && <AccountEmailDialog current={email} onClose={() => setEditingEmail(false)} onSaved={setEmail} />}
     </Flex>
   );
 }

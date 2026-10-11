@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { IconProps } from '@chakra-ui/react';
-import { ChartIcon, CodeIcon, FolderIcon, HomeIcon, LayoutIcon, MergeIcon, SearchIcon, ShieldIcon, TableIcon, UploadIcon } from '../icons';
+import { BellIcon, ChartIcon, CodeIcon, FolderIcon, HomeIcon, LayoutIcon, MergeIcon, SearchIcon, ShieldIcon, TableIcon, UploadIcon } from '../icons';
 
 export interface NavItem {
   to: string;
@@ -21,5 +21,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/combine', label: 'Combine', icon: MergeIcon },
   { to: '/datasets', label: 'Uploads', icon: UploadIcon },
   { to: '/dashboards', label: 'Dashboards', icon: LayoutIcon },
+  { to: '/subscriptions', label: 'Subscriptions', icon: BellIcon },
   { to: '/admin', label: 'Admin', icon: ShieldIcon, adminOnly: true },
 ];

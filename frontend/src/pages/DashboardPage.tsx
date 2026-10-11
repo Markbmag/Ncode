@@ -10,10 +10,12 @@ import 'react-grid-layout/css/styles.css';
 import { apiErrorMessage, http } from '../api';
 import type { SavedQuestion } from '../library/api';
 import {
-  ArchiveIcon, ChartIcon, ChevronRightIcon, CopyIcon, FolderIcon, LayoutIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, SaveIcon,
+  ArchiveIcon, BellIcon, ChartIcon, GlobeIcon, ChevronRightIcon, CopyIcon, FolderIcon, LayoutIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, SaveIcon,
   SlidersIcon, StarIcon, XIcon,
 } from '../icons';
 import { DialogShell, MoveDialog } from '../library/dialogs';
+import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
+import { ShareDialog } from '../sharing/ShareDialog';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { cardQueue, dashboards, useDashboard } from '../dashboards/api';
 import { DashboardCard } from '../dashboards/DashboardCard';
@@ -71,6 +73,8 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const filtersDialog = useDisclosure();
   const details = useDisclosure();
   const move = useDisclosure();
+  const share = useDisclosure();
+  const [subsOpen, setSubsOpen] = useState(() => search.get('subscriptions') === '1');
   const [editingCard, setEditingCard] = useState<DashCard | null>(null);
   const [renamingTab, setRenamingTab] = useState<string | null>(null);
 
@@ -265,6 +269,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
             </Select>
             {!tv && (
               <>
+                <Tooltip label="Subscriptions: send it by email or to a chat" hasArrow>
+                  <IconButton aria-label="Subscriptions" size="sm" variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
+                </Tooltip>
                 <Button size="sm" variant="subtle" onClick={enterTv} data-testid="tv-mode">
                   TV mode
                 </Button>
@@ -277,6 +284,11 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                   <MenuButton as={IconButton} aria-label="More actions" size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="dashboard-menu" />
                   <MenuList fontSize="sm">
                     <MenuItem onClick={() => window.print()}>Print / save as PDF</MenuItem>
+                    {ws.isAdmin && (
+                      <MenuItem icon={<GlobeIcon boxSize={4} />} onClick={share.onOpen} data-testid="dashboard-share">
+                        Public link / embed…
+                      </MenuItem>
+                    )}
                     <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act('Could not duplicate', async () => navigate(`/dashboards/${(await dashboards.duplicate(dashboard.id)).id}`))}>
                       Duplicate
                     </MenuItem>
@@ -443,6 +455,18 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         onSave={(filters, cards) => change((d) => ({ ...d, filters, cards }))}
       />
       {details.isOpen && <DetailsDialog dashboard={dashboard} onClose={details.onClose} />}
+      <SubscriptionsDrawer
+        isOpen={subsOpen}
+        onClose={() => setSubsOpen(false)}
+        target={{ type: 'dashboard', id: dashboard.id, name: dashboard.name, filters: dashboard.filters }}
+      />
+      {share.isOpen && (
+        <ShareDialog
+          isOpen
+          onClose={share.onClose}
+          target={{ type: 'dashboard', id: dashboard.id, name: dashboard.name, params: dashboard.filters.map((f) => ({ name: f.id, label: f.label })) }}
+        />
+      )}
       <MoveDialog
         isOpen={move.isOpen}
         onClose={move.onClose}

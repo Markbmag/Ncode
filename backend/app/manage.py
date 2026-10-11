@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("allow")
     p.add_argument("username")
     p.add_argument("connections", help='comma-separated connection keys, or "*"')
+    p = sub.add_parser("set-email", help="the address subscriptions and alerts are sent to (\"\" removes it)")
+    p.add_argument("username")
+    p.add_argument("email")
     sub.add_parser("disable").add_argument("username")
     sub.add_parser("enable").add_argument("username")
     sub.add_parser("delete-user").add_argument("username")
@@ -116,7 +119,8 @@ def main(argv: list[str] | None = None) -> None:
             print("No users yet. Create one with: python -m app.manage create-user <name> --admin")
         for u in users:
             status = "active" if u.is_active else "DISABLED"
-            print(f"{u.username:<24} {u.role:<6} {status:<9} connections: {format_allowed(u.allowed_connections)}")
+            print(f"{u.username:<24} {u.role:<6} {status:<9} connections: {format_allowed(u.allowed_connections)}"
+                  + (f"  email: {u.email}" if u.email else ""))
 
     elif args.command == "set-password":
         name = _check_username(args.username)
@@ -131,6 +135,17 @@ def main(argv: list[str] | None = None) -> None:
         if not db.update_user(name, allowed_connections=format_allowed(allowed)):
             _fail(f"no such user {name!r}")
         print(f"{name}: connections = {format_allowed(allowed)}")
+
+    elif args.command == "set-email":
+        from .automation.settings import valid_email
+
+        name = _check_username(args.username)
+        email = args.email.strip()
+        if email and not valid_email(email):
+            _fail(f"{email!r} is not an email address")
+        if not db.update_user(name, email=email or None):
+            _fail(f"no such user {name!r}")
+        print(f"{name}: email = {email or '(none)'}")
 
     elif args.command in ("disable", "enable"):
         name = _check_username(args.username)

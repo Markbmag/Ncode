@@ -7,10 +7,13 @@ import {
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { EngineBadge } from '../components/EngineBadge';
-import { ArchiveIcon, ChevronRightIcon, CopyIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
+import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
 import { library } from './api';
 import type { QuestionPayload, SavedQuestion } from './api';
 import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
+import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
+import { ShareDialog } from '../sharing/ShareDialog';
+import { useWorkspace } from '../workspace/useWorkspace';
 
 interface Props {
   engine?: string;
@@ -35,6 +38,10 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   const saveNew = useDisclosure();
   const move = useDisclosure();
   const details = useDisclosure();
+  const share = useDisclosure();
+  const ws = useWorkspace();
+  // ?subscriptions=1 (from the Subscriptions page) opens the drawer
+  const [subsOpen, setSubsOpen] = useState<null | 'list' | 'alert'>(() => (search.get('subscriptions') === '1' ? 'list' : null));
   const [saving, setSaving] = useState(false);
   const canEdit = saved?.access === 'edit';
 
@@ -160,6 +167,11 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       <Box flex={1} />
       <HStack spacing={2} wrap="wrap">
         {children}
+        {saved && (
+          <Tooltip label="Subscriptions and alerts" hasArrow>
+            <IconButton aria-label="Subscriptions and alerts" size="sm" variant="ghost" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('list')} data-testid="question-subscriptions" />
+          </Tooltip>
+        )}
         {(!saved || canEdit) && (
           <Button
             size="sm"
@@ -200,6 +212,14 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void duplicate()}>
                 Duplicate
               </MenuItem>
+              <MenuItem icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('alert')} data-testid="question-alert">
+                Set up an alert…
+              </MenuItem>
+              {ws.isAdmin && (
+                <MenuItem icon={<GlobeIcon boxSize={4} />} onClick={share.onOpen} data-testid="question-share">
+                  Public link / embed…
+                </MenuItem>
+              )}
               {saved.kind === 'builder' && (
                 <MenuItem icon={<SparklesIcon boxSize={4} />} onClick={() => navigate(`/xray?question=${saved.id}`)} data-testid="question-xray">
                   X-ray
@@ -251,6 +271,19 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             onMove={(target) => library.updateQuestion(saved.id, { collection_id: target as number })}
           />
           {details.isOpen && <DetailsDialog isOpen onClose={details.onClose} question={saved} />}
+          <SubscriptionsDrawer
+            isOpen={subsOpen !== null}
+            onClose={() => setSubsOpen(null)}
+            startWith={subsOpen === 'alert' ? 'alert' : null}
+            target={{ type: 'question', id: saved.id, name: saved.name, parameters: saved.parameters }}
+          />
+          {share.isOpen && (
+            <ShareDialog
+              isOpen
+              onClose={share.onClose}
+              target={{ type: 'question', id: saved.id, name: saved.name, params: saved.parameters.map((p) => ({ name: p.name, label: p.label || p.name })) }}
+            />
+          )}
         </>
       )}
     </Flex>

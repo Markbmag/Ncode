@@ -1,5 +1,5 @@
 /** Dashboard API (backend/app/content/dashboard_routes.py): hooks and mutations. */
-import { useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { apiErrorMessage, http } from '../api';
@@ -8,7 +8,19 @@ import { libraryKeys, refreshLibrary } from '../library/api';
 import { queryClient } from '../lib/queryClient';
 import type { TaskSnapshot } from '../query/useQueryRun';
 import { RunQueue } from './logic';
-import type { Dashboard, DashboardSummary, Definition } from './types';
+import type { Dashboard, DashboardSummary, DashCard, Definition } from './types';
+
+/**
+ * Where cards run. Inside Ncode: the signed-in API (null). On a public link or an embed (M8):
+ * /api/public/{token} or /api/embed/{jwt}, with no editor and downloads only when allowed.
+ */
+export interface CardEndpoints {
+  run: (card: DashCard) => string;
+  tasks: string; // base of /tasks/{id}
+  headers?: Record<string, string>;
+  download: boolean;
+}
+export const CardEndpointsContext = createContext<CardEndpoints | null>(null);
 
 export const dashboardKeys = {
   list: (params: Record<string, unknown>) => [...libraryKeys.all, 'dashboards', params] as const,
@@ -72,7 +84,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * or leaving the page cancels the older one. The last result stays visible while the
  * next one loads.
  */
-export function useCardRun(url: string, bodyJson: string, trigger: number, refresh: boolean, enabled: boolean): CardRunState {
+export function useCardRun(
+  url: string, bodyJson: string, trigger: number, refresh: boolean, enabled: boolean, tasks = '/api/query', headersJson = '{}',
+): CardRunState {
   const [state, setState] = useState<CardRunState>(IDLE);
 
   useEffect(() => {
@@ -85,11 +99,14 @@ export function useCardRun(url: string, bodyJson: string, trigger: number, refre
       try {
         if (!alive) return;
         setState((prev) => ({ ...prev, status: 'running' }));
-        const body = { ...(JSON.parse(bodyJson) as object), wait_ms: 4000, refresh };
+        // public links and embeds allow shorter waits (they hold server threads)
+        const shared = tasks !== '/api/query';
+        const body = { ...(JSON.parse(bodyJson) as object), wait_ms: shared ? 2000 : 4000, refresh };
+        const headers = JSON.parse(headersJson) as Record<string, string>;
         let snap: TaskSnapshot | null = null;
         for (let attempt = 0; snap === null; attempt++) {
           try {
-            snap = (await http.post<TaskSnapshot>(url, body)).data;
+            snap = (await http.post<TaskSnapshot>(url, body, { headers })).data;
           } catch (error) {
             // too many queries at once (other tabs, other pages): wait and try again
             if (axios.isAxiosError(error) && error.response?.status === 429 && attempt < 20 && alive) await sleep(1000 + attempt * 250);
@@ -99,7 +116,7 @@ export function useCardRun(url: string, bodyJson: string, trigger: number, refre
         }
         task = snap.task_id;
         while (snap.status === 'running') {
-          snap = (await http.get<TaskSnapshot>(`/api/query/tasks/${snap.task_id}`, { params: { wait_ms: 10000 } })).data;
+          snap = (await http.get<TaskSnapshot>(`${tasks}/tasks/${snap.task_id}`, { params: { wait_ms: shared ? 2000 : 10000 }, headers })).data;
           if (!alive) return;
         }
         task = null;
@@ -121,9 +138,9 @@ export function useCardRun(url: string, bodyJson: string, trigger: number, refre
     void run();
     return () => {
       alive = false;
-      if (task) http.delete(`/api/query/tasks/${task}`).catch(() => undefined);
+      if (task) http.delete(`${tasks}/tasks/${task}`, { headers: JSON.parse(headersJson) as Record<string, string> }).catch(() => undefined);
     };
-  }, [url, bodyJson, trigger, refresh, enabled]);
+  }, [url, bodyJson, trigger, refresh, enabled, tasks, headersJson]);
 
   return state;
 }

@@ -32,7 +32,7 @@ from sqlalchemy import and_, delete, func, insert, or_, select, update
 
 from ..appdb import User, users_table
 from ..query.spec import QuerySpec
-from .store import ContentError, ContentStore, Level, NotFound, Question, Snapshot, _clean_name
+from .store import ContentError, ContentStore, Level, NotFound, Question, Snapshot, _clean_name, forget_items
 from .tables import dashboard_cards_table, dashboards_table, favorites_table
 
 KEY = r"^[A-Za-z0-9_-]{1,40}$"
@@ -540,4 +540,5 @@ def delete_dashboards(conn: Any, ids: list[int]) -> None:
     conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "dashboard", favorites_table.c.item_id.in_(ids)))
     conn.execute(delete(dashboard_cards_table).where(dashboard_cards_table.c.dashboard_id.in_(ids)))
     conn.execute(delete(dashboards_table).where(dashboards_table.c.id.in_(ids)))
+    forget_items(conn, "dashboard", ids)
 
