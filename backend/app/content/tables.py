@@ -1,4 +1,4 @@
-"""Table definitions for the library and the semantic layer. They mirror migrations 0002-0005 (app/migrations/versions)."""
+"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0006 (app/migrations/versions)."""
 
 from __future__ import annotations
 
@@ -162,4 +162,82 @@ metrics_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+)
+
+# ---------------------------------------------------------------- M8: automation and sharing (migration 0006)
+
+app_settings_table = Table(
+    "app_settings",
+    metadata,
+    Column("key", String(64), primary_key=True),
+    Column("value", Text, nullable=False),
+    Column("secret", Text),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+)
+
+destinations_table = Table(
+    "destinations",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("kind", String(16), nullable=False),
+    Column("config", Text, nullable=False),
+    Column("secret", Text, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("created_by", String(64)),
+    Column("updated_at", Float, nullable=False),
+)
+
+subscriptions_table = Table(
+    "subscriptions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(200), nullable=False),
+    Column("target_type", String(16), nullable=False),
+    Column("target_id", Integer, nullable=False, index=True),
+    Column("owner_id", Integer, nullable=False, index=True),
+    Column("schedule", Text, nullable=False),
+    Column("recipients", Text, nullable=False),
+    Column("options", Text, nullable=False),
+    Column("alert", Text),
+    Column("enabled", Boolean, nullable=False, default=True),
+    Column("next_run_at", Float, index=True),
+    Column("last_run_at", Float),
+    Column("last_status", String(16)),
+    Column("last_error", Text),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+)
+
+subscription_runs_table = Table(
+    "subscription_runs",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("subscription_id", Integer, nullable=False, index=True),
+    Column("trigger", String(16), nullable=False),
+    Column("started_at", Float, nullable=False),
+    Column("finished_at", Float),
+    Column("status", String(16), nullable=False),
+    Column("detail", Text),
+)
+
+share_links_table = Table(
+    "share_links",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("kind", String(8), nullable=False),
+    Column("target_type", String(16), nullable=False),
+    Column("target_id", Integer, nullable=False, index=True),
+    Column("token_hash", String(64), unique=True),
+    Column("token_enc", Text),
+    Column("password_hash", String(255)),
+    Column("expires_at", Float),
+    Column("allow_download", Boolean, nullable=False, default=False),
+    Column("settings", Text, nullable=False),
+    Column("created_by", String(64)),
+    Column("created_at", Float, nullable=False),
+    Column("revoked_at", Float),
+    Column("last_used_at", Float),
+    Column("views", Integer, nullable=False, default=0),
 )

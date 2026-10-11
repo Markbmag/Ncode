@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from ..appdb import User, users_table
 from .tables import (
     collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, permissions_table,
-    questions_table,
+    questions_table, share_links_table, subscription_runs_table, subscriptions_table,
 )
 
 Level = Literal["view", "edit"]
@@ -370,11 +370,13 @@ class ContentStore:
                 # cards elsewhere that showed these questions say "deleted" from now on
                 conn.execute(update(dashboard_cards_table).where(dashboard_cards_table.c.question_id.in_(qids)).values(question_id=None))
                 conn.execute(delete(questions_table).where(questions_table.c.id.in_(qids)))
+                forget_items(conn, "question", qids)
             dids = [r.id for r in conn.execute(select(dashboards_table.c.id).where(dashboards_table.c.collection_id.in_(ids)))]
             if dids:
                 conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "dashboard", favorites_table.c.item_id.in_(dids)))
                 conn.execute(delete(dashboard_cards_table).where(dashboard_cards_table.c.dashboard_id.in_(dids)))
                 conn.execute(delete(dashboards_table).where(dashboards_table.c.id.in_(dids)))
+                forget_items(conn, "dashboard", dids)
             files = [r.file for r in conn.execute(select(datasets_table.c.file).where(datasets_table.c.collection_id.in_(ids)))]
             conn.execute(delete(datasets_table).where(datasets_table.c.collection_id.in_(ids)))
             conn.execute(delete(permissions_table).where(permissions_table.c.collection_id.in_(ids)))
@@ -592,6 +594,7 @@ class ContentStore:
             conn.execute(delete(favorites_table).where(favorites_table.c.item_type == "question", favorites_table.c.item_id == qid))
             conn.execute(update(dashboard_cards_table).where(dashboard_cards_table.c.question_id == qid).values(question_id=None))
             conn.execute(delete(questions_table).where(questions_table.c.id == qid))
+            forget_items(conn, "question", [qid])
 
     def question_by_import_key(self, key: str) -> int | None:
         with self.engine.connect() as conn:
@@ -612,6 +615,23 @@ class ContentStore:
                 )
 
 
+def forget_items(conn: Any, target_type: str, ids: list[int]) -> None:
+    """Inside the transaction that deletes questions or dashboards: their subscriptions,
+    alerts and public links go too (M8)."""
+    if not ids:
+        return
+    subs = select(subscriptions_table.c.id).where(
+        subscriptions_table.c.target_type == target_type, subscriptions_table.c.target_id.in_(ids)
+    )
+    conn.execute(delete(subscription_runs_table).where(subscription_runs_table.c.subscription_id.in_(subs)))
+    conn.execute(delete(subscriptions_table).where(
+        subscriptions_table.c.target_type == target_type, subscriptions_table.c.target_id.in_(ids)
+    ))
+    conn.execute(delete(share_links_table).where(
+        share_links_table.c.target_type == target_type, share_links_table.c.target_id.in_(ids)
+    ))
+
+
 def forget_user(conn: Any, user_id: int, username: str) -> None:
     """Called inside the transaction that deletes a user: content stays, the user's traces go.
 
@@ -629,3 +649,10 @@ def forget_user(conn: Any, user_id: int, username: str) -> None:
     conn.execute(update(questions_table).where(questions_table.c.owner_id == user_id).values(owner_id=None))
     conn.execute(update(dashboards_table).where(dashboards_table.c.owner_id == user_id).values(owner_id=None))
     conn.execute(update(datasets_table).where(datasets_table.c.owner_id == user_id).values(owner_id=None))
+    # what ran or was shared in the user's name stops (it would run with their permissions)
+    subs = select(subscriptions_table.c.id).where(subscriptions_table.c.owner_id == user_id)
+    conn.execute(delete(subscription_runs_table).where(subscription_runs_table.c.subscription_id.in_(subs)))
+    conn.execute(delete(subscriptions_table).where(subscriptions_table.c.owner_id == user_id))
+    conn.execute(update(share_links_table).where(
+        share_links_table.c.created_by == username, share_links_table.c.revoked_at.is_(None)
+    ).values(revoked_at=time.time()))

@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 
 from app.api import create_app
 from app.appdb import AppDB
+from app.crypto import Cipher, generate_key
 from app.config import Settings, load_connections
 from app.security import hash_password
 
@@ -27,7 +28,7 @@ def make_client(tmp_path, **settings):
     load(engine)
     engine.dispose()
     connections = load_connections({"NCODE_CONN_SHOP_ENGINE": "sqlite", "NCODE_CONN_SHOP_DATABASE": str(shop)})
-    app_db = AppDB(tmp_path / "app.sqlite")
+    app_db = AppDB(tmp_path / "app.sqlite", cipher=Cipher(generate_key()))
     app_db.create_user("admin", hash_password("admin-pass-1"), "admin")
     app_db.create_user("alice", hash_password("alice-pass-1"))
     app_db.create_user("bob", hash_password("bob-pass-123"), allowed=("other",))

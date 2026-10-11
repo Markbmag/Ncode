@@ -27,6 +27,7 @@ or {"kind": "federated", "spec": FederatedSpec} (several sources combined, app/f
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -45,6 +46,14 @@ from .params import (
 from .store import ROLES, ContentError, ContentStore, Question
 
 MAX_VIZ_BYTES = 100_000
+
+
+@dataclass(frozen=True)
+class ContentServices:
+    store: ContentStore
+    dashboards: DashboardStore
+    run_saved: Callable[..., dict[str, Any]]   # (user, question, params, conditions, wait_ms, refresh, extra)
+    start_card: Callable[..., dict[str, Any]]  # (user, dashboard, card key, filter values, wait_ms, refresh, extra)
 
 
 class CollectionCreate(BaseModel):
@@ -448,7 +457,9 @@ def register_content_routes(
         }
 
     app.include_router(router)
-    register_dashboard_routes(
+    start_card = register_dashboard_routes(
         app, store=dashboard_store, app_db=app_db, current_user=current_user, run_saved=run_saved, fail=fail
     )
+    # subscriptions and public links (M8) run saved content through the same checks
+    app.state.content = ContentServices(store=store, dashboards=dashboard_store, run_saved=run_saved, start_card=start_card)
     return store

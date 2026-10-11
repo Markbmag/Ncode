@@ -135,6 +135,12 @@ class Settings:
     dataset_max_mb: int = 100            # largest file that can be uploaded
     dataset_max_rows: int = 1_000_000    # rows kept per uploaded file
     profile_sample_rows: int = 20_000    # rows read to profile / X-ray a table (M7)
+    # --- automation and sharing (M8) ---
+    scheduler_enabled: bool = True       # send subscriptions and alerts on schedule
+    scheduler_interval_sec: int = 30     # how often due subscriptions are looked for
+    scheduler_workers: int = 2           # subscriptions sent at the same time
+    slow_query_sec: int = 5              # queries slower than this show in Admin → Usage → Slow queries
+    public_rate_per_min: int = 120       # requests per minute per visitor on public links and embeds
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
 
@@ -193,6 +199,11 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         dataset_max_mb=max(1, _int(env, "NCODE_DATASET_MAX_MB", defaults.dataset_max_mb)),
         dataset_max_rows=max(1, _int(env, "NCODE_DATASET_MAX_ROWS", defaults.dataset_max_rows)),
         profile_sample_rows=max(100, _int(env, "NCODE_PROFILE_SAMPLE_ROWS", defaults.profile_sample_rows)),
+        scheduler_enabled=_bool(env, "NCODE_SCHEDULER_ENABLED", defaults.scheduler_enabled),
+        scheduler_interval_sec=max(5, _int(env, "NCODE_SCHEDULER_INTERVAL_SEC", defaults.scheduler_interval_sec)),
+        scheduler_workers=max(1, _int(env, "NCODE_SCHEDULER_WORKERS", defaults.scheduler_workers)),
+        slow_query_sec=max(1, _int(env, "NCODE_SLOW_QUERY_SEC", defaults.slow_query_sec)),
+        public_rate_per_min=max(10, _int(env, "NCODE_PUBLIC_RATE_PER_MIN", defaults.public_rate_per_min)),
     )
 
 

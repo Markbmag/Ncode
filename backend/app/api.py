@@ -53,6 +53,13 @@ from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
 from .query.routes import register_query_routes
 from .analysis.routes import register_analysis_routes
+from .automation.engine import Engine as AutomationEngine
+from .automation.routes import register_automation_routes
+from .automation.scheduler import Scheduler
+from .automation.settings import SettingsStore
+from .automation.store import SubscriptionStore
+from .sharing.routes import register_sharing_routes
+from .usage import register_usage_routes
 from .semantic.routes import register_semantic_routes, schema_extras
 from .semantic.store import SemanticStore
 from .query.runner import QueryRunner
@@ -88,6 +95,13 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
     semantic = SemanticStore(app_db.engine)
+    settings_store = SettingsStore(app_db.engine, app_db.cipher)
+    subscriptions = SubscriptionStore(app_db.engine)
+    automation = AutomationEngine(
+        app_db=app_db, settings_store=settings_store, subs=subscriptions, runner=runner,
+        content=lambda: app.state.content, statement_timeout_sec=settings.statement_timeout_sec,
+    )
+    scheduler = Scheduler(automation, subscriptions, interval_sec=settings.scheduler_interval_sec, workers=settings.scheduler_workers)
     bearer = HTTPBearer(auto_error=False)
 
     @asynccontextmanager
@@ -98,7 +112,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             logger.warning(
                 "No users exist yet. Create the first admin with:  python -m app.manage create-user <name> --admin"
             )
+        if settings.scheduler_enabled:
+            scheduler.start()
         yield
+        scheduler.stop()
         runner.shutdown()
         registry.dispose_all()
         app_db.dispose()
@@ -183,14 +200,14 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
 
     @app.get("/api/auth/me")
     def me(user: User = Depends(current_user)):
-        return {"username": user.username, "role": user.role}
+        return {"username": user.username, "role": user.role, "email": user.email}
 
     # ------------------------------------------------------------------
     # connections
     # ------------------------------------------------------------------
     def require_admin(user: User = Depends(current_user)) -> User:
         if not user.is_admin:
-            raise HTTPException(status_code=403, detail="Only an administrator can manage connections")
+            raise HTTPException(status_code=403, detail="Only an administrator can do this")
         return user
 
     def details_of(cfg: ConnectionConfig, user: User) -> ConnectionDetails:
@@ -697,4 +714,14 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         app, registry=registry, settings=settings, runner=runner, queries=queries, content=content, semantic=semantic,
         current_user=current_user, require_connection=require_connection,
     )
+    app.state.scheduler = scheduler
+    register_automation_routes(
+        app, app_db=app_db, settings_store=settings_store, subs=subscriptions, engine=automation,
+        scheduler=scheduler, current_user=current_user, require_admin=require_admin,
+    )
+    register_sharing_routes(
+        app, app_db=app_db, settings=settings, settings_store=settings_store, runner=runner,
+        current_user=current_user, require_admin=require_admin,
+    )
+    register_usage_routes(app, app_db=app_db, settings=settings, require_admin=require_admin)
     return app

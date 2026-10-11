@@ -39,6 +39,7 @@ users_table = Table(
     Column("is_active", Boolean, nullable=False, default=True),
     Column("allowed_connections", String(500), nullable=False, default="*"),  # "*" or "mes,les"
     Column("created_at", Float, nullable=False),
+    Column("email", String(254)),                                          # subscriptions (M8)
 )
 
 sessions_table = Table(
@@ -95,6 +96,7 @@ class User:
     # None = every connection; otherwise only these connection keys
     allowed_connections: tuple[str, ...] | None = None
     password_hash: str = field(default="", repr=False)
+    email: str | None = None
 
     @property
     def is_admin(self) -> bool:
@@ -133,6 +135,7 @@ def _to_user(row: Any) -> User:
         is_active=bool(row.is_active),
         allowed_connections=parse_allowed(row.allowed_connections),
         password_hash=row.password_hash,
+        email=row.email,
     )
 
 
@@ -179,6 +182,11 @@ class AppDB:
     def get_user_by_name(self, username: str) -> User | None:
         with self.engine.connect() as conn:
             row = conn.execute(select(users_table).where(users_table.c.username == username)).first()
+        return _to_user(row) if row else None
+
+    def get_user(self, user_id: int) -> User | None:
+        with self.engine.connect() as conn:
+            row = conn.execute(select(users_table).where(users_table.c.id == user_id)).first()
         return _to_user(row) if row else None
 
     def list_users(self) -> list[User]:
