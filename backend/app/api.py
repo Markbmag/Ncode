@@ -50,6 +50,7 @@ from .config import ENGINES, ConnectionConfig, Settings, driver_available, norma
 from .crypto import CipherError
 from .db import ConnectionRegistry, describe_error, probe
 from .explore import browse_table, csv_stream, table_structure
+from .content.routes import register_content_routes
 from .query.routes import register_query_routes
 from .query.runner import QueryRunner
 from .schema_graph import describe_schema
@@ -103,7 +104,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["*"],
         expose_headers=["Retry-After"],  # lets the login screen show the lockout countdown
     )
@@ -665,7 +666,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             except RuntimeError:
                 pass  # already closed
 
-    register_query_routes(
+    queries = register_query_routes(
         app,
         registry=registry,
         settings=settings,
@@ -673,5 +674,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         runner=runner,
         current_user=current_user,
         require_connection=require_connection,
+    )
+    register_content_routes(
+        app, app_db=app_db, queries=queries, current_user=current_user, require_connection=require_connection
     )
     return app

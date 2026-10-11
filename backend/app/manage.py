@@ -11,6 +11,7 @@
     python -m app.manage delete-user alice
     python -m app.manage audit --limit 50                  # who searched what
     python -m app.manage generate-key                      # a new NCODE_SECRET_KEY value
+    python -m app.manage import-datadesk app-data.sqlite --map db1=mes,db2=crm --dry-run
 """
 
 from __future__ import annotations
@@ -78,6 +79,12 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("audit")
     p.add_argument("--limit", type=int, default=50)
     sub.add_parser("generate-key", help="print a new encryption key for NCODE_SECRET_KEY")
+    p = sub.add_parser("import-datadesk", help="import DataDesk reports and dashboards into the library")
+    p.add_argument("file", help="DataDesk's app database (app-data.sqlite); it is only read")
+    p.add_argument("--map", default="", help="DataDesk database -> Ncode connection, e.g. db1=mes,db2=crm")
+    p.add_argument("--owner", default=None, help="user who owns the imported content (default: the first admin)")
+    p.add_argument("--dry-run", action="store_true", help="only show what would be imported")
+    p.add_argument("--report", default=None, help="also write the report to this Markdown file")
 
     args = parser.parse_args(argv)
 
@@ -156,7 +163,47 @@ def main(argv: list[str] | None = None) -> None:
                 )
             print(f"{when}  {r.username or '-':<16} {r.action:<13} {detail}")
 
+    elif args.command == "import-datadesk":
+        _import_datadesk(args, db, settings)
+
     db.dispose()
+
+
+def _import_datadesk(args: argparse.Namespace, db: AppDB, settings) -> None:
+    from pathlib import Path
+
+    from .content.datadesk import ImportError_, parse_map, run_import
+    from .content.store import ContentStore
+
+    users = db.list_users()
+    if args.owner:
+        owner = db.get_user_by_name(_check_username(args.owner))
+        if owner is None:
+            _fail(f"no such user {args.owner!r}")
+    else:
+        owner = next((u for u in users if u.is_admin and u.is_active), None)
+        if owner is None:
+            _fail("no admin exists yet; create one or pass --owner")
+    connections = {k: c.engine for k, c in load_connections().items()}
+    for key, engine in db.connection_engines().items():  # UI-made connections (no password needed)
+        connections.setdefault(key, engine)
+    try:
+        mapping = parse_map(args.map)
+        unknown = sorted(v for v in mapping.values() if v not in connections)
+        if unknown:
+            _fail(f"--map names connections Ncode does not have: {', '.join(unknown)} (known: {', '.join(sorted(connections))})")
+        report = run_import(
+            Path(args.file), ContentStore(db.engine), owner, mapping=mapping, connections=connections, dry_run=args.dry_run
+        )
+    except ImportError_ as exc:
+        _fail(str(exc))
+    text = report.text()
+    print(text)
+    if args.report:
+        Path(args.report).write_text(text, encoding="utf-8")
+        print(f"Report written to {args.report}")
+    if not args.dry_run:
+        db.audit(owner.username, "import_datadesk", phrase=Path(args.file).name, status="ok")
 
 
 if __name__ == "__main__":

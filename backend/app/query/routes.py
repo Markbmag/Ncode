@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -57,6 +58,16 @@ class RunSqlRequest(BaseModel):
     refresh: bool = False
 
 
+@dataclass(frozen=True)
+class QueryService:
+    """What saved questions (app/content/routes.py) use to run through the same checks."""
+
+    start_spec: Callable[..., dict[str, Any]]
+    start_sql: Callable[..., dict[str, Any]]
+    guard: Callable[..., Any]
+    compile_for: Callable[..., Any]
+
+
 class CheckSqlRequest(BaseModel):
     connection: str = Field(min_length=1, max_length=64)
     sql: str = Field(min_length=1, max_length=100_000)
@@ -71,7 +82,7 @@ def register_query_routes(
     runner: QueryRunner,
     current_user: Callable[..., User],
     require_connection: Callable[[str, User], None],
-) -> None:
+) -> "QueryService":
     router = APIRouter(prefix="/api/query", tags=["query"])
 
     def check_capacity(user: User) -> None:
@@ -133,24 +144,27 @@ def register_query_routes(
         return task
 
     # ------------------------------------------------------------------ builder questions
-    @router.post("")
-    def run_question(body: RunSpecRequest, user: User = Depends(current_user)):
-        spec = body.spec
+    def start_spec(user: User, spec: QuerySpec, wait_ms: int, refresh: bool, extra: dict[str, Any] | None = None):
         require_connection(spec.connection, user)
         check_capacity(user)
         engine, compiled, sql = compile_for(spec)
         statement = compiled.limited(1)  # one extra row tells us the result was cut off
         types = [c.type for c in compiled.columns]
         task = QueryTask(owner=user.username, connection=spec.connection, kind="builder")
-        audit_id = audit_start(user, "query", spec.connection, sql, {"spec": spec.model_dump(mode="json", by_alias=True)})
+        options = {"spec": spec.model_dump(mode="json", by_alias=True), **(extra or {})}
+        audit_id = audit_start(user, "query", spec.connection, sql, options)
         runner.submit(
             task,
             lambda t: run_statement(engine, t, statement, compiled.limit, types, sql),
             cache_key=ResultCache.key("builder", spec.model_dump(mode="json"), compiled.limit),
-            read_cache=not body.refresh,
+            read_cache=not refresh,
             on_finish=audit_finish(audit_id),
         )
-        return respond(task, body.wait_ms)
+        return respond(task, wait_ms)
+
+    @router.post("")
+    def run_question(body: RunSpecRequest, user: User = Depends(current_user)):
+        return start_spec(user, body.spec, body.wait_ms, body.refresh)
 
     @router.post("/compile")
     def compile_question(body: CompileRequest, user: User = Depends(current_user)):
@@ -179,26 +193,38 @@ def register_query_routes(
             return {"ok": False, "error": exc.detail, "params": [], "tables": []}
         return {"ok": True, "error": None, "params": checked.params, "tables": checked.tables}
 
-    @router.post("/sql")
-    def run_sql_query(body: RunSqlRequest, user: User = Depends(current_user)):
-        require_connection(body.connection, user)
+    def start_sql(
+        user: User,
+        connection: str,
+        sql: str,
+        params: dict[str, Any],
+        limit: int | None,
+        wait_ms: int,
+        refresh: bool,
+        extra: dict[str, Any] | None = None,
+    ):
+        require_connection(connection, user)
         check_capacity(user)
-        engine, checked = guard(body.connection, body.sql, user)
-        missing = [p for p in checked.params if p not in body.params]
+        engine, checked = guard(connection, sql, user)
+        missing = [p for p in checked.params if p not in params]
         if missing:
             raise HTTPException(status_code=400, detail=f"Give a value for {', '.join('{{' + m + '}}' for m in missing)}")
-        limit = min(body.limit or settings.query_default_rows, settings.query_max_rows)
-        params = {k: v for k, v in body.params.items() if k in checked.params}
-        task = QueryTask(owner=user.username, connection=body.connection, kind="sql")
-        audit_id = audit_start(user, "sql", body.connection, body.sql, {"params": params, "limit": limit})
+        limit = min(limit or settings.query_default_rows, settings.query_max_rows)
+        params = {k: v for k, v in params.items() if k in checked.params}
+        task = QueryTask(owner=user.username, connection=connection, kind="sql")
+        audit_id = audit_start(user, "sql", connection, sql, {"params": params, "limit": limit, **(extra or {})})
         runner.submit(
             task,
-            lambda t: run_sql(engine, t, body.sql, params, limit),
-            cache_key=ResultCache.key("sql", body.connection, body.sql, params, limit),
-            read_cache=not body.refresh,
+            lambda t: run_sql(engine, t, sql, params, limit),
+            cache_key=ResultCache.key("sql", connection, sql, params, limit),
+            read_cache=not refresh,
             on_finish=audit_finish(audit_id),
         )
-        return respond(task, body.wait_ms)
+        return respond(task, wait_ms)
+
+    @router.post("/sql")
+    def run_sql_query(body: RunSqlRequest, user: User = Depends(current_user)):
+        return start_sql(user, body.connection, body.sql, body.params, body.limit, body.wait_ms, body.refresh)
 
     # ------------------------------------------------------------------ tasks
     @router.get("/tasks/{task_id}")
@@ -225,3 +251,4 @@ def register_query_routes(
         )
 
     app.include_router(router)
+    return QueryService(start_spec=start_spec, start_sql=start_sql, guard=guard, compile_for=compile_for)

@@ -102,6 +102,9 @@ class Condition(_Model):
     op: FilterOp
     value: Any = None
     case_sensitive: bool = False
+    # Saved questions (M4): the value comes from this question parameter when it is run
+    # (app/content/params.py); without a value the condition is left out.
+    param: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 
     @model_validator(mode="after")
     def _target(self) -> "Condition":
