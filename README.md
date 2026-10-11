@@ -176,10 +176,12 @@ link opens the question with the same values. Dashboard filters (M5) will set th
 
 `--map` says which Ncode connection each DataDesk database is. The dry run only prints the report;
 without it, everything goes into a collection **DataDesk import** owned by `--owner` (default: the
-first admin), with one sub-collection per dashboard. Single-table reports become builder questions,
+first admin). Each DataDesk dashboard becomes a dashboard, in a sub-collection of the same name that
+also holds its reports (cards two per row). Single-table reports become builder questions,
 SQL reports SQL questions (only if they pass the read-only check), multi-database reports wait for
 the federated workspace (M6). The report lists every report and why something was not converted.
-DataDesk's file is only read; running the import again skips what was imported before.
+DataDesk's file is only read; running the import again skips what was imported before (and creates
+the dashboards of an import made before dashboards existed).
 
 ## SQL editor
 
@@ -219,6 +221,34 @@ series are added up as *Other*), at most 6 pie slices, and colours tested for co
 readers in both themes. **Download** offers CSV, an **Excel workbook** (numbers and dates as real
 Excel values) and, for charts, **PNG** or **SVG**. *Reset* returns to the automatic chart.
 Admins find every chart type with sample data under **Admin → Chart gallery**.
+
+## Dashboards
+
+**Dashboards** in the sidebar → **New dashboard** (name and collection) opens it in edit mode:
+
+- **Question** adds a saved question as a card, **Text** a note (Markdown: `# heading`, `**bold**`,
+  `*italic*`, lists, links), **Heading** a section title. Drag a card by its title bar, resize it
+  from the bottom-right corner; the ✎ on a card changes its title, the table/chart button how it is
+  shown on this dashboard (the question itself is not changed).
+- **Tab** splits the dashboard into tabs (double-click a tab to rename it).
+- **Filters** adds dashboard filters - date range, single date, list of values, text, number - with
+  a default and *required*. For each card choose what the filter changes: a **parameter** of the
+  question (`{{name}}` in SQL, a filter set to *ask for the value* in the builder; a parameter with
+  the same name is connected automatically) or, for questions built without SQL, a **column**
+  directly. A date range on a single-date parameter passes its start date ("since").
+- **Save** keeps the layout, **Cancel** throws the changes away.
+
+Viewing: change a filter and only the cards it is connected to run again (the badge on a card says
+how many filters apply to it). Filter values and the tab are part of the link, so a link opens the
+same view. ↻ refreshes every card (bypassing the cache); auto-refresh every 30 s ... 15 min (saved
+with the dashboard as its default). **TV mode** shows the dashboard alone, full screen. The **⋯** of
+a card opens its question in the editor (with the filter values as parameters) and downloads the
+card as CSV, Excel or PNG; the dashboard's **⋯** has *Print / save as PDF*, *Duplicate*, *Rename*,
+*Move* and *Archive*. Cards load a few at a time (as many as `NCODE_MAX_CONCURRENT_QUERIES` allows).
+
+Dashboards live in collections and follow their sharing. A dashboard never shows more than the
+viewer may see: a card whose question is not shared with them says so, and running a card still
+needs access to its database. Editors can rearrange cards they cannot see but not add such questions.
 
 ## Browsing and exporting
 
@@ -325,6 +355,21 @@ A builder question's `spec` is the question JSON above; a filter rule with `"par
 its value from the parameter. A SQL question's `spec` is `{"sql": "...", "limit": 2000}`. Parameters
 are `[{"name", "label", "type": "text"|"number"|"date", "default", "required"}]`. Questions are
 checked when saved (unknown columns, SQL that is not read-only are refused).
+
+### Dashboards
+
+    GET    /api/dashboards?q=&favorites=&collection=
+    POST   /api/dashboards                        {"name", "description", "collection_id"}
+    GET    /api/dashboards/{id}                   filters, tabs, cards (each with the question as far as you may see it)
+    PUT    /api/dashboards/{id}                   {"filters", "tabs", "cards", "settings"}: the whole definition
+    PATCH  /api/dashboards/{id}                   rename / move / archive;  DELETE (archived only)
+    POST   /api/dashboards/{id}/duplicate         PUT|DELETE /api/dashboards/{id}/favorite
+    POST   /api/dashboards/{id}/cards/{key}/run   {"filters": {"period": ["2026-01-01", "2026-03-31"]}} -> a query task
+
+A card is `{"key", "kind": "question"|"text"|"heading", "question_id", "tab", "layout": {"x", "y",
+"w", "h"} (12 columns), "viz", "title", "text", "mappings": {"<filter id>": {"param": "since"} |
+{"field": "orders.created_at"}}}`; a filter is `{"id", "label", "type":
+"date_range"|"date"|"text"|"category"|"number", "default", "required"}`.
 
 ### SQL mode
 

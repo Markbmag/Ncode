@@ -11,6 +11,7 @@ const SqlPage = lazy(() => import('./pages/SqlPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const SavedQuestionPage = lazy(() => import('./pages/SavedQuestionPage'));
 const DashboardsPage = lazy(() => import('./pages/DashboardsPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const ChartGalleryPage = lazy(() => import('./pages/ChartGalleryPage'));
 
@@ -28,6 +29,7 @@ export function AppRoutes() {
         <Route path="questions/:id" element={<SavedQuestionPage />} />
         <Route path="sql" element={<SqlPage />} />
         <Route path="dashboards" element={<DashboardsPage />} />
+        <Route path="dashboards/:id" element={<DashboardPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="admin/charts" element={<ChartGalleryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -198,6 +198,7 @@ export interface Limits {
   max_export_rows: number;
   query_default_rows?: number;
   query_max_rows?: number;
+  max_concurrent_queries?: number;
 }
 
 // ---------------------------------------------------------------- schema v2

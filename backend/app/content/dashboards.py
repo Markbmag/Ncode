@@ -210,12 +210,47 @@ def filter_values(filters: list[DashboardFilter], given: dict[str, Any]) -> dict
     return out
 
 
-def _as_param(ftype: str, value: Any) -> Any:
-    """A filter value in the shape question parameters take (see params.py)."""
-    if ftype == "date_range":
-        return [d.isoformat() if d else None for d in value]
-    if ftype == "date":
-        return value.isoformat()
+ParamShape = Literal["single", "pair", "list"]
+
+
+def param_shapes(kind: str, spec: dict[str, Any]) -> dict[str, ParamShape]:
+    """How many values each parameter of a question takes: one, two (between) or a list (in).
+
+    SQL parameters always take one value; builder parameters follow the filter operator."""
+    if kind != "builder":
+        return {}
+    from .params import spec_params  # params imports store, like this module
+
+    out: dict[str, ParamShape] = {}
+    for name, op in spec_params(QuerySpec.model_validate(spec)):
+        out.setdefault(name, "pair" if op == "between" else "list" if op in ("in", "not_in") else "single")
+    return out
+
+
+def _as_param(f: DashboardFilter, value: Any, shape: ParamShape, param: str) -> Any:
+    """A filter value in the shape the parameter takes (None = leave the parameter unset)."""
+    if f.type == "date_range":
+        start, end = value
+        if shape == "pair":  # an open end becomes a far-away date
+            return [(start or date(1900, 1, 1)).isoformat(), (end or date(9999, 12, 31)).isoformat()]
+        if shape == "list":
+            return [d.isoformat() for d in (start, end) if d] or None
+        return start.isoformat() if start else None  # one date: the start of the range ("since")
+    if f.type == "date":
+        day = value.isoformat()
+        return [day, day] if shape == "pair" else [day] if shape == "list" else day
+    if isinstance(value, list):  # category
+        if shape == "list":
+            return value
+        if shape == "pair" and len(value) == 2:
+            return value
+        if shape == "single" and len(value) == 1:
+            return value[0]
+        raise ContentError(f"Filter {f.label!r} has {len(value)} values, but {{{{{param}}}}} takes {'two' if shape == 'pair' else 'one'}")
+    if shape == "list":
+        return [value]
+    if shape == "pair":
+        raise ContentError(f"Filter {f.label!r} has one value, but parameter {param!r} needs two (between)")
     return value
 
 
@@ -239,9 +274,11 @@ def _field_conditions(ftype: str, ref: str, value: Any) -> list[dict[str, Any]]:
 
 
 def apply_filters(
-    card: Card, filters: list[DashboardFilter], values: dict[str, Any], kind: str
+    card: Card, filters: list[DashboardFilter], values: dict[str, Any], kind: str,
+    shapes: dict[str, ParamShape] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """(question parameter values, extra builder conditions) for one card."""
+    shapes = shapes or {}
     by_id = {f.id: f for f in filters}
     params: dict[str, Any] = {}
     conditions: list[dict[str, Any]] = []
@@ -251,7 +288,9 @@ def apply_filters(
         if f is None or value is None:
             continue
         if mapping.param:
-            params[mapping.param] = _as_param(f.type, value)
+            converted = _as_param(f, value, shapes.get(mapping.param, "single"), mapping.param)
+            if converted is not None:
+                params[mapping.param] = converted
         elif mapping.field:
             if kind != "builder":
                 raise ContentError("Only questions built without SQL can be filtered by a column; map the filter to a parameter")

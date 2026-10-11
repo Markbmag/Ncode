@@ -23,7 +23,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ..appdb import AppDB, User
 from ..query.routes import MAX_WAIT_MS
-from .dashboards import Card, Dashboard, DashboardFilter, DashboardStore, Definition, apply_filters, filter_values
+from .dashboards import (
+    Card, Dashboard, DashboardFilter, DashboardStore, Definition, apply_filters, filter_values, param_shapes,
+)
 from .store import ContentError, Question
 
 
@@ -218,7 +220,7 @@ def register_dashboard_routes(
             card = Card.model_validate(raw)
             filters = [DashboardFilter.model_validate(f) for f in d.filters]
             values = filter_values(filters, body.filters)
-            params, conditions = apply_filters(card, filters, values, q.kind)
+            params, conditions = apply_filters(card, filters, values, q.kind, param_shapes(q.kind, q.spec))
         except ContentError as exc:
             raise fail(exc) from exc
         return run_saved(user, q, params, conditions, body.wait_ms, body.refresh, {"question_id": q.id, "dashboard_id": d.id})

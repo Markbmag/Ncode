@@ -129,6 +129,31 @@ def test_filter_mapped_to_parameters(env):
     assert rows(run_card(env, "alice", d["id"], "b", {"status": "paid"})) == [[5]]
 
 
+def test_filter_values_take_the_shape_of_the_parameter(env):
+    sql = save_sql(env, "alice", "SELECT count(*) FROM q_orders WHERE paid_on >= {{since}}",
+                   parameters=[{"name": "since", "type": "date", "default": "2000-01-01"}])
+    between = {**COUNT_ORDERS, "filters": {"rules": [{"ref": "q_orders.paid_on", "op": "between", "param": "period"}]}}
+    b = save_builder(env, "alice", spec=between, parameters=[{"name": "period", "type": "date"}], name="Between")
+    listed = {**COUNT_ORDERS, "filters": {"rules": [{"ref": "q_orders.status", "op": "=", "param": "status"}]}}
+    one = save_builder(env, "alice", spec=listed, parameters=[{"name": "status"}], name="One status")
+    d = new_dashboard(env, "alice")
+    put(env, "alice", d["id"], {
+        "filters": [{"id": "period", "label": "Period", "type": "date_range"}, {"id": "status", "label": "Status", "type": "category"}],
+        "cards": [card("sql", sql["id"], mappings={"period": {"param": "since"}}),
+                  card("b", b["id"], x=6, mappings={"period": {"param": "period"}}),
+                  card("one", one["id"], y=4, mappings={"status": {"param": "status"}})],
+    })
+    # a range given to a single-date parameter passes its start ("since")
+    assert rows(run_card(env, "alice", d["id"], "sql", {"period": ["2026-04-01", "2026-04-30"]})) == [[2]]
+    assert rows(run_card(env, "alice", d["id"], "sql", {"period": ["", "2026-04-30"]})) == [[7]]  # no start: the default
+    # ... and both ends to a "between" parameter, an open end reaching far
+    assert rows(run_card(env, "alice", d["id"], "b", {"period": ["2026-01-01", "2026-01-31"]})) == [[2]]
+    assert rows(run_card(env, "alice", d["id"], "b", {"period": ["2026-04-01", ""]})) == [[2]]
+    # a list with one value fits a single-value parameter; with two it does not
+    assert rows(run_card(env, "alice", d["id"], "one", {"status": ["refunded"]})) == [[1]]
+    assert "takes one" in run_card(env, "alice", d["id"], "one", {"status": ["paid", "refunded"]}, status=400)["detail"]
+
+
 def test_sql_cards_cannot_be_filtered_by_column(env):
     sql = save_sql(env, "alice", "SELECT 1 AS one")
     d = new_dashboard(env, "alice")

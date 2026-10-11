@@ -8,12 +8,14 @@ import { Link as RouterLink, NavLink, useNavigate, useParams } from 'react-route
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import {
-  ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LinkIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
+  ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LayoutIcon, LinkIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
   SearchIcon, StarIcon, TrashIcon, UsersIcon,
 } from '../icons';
 import { flattenTree, library, useArchive, useCollection, useCollections, useQuestions } from '../library/api';
 import type { CollectionInfo, QuestionKind, QuestionSummary } from '../library/api';
 import { CollectionDialog, ConfirmDialog, MoveDialog, ShareDialog } from '../library/dialogs';
+import { dashboards, useDashboards } from '../dashboards/api';
+import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: LinkIcon };
 
@@ -221,7 +223,7 @@ function Empty({ children }: { children: ReactNode }) {
 function QuestionList({ items, loading, error, empty, showCollection }: { items?: QuestionSummary[]; loading: boolean; error: unknown; empty: string; showCollection?: boolean }) {
   if (loading) return <Skeleton h="100px" />;
   if (error) return <Empty>{apiErrorMessage(error, 'Could not load the questions')}</Empty>;
-  if (!items?.length) return <Empty>{empty}</Empty>;
+  if (!items?.length) return empty ? <Empty>{empty}</Empty> : null;
   return (
     <Box>
       {items.map((q) => (
@@ -251,11 +253,13 @@ function LibraryHome() {
   const [text, setText] = useState('');
   const query = text.trim();
   const favorites = useQuestions({ favorites: true });
+  const favoriteBoards = useDashboards({ favorites: true });
   const recent = useQuestions({ limit: 15 });
   const found = useQuestions({ q: query, limit: 100 }, query.length > 0);
+  const foundBoards = useDashboards({ q: query, limit: 50 }, query.length > 0);
   return (
     <VStack align="stretch" spacing={5}>
-      <PageHeader title="Library" subtitle="Saved questions, organised in collections you can share." actions={<NewButtons />} />
+      <PageHeader title="Library" subtitle="Saved questions and dashboards, organised in collections you can share." actions={<NewButtons />} />
       <InputGroup size="md">
         <InputLeftElement pointerEvents="none">
           <SearchIcon boxSize={4} color="faintText" />
@@ -263,13 +267,31 @@ function LibraryHome() {
         <Input placeholder="Find a question by name or description…" value={text} onChange={(e) => setText(e.target.value)} bg="panelBg" data-testid="library-search" />
       </InputGroup>
       {query ? (
-        <Panel title={`Questions matching “${query}”`}>
-          <QuestionList items={found.data} loading={found.isPending} error={found.error} empty="Nothing found." showCollection />
-        </Panel>
+        <>
+          {(foundBoards.data?.length ?? 0) > 0 && (
+            <Panel title={`Dashboards matching “${query}”`}>
+              {foundBoards.data!.map((d) => (
+                <DashboardRow key={d.id} d={d} showCollection />
+              ))}
+            </Panel>
+          )}
+          <Panel title={`Questions matching “${query}”`}>
+            <QuestionList items={found.data} loading={found.isPending} error={found.error} empty="Nothing found." showCollection />
+          </Panel>
+        </>
       ) : (
         <>
           <Panel title="Favourites">
-            <QuestionList items={favorites.data} loading={favorites.isPending} error={favorites.error} empty="Star a question to keep it here." showCollection />
+            {favoriteBoards.data?.map((d) => (
+              <DashboardRow key={`d${d.id}`} d={d} showCollection />
+            ))}
+            <QuestionList
+              items={favorites.data}
+              loading={favorites.isPending}
+              error={favorites.error}
+              empty={favoriteBoards.data?.length ? '' : 'Star a question or a dashboard to keep it here.'}
+              showCollection
+            />
           </Panel>
           <Panel title="Recently changed">
             <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} empty="No saved questions yet. Build one and press Save." showCollection />
@@ -287,6 +309,7 @@ function CollectionView({ id }: { id: number }) {
   const navigate = useNavigate();
   const toast = useToast();
   const share = useDisclosure();
+  const newBoard = useDisclosure();
   const edit = useDisclosure();
   const sub = useDisclosure();
   const move = useDisclosure();
@@ -387,9 +410,28 @@ function CollectionView({ id }: { id: number }) {
           ))}
         </Panel>
       )}
+      {(data.dashboards.length > 0 || c.access === 'edit') && (
+        <Panel
+          title="Dashboards"
+          actions={
+            c.access === 'edit' ? (
+              <Button size="sm" variant="subtle" leftIcon={<PlusIcon boxSize={4} />} onClick={newBoard.onOpen} data-testid="new-dashboard-here">
+                New dashboard
+              </Button>
+            ) : undefined
+          }
+        >
+          {data.dashboards.length === 0 ? (
+            <Empty>No dashboards here yet.</Empty>
+          ) : (
+            data.dashboards.map((d) => <DashboardRow key={d.id} d={d} />)
+          )}
+        </Panel>
+      )}
       <Panel title="Questions" actions={c.access === 'edit' ? <NewButtons collection={c.id} /> : undefined}>
         <QuestionList items={data.questions} loading={false} error={null} empty={c.access === 'edit' ? 'Empty. Save a question into this collection.' : 'Empty.'} />
       </Panel>
+      <NewDashboardDialog isOpen={newBoard.isOpen} onClose={newBoard.onClose} collectionId={c.id} />
 
       {c.can_manage && !c.personal && <ShareDialog isOpen={share.isOpen} onClose={share.onClose} collection={c} />}
       <CollectionDialog isOpen={edit.isOpen} onClose={edit.onClose} collection={c} />
@@ -412,7 +454,7 @@ function CollectionView({ id }: { id: number }) {
 function ArchiveView() {
   const { data, isPending, error } = useArchive();
   const toast = useToast();
-  const [deleting, setDeleting] = useState<{ kind: 'question' | 'collection'; id: number; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<{ kind: 'question' | 'collection' | 'dashboard'; id: number; name: string } | null>(null);
   const restore = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
@@ -422,7 +464,7 @@ function ArchiveView() {
   };
   return (
     <VStack align="stretch" spacing={4}>
-      <PageHeader title="Archive" subtitle="Archived questions and collections. Restore them, or delete them for good." />
+      <PageHeader title="Archive" subtitle="Archived questions, dashboards and collections. Restore them, or delete them for good." />
       {isPending && <Skeleton h="160px" borderRadius="xl" />}
       {error && (
         <Alert status="error" borderRadius="xl">
@@ -441,6 +483,19 @@ function ArchiveView() {
                 name={c.name}
                 onRestore={() => void restore(() => library.updateCollection(c.id, { archived: false }))}
                 onDelete={() => setDeleting({ kind: 'collection', id: c.id, name: c.name })}
+              />
+            ))}
+          </Panel>
+          <Panel title="Dashboards">
+            {data.dashboards.length === 0 && <Empty>No archived dashboards.</Empty>}
+            {data.dashboards.map((d) => (
+              <ArchiveRow
+                key={`d${d.id}`}
+                icon={<LayoutIcon boxSize={4} />}
+                name={d.name}
+                detail={d.collection?.name}
+                onRestore={() => void restore(() => dashboards.update(d.id, { archived: false }))}
+                onDelete={() => setDeleting({ kind: 'dashboard', id: d.id, name: d.name })}
               />
             ))}
           </Panel>
@@ -469,12 +524,13 @@ function ArchiveView() {
         confirmLabel="Delete"
         body={
           deleting?.kind === 'collection'
-            ? `“${deleting.name}” and everything inside it (questions and collections) will be deleted. This cannot be undone.`
+            ? `“${deleting.name}” and everything inside it (questions, dashboards and collections) will be deleted. This cannot be undone.`
             : `“${deleting?.name}” will be deleted. This cannot be undone.`
         }
         onConfirm={async () => {
           if (!deleting) return;
           if (deleting.kind === 'collection') await library.deleteCollection(deleting.id);
+          else if (deleting.kind === 'dashboard') await dashboards.remove(deleting.id);
           else await library.deleteQuestion(deleting.id);
         }}
       />
