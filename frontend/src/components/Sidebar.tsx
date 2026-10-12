@@ -9,6 +9,7 @@ import { AccountDialog } from '../account/AccountDialog';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
+import { t } from '../i18n/index.ts';
 
 interface SidebarProps {
   connections: Connection[];
@@ -43,7 +44,7 @@ export function Logo() {
           Ncode
         </Text>
         <Text fontSize="xs" color="mutedText">
-          Data workspace
+          {t('Data workspace')}
         </Text>
       </Box>
     </HStack>
@@ -53,9 +54,9 @@ export function Logo() {
 export function ColorModeButton() {
   const { colorMode, toggleColorMode } = useColorMode();
   return (
-    <Tooltip label={colorMode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} hasArrow>
+    <Tooltip label={colorMode === 'dark' ? t('Switch to light theme') : t('Switch to dark theme')} hasArrow>
       <IconButton
-        aria-label="Toggle color theme"
+        aria-label={t('Toggle color theme')}
         size="sm"
         icon={colorMode === 'dark' ? <SunIcon boxSize={4} /> : <MoonIcon boxSize={4} />}
         onClick={toggleColorMode}
@@ -69,7 +70,7 @@ export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compa
   return (
     <Flex
       as="nav"
-      aria-label="Sections"
+      aria-label={t('Sections')}
       direction={compact ? 'row' : 'column'}
       gap={compact ? 1 : 0.5}
       overflowX={compact ? 'auto' : undefined}
@@ -98,9 +99,9 @@ export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compa
             {item.label}
           </Text>
           {item.milestone && !compact && (
-            <Tooltip label={`Coming in milestone ${item.milestone} of the roadmap`} hasArrow>
+            <Tooltip label={t('Coming in milestone {milestone} of the roadmap', { milestone: item.milestone })} hasArrow>
               <Badge fontSize="0.6rem" bg="chipBg" color="faintText" borderRadius="full" px={1.5}>
-                soon
+                {t('soon')}
               </Badge>
             </Tooltip>
           )}
@@ -137,7 +138,7 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
 
       <Flex px={5} pb={2} align="center" justify="space-between">
         <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText">
-          DATABASES
+          {t('DATABASES')}
         </Text>
         <Badge bg="chipBg" color="mutedText" borderRadius="full" px={2}>
           {connections.length}
@@ -173,16 +174,16 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
                 </Text>
               </Box>
               {connection.source === 'env' && (
-                <Tooltip label="Defined in the .env file — edit it there" hasArrow>
+                <Tooltip label={t('Defined in the .env file — edit it there')} hasArrow>
                   <Box color="faintText">
                     <LockIcon boxSize={3.5} />
                   </Box>
                 </Tooltip>
               )}
               {connection.editable && (
-                <Tooltip label="Edit connection" hasArrow>
+                <Tooltip label={t('Edit connection')} hasArrow>
                   <IconButton
-                    aria-label={`Edit ${connection.label}`}
+                    aria-label={t('Edit {name}', { name: connection.label })}
                     size="xs"
                     variant="ghost"
                     icon={<PencilIcon boxSize={3.5} />}
@@ -202,7 +203,7 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
 
         {connections.length === 0 && (
           <Text fontSize="sm" color="mutedText" px={3} py={4}>
-            No databases yet.
+            {t('No databases yet.')}
           </Text>
         )}
       </VStack>
@@ -210,7 +211,7 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
       {isAdmin && (
         <Box px={4} pt={3}>
           <Button w="100%" variant="subtle" leftIcon={<PlusIcon boxSize={4} />} onClick={onAdd}>
-            Add a database
+            {t('Add a database')}
           </Button>
         </Box>
       )}
@@ -222,16 +223,16 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
             {user.username}
           </Text>
           <Text fontSize="xs" color="mutedText">
-            {user.role === 'admin' ? 'Administrator' : 'User'}
+            {user.role === 'admin' ? t('Administrator') : t('User')}
           </Text>
         </Box>
-        <Tooltip label={email ? `Your account (${email})` : 'Your account: add your email address for subscriptions'} hasArrow>
-          <IconButton aria-label="Your account" size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
+        <Tooltip label={email ? t('Your account ({email})', { email }) : t('Your account: add your email address for subscriptions')} hasArrow>
+          <IconButton aria-label={t('Your account')} size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
         </Tooltip>
         <LanguageSwitch />
         <ColorModeButton />
-        <Tooltip label="Sign out" hasArrow>
-          <IconButton aria-label="Sign out" size="sm" icon={<LogOutIcon boxSize={4} />} onClick={onLogout} />
+        <Tooltip label={t('Sign out')} hasArrow>
+          <IconButton aria-label={t('Sign out')} size="sm" icon={<LogOutIcon boxSize={4} />} onClick={onLogout} />
         </Tooltip>
       </Flex>
       {editingEmail && <AccountDialog username={user.username} email={email} onClose={() => setEditingEmail(false)} onEmail={setEmail} />}

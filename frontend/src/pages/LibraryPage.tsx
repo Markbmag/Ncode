@@ -19,15 +19,16 @@ import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 import { DatasetRow } from './DatasetsPage';
 import { datasets } from '../federation/api';
 import { UploadDialog } from '../federation/UploadDialog';
+import { t } from '../i18n/index.ts';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`;
+  if (s < 60) return t('just now');
+  if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
+  if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
   return new Date(ts * 1000).toLocaleDateString();
 }
 
@@ -86,28 +87,28 @@ function CollectionTree({ activeId, archive }: { activeId: number | null; archiv
   return (
     <VStack align="stretch" spacing={0.5} data-testid="collection-tree">
       <TreeLink to="/library" active={activeId === null && !archive} icon={<StarIcon boxSize={4} />}>
-        Start
+        {t('Start')}
       </TreeLink>
       <Flex align="center" justify="space-between" pt={3} pb={1} pl={2}>
         <Text fontSize="2xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.08em">
-          Collections
+          {t('Collections')}
         </Text>
-        <Tooltip label="New collection" hasArrow>
-          <IconButton aria-label="New collection" size="xs" variant="ghost" icon={<PlusIcon boxSize={3} />} onClick={create.onOpen} data-testid="new-collection" />
+        <Tooltip label={t('New collection')} hasArrow>
+          <IconButton aria-label={t('New collection')} size="xs" variant="ghost" icon={<PlusIcon boxSize={3} />} onClick={create.onOpen} data-testid="new-collection" />
         </Tooltip>
       </Flex>
       {isPending && <Skeleton h="120px" borderRadius="md" />}
-      {isError && <Text fontSize="xs" color="red.400">{apiErrorMessage(error, 'Could not load collections')}</Text>}
+      {isError && <Text fontSize="xs" color="red.400">{apiErrorMessage(error, t('Could not load collections'))}</Text>}
       {own.map((n) => (
         <TreeLink key={n.id} to={`/library/c/${n.id}`} active={n.id === activeId} depth={n.depth} icon={<FolderIcon boxSize={4} />} testId={`tree-${n.id}`}>
-          {n.mine ? 'My collection' : n.name}
+          {n.mine ? t('My collection') : n.name}
           {n.shared && !n.personal && <UsersIcon boxSize={3} ml={1.5} color="faintText" />}
         </TreeLink>
       ))}
       {others.length > 0 && (
         <>
           <Text fontSize="2xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.08em" pt={3} pb={1} pl={2}>
-            Other people’s collections
+            {t('Other people’s collections')}
           </Text>
           {others.map((n) => (
             <TreeLink key={n.id} to={`/library/c/${n.id}`} active={n.id === activeId} depth={n.depth} icon={<FolderIcon boxSize={4} />}>
@@ -118,7 +119,7 @@ function CollectionTree({ activeId, archive }: { activeId: number | null; archiv
       )}
       <Box pt={3}>
         <TreeLink to="/library/archive" active={archive} icon={<ArchiveIcon boxSize={4} />} testId="tree-archive">
-          Archive
+          {t('Archive')}
         </TreeLink>
       </Box>
       <CollectionDialog isOpen={create.isOpen} onClose={create.onClose} parentId={null} onDone={(c) => navigate(`/library/c/${c.id}`)} />
@@ -149,7 +150,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
     try {
       await fn();
     } catch (e) {
-      toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again'), duration: 5000 });
+      toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 5000 });
     }
   };
   return (
@@ -161,41 +162,41 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
         </Link>
         <Text fontSize="xs" color="mutedText" noOfLines={1}>
           {showCollection && q.collection && `${q.collection.name} · `}
-          {q.kind === 'federated' ? 'multi-source' : q.connection} · {q.owner ?? 'former user'} · {ago(q.updated_at)}
+          {q.kind === 'federated' ? t('multi-source') : q.connection} · {q.owner ?? t('former user')} · {ago(q.updated_at)}
           {q.description && ` · ${q.description}`}
         </Text>
       </Box>
       {q.imported && <Badge fontSize="2xs">DataDesk</Badge>}
-      {q.model && <Badge fontSize="2xs" colorScheme="teal">model</Badge>}
-      {q.access === 'view' && <Badge fontSize="2xs">view only</Badge>}
+      {q.model && <Badge fontSize="2xs" colorScheme="teal">{t('model')}</Badge>}
+      {q.access === 'view' && <Badge fontSize="2xs">{t('view only')}</Badge>}
       <IconButton
-        aria-label={q.favorite ? 'Remove from favourites' : 'Add to favourites'}
+        aria-label={q.favorite ? t('Remove from favourites') : t('Add to favourites')}
         size="xs"
         variant="ghost"
         color={q.favorite ? 'yellow.400' : 'faintText'}
         icon={<StarIcon boxSize={4} fill={q.favorite ? 'currentColor' : 'none'} />}
-        onClick={() => void act('Could not change favourites', () => library.favorite(q.id, !q.favorite))}
+        onClick={() => void act(t('Could not change favourites'), () => library.favorite(q.id, !q.favorite))}
       />
       <Menu isLazy placement="bottom-end">
-        <MenuButton as={IconButton} aria-label={`Actions for ${q.name}`} size="xs" variant="ghost" icon={<MoreIcon boxSize={4} />} />
+        <MenuButton as={IconButton} aria-label={t('Actions for {name}', { name: q.name })} size="xs" variant="ghost" icon={<MoreIcon boxSize={4} />} />
         <MenuList fontSize="sm">
-          <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act('Could not duplicate', async () => navigate(`/questions/${(await library.duplicate(q.id)).id}`))}>
-            Duplicate
+          <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/questions/${(await library.duplicate(q.id)).id}`))}>
+            {t('Duplicate')}
           </MenuItem>
           {q.access === 'edit' && (
             <>
               <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
-                Move…
+                {t('Move…')}
               </MenuItem>
               <MenuDivider />
-              <MenuItem icon={<ArchiveIcon boxSize={4} />} onClick={() => void act('Could not archive', () => library.updateQuestion(q.id, { archived: true }))}>
-                Archive
+              <MenuItem icon={<ArchiveIcon boxSize={4} />} onClick={() => void act(t('Could not archive'), () => library.updateQuestion(q.id, { archived: true }))}>
+                {t('Archive')}
               </MenuItem>
             </>
           )}
         </MenuList>
       </Menu>
-      <MoveDialog isOpen={move.isOpen} onClose={move.onClose} title={`Move “${q.name}”`} current={q.collection_id} onMove={(t) => library.updateQuestion(q.id, { collection_id: t as number })} />
+      <MoveDialog isOpen={move.isOpen} onClose={move.onClose} title={t('Move “{name}”', { name: q.name })} current={q.collection_id} onMove={(t) => library.updateQuestion(q.id, { collection_id: t as number })} />
     </Flex>
   );
 }
@@ -226,7 +227,7 @@ function Empty({ children }: { children: ReactNode }) {
 
 function QuestionList({ items, loading, error, empty, showCollection }: { items?: QuestionSummary[]; loading: boolean; error: unknown; empty: string; showCollection?: boolean }) {
   if (loading) return <Skeleton h="100px" />;
-  if (error) return <Empty>{apiErrorMessage(error, 'Could not load the questions')}</Empty>;
+  if (error) return <Empty>{apiErrorMessage(error, t('Could not load the questions'))}</Empty>;
   if (!items?.length) return empty ? <Empty>{empty}</Empty> : null;
   return (
     <Box>
@@ -242,13 +243,13 @@ function NewButtons({ collection }: { collection?: number }) {
   return (
     <HStack>
       <Button as={RouterLink} to={`/questions${into}`} size="sm" variant="brand" leftIcon={<ChartIcon boxSize={4} />}>
-        New question
+        {t('New question')}
       </Button>
       <Button as={RouterLink} to={`/sql${into}`} size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />}>
-        New SQL query
+        {t('New SQL query')}
       </Button>
       <Button as={RouterLink} to={`/combine${into}`} size="sm" variant="subtle" leftIcon={<MergeIcon boxSize={4} />}>
-        Combine sources
+        {t('Combine sources')}
       </Button>
     </HStack>
   );
@@ -266,29 +267,29 @@ function LibraryHome() {
   const foundBoards = useDashboards({ q: query, limit: 50 }, query.length > 0);
   return (
     <VStack align="stretch" spacing={5}>
-      <PageHeader title="Library" subtitle="Saved questions and dashboards, organised in collections you can share." actions={<NewButtons />} />
+      <PageHeader title={t('Library')} subtitle={t('Saved questions and dashboards, organised in collections you can share.')} actions={<NewButtons />} />
       <InputGroup size="md">
         <InputLeftElement pointerEvents="none">
           <SearchIcon boxSize={4} color="faintText" />
         </InputLeftElement>
-        <Input placeholder="Find a question by name or description…" value={text} onChange={(e) => setText(e.target.value)} bg="panelBg" data-testid="library-search" />
+        <Input placeholder={t('Find a question by name or description…')} value={text} onChange={(e) => setText(e.target.value)} bg="panelBg" data-testid="library-search" />
       </InputGroup>
       {query ? (
         <>
           {(foundBoards.data?.length ?? 0) > 0 && (
-            <Panel title={`Dashboards matching “${query}”`}>
+            <Panel title={t('Dashboards matching “{query}”', { query })}>
               {foundBoards.data!.map((d) => (
                 <DashboardRow key={d.id} d={d} showCollection />
               ))}
             </Panel>
           )}
-          <Panel title={`Questions matching “${query}”`}>
-            <QuestionList items={found.data} loading={found.isPending} error={found.error} empty="Nothing found." showCollection />
+          <Panel title={t('Questions matching “{query}”', { query })}>
+            <QuestionList items={found.data} loading={found.isPending} error={found.error} empty={t('Nothing found.')} showCollection />
           </Panel>
         </>
       ) : (
         <>
-          <Panel title="Favourites">
+          <Panel title={t('Favourites')}>
             {favoriteBoards.data?.map((d) => (
               <DashboardRow key={`d${d.id}`} d={d} showCollection />
             ))}
@@ -296,12 +297,12 @@ function LibraryHome() {
               items={favorites.data}
               loading={favorites.isPending}
               error={favorites.error}
-              empty={favoriteBoards.data?.length ? '' : 'Star a question or a dashboard to keep it here.'}
+              empty={favoriteBoards.data?.length ? '' : t('Star a question or a dashboard to keep it here.')}
               showCollection
             />
           </Panel>
-          <Panel title="Recently changed">
-            <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} empty="No saved questions yet. Build one and press Save." showCollection />
+          <Panel title={t('Recently changed')}>
+            <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} empty={t('No saved questions yet. Build one and press Save.')} showCollection />
           </Panel>
         </>
       )}
@@ -327,17 +328,17 @@ function CollectionView({ id }: { id: number }) {
     return (
       <Alert status="error" borderRadius="xl">
         <AlertIcon />
-        {apiErrorMessage(error, 'This collection could not be opened.')}
+        {apiErrorMessage(error, t('This collection could not be opened.'))}
       </Alert>
     );
   const c = data.collection;
   const archive = async () => {
     try {
       await library.updateCollection(c.id, { archived: true });
-      toast({ status: 'info', title: `“${c.name}” archived`, description: 'Restore it from the Archive.', duration: 4000 });
+      toast({ status: 'info', title: t('“{name}” archived', { name: c.name }), description: t('Restore it from the Archive.'), duration: 4000 });
       navigate('/library');
     } catch (e) {
-      toast({ status: 'error', title: 'Could not archive', description: apiErrorMessage(e, 'Please try again'), duration: 5000 });
+      toast({ status: 'error', title: t('Could not archive'), description: apiErrorMessage(e, t('Please try again')), duration: 5000 });
     }
   };
 
@@ -345,7 +346,7 @@ function CollectionView({ id }: { id: number }) {
     <VStack align="stretch" spacing={4}>
       <HStack spacing={1} fontSize="xs" color="mutedText">
         <Link as={RouterLink} to="/library">
-          Library
+          {t('Library')}
         </Link>
         {data.path.slice(0, -1).map((p) => (
           <HStack key={p.id} spacing={1}>
@@ -357,45 +358,45 @@ function CollectionView({ id }: { id: number }) {
         ))}
       </HStack>
       <PageHeader
-        title={c.mine ? 'My collection' : c.name}
+        title={c.mine ? t('My collection') : c.name}
         subtitle={
           <>
-            {c.description || (c.mine ? 'Only you (and admins) can see what is in here.' : null)}
-            {c.archived && <Badge ml={2}>archived</Badge>}
-            {c.access === 'view' && <Badge ml={2}>view only</Badge>}
+            {c.description || (c.mine ? t('Only you (and admins) can see what is in here.') : null)}
+            {c.archived && <Badge ml={2}>{t('archived')}</Badge>}
+            {c.access === 'view' && <Badge ml={2}>{t('view only')}</Badge>}
           </>
         }
         actions={
           <HStack>
             {c.can_manage && !c.personal && (
               <Button size="sm" variant="subtle" leftIcon={<UsersIcon boxSize={4} />} onClick={share.onOpen} data-testid="share-collection">
-                Share
+                {t('Share')}
               </Button>
             )}
             {c.access === 'edit' && (
               <Button size="sm" variant="subtle" leftIcon={<PlusIcon boxSize={4} />} onClick={sub.onOpen}>
-                Collection
+                {t('Collection')}
               </Button>
             )}
             {(c.access === 'edit' || c.can_manage) && !c.personal && (
               <Menu isLazy placement="bottom-end">
-                <MenuButton as={IconButton} aria-label="Collection actions" size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="collection-menu" />
+                <MenuButton as={IconButton} aria-label={t('Collection actions')} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="collection-menu" />
                 <MenuList fontSize="sm">
                   {c.access === 'edit' && (
                     <MenuItem icon={<PencilIcon boxSize={4} />} onClick={edit.onOpen}>
-                      Rename / describe…
+                      {t('Rename / describe…')}
                     </MenuItem>
                   )}
                   {c.can_manage && (
                     <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
-                      Move…
+                      {t('Move…')}
                     </MenuItem>
                   )}
                   {c.can_manage && (
                     <>
                       <MenuDivider />
                       <MenuItem icon={<ArchiveIcon boxSize={4} />} onClick={() => void archive()}>
-                        Archive
+                        {t('Archive')}
                       </MenuItem>
                     </>
                   )}
@@ -406,7 +407,7 @@ function CollectionView({ id }: { id: number }) {
         }
       />
       {data.collections.length > 0 && (
-        <Panel title="Collections">
+        <Panel title={t('Collections')}>
           {data.collections.map((child) => (
             <Flex key={child.id} align="center" gap={3} px={3} py={2.5} borderBottom="1px solid" borderColor="lineColor" _last={{ borderBottom: 'none' }} _hover={{ bg: 'panelHover' }}>
               <FolderIcon boxSize={4} color="yellow.400" />
@@ -420,37 +421,37 @@ function CollectionView({ id }: { id: number }) {
       )}
       {(data.dashboards.length > 0 || c.access === 'edit') && (
         <Panel
-          title="Dashboards"
+          title={t('Dashboards')}
           actions={
             c.access === 'edit' ? (
               <Button size="sm" variant="subtle" leftIcon={<PlusIcon boxSize={4} />} onClick={newBoard.onOpen} data-testid="new-dashboard-here">
-                New dashboard
+                {t('New dashboard')}
               </Button>
             ) : undefined
           }
         >
           {data.dashboards.length === 0 ? (
-            <Empty>No dashboards here yet.</Empty>
+            <Empty>{t('No dashboards here yet.')}</Empty>
           ) : (
             data.dashboards.map((d) => <DashboardRow key={d.id} d={d} />)
           )}
         </Panel>
       )}
-      <Panel title="Questions" actions={c.access === 'edit' ? <NewButtons collection={c.id} /> : undefined}>
-        <QuestionList items={data.questions} loading={false} error={null} empty={c.access === 'edit' ? 'Empty. Save a question into this collection.' : 'Empty.'} />
+      <Panel title={t('Questions')} actions={c.access === 'edit' ? <NewButtons collection={c.id} /> : undefined}>
+        <QuestionList items={data.questions} loading={false} error={null} empty={c.access === 'edit' ? t('Empty. Save a question into this collection.') : t('Empty.')} />
       </Panel>
       {((data.datasets?.length ?? 0) > 0 || c.access === 'edit') && (
         <Panel
-          title="Uploaded files"
+          title={t('Uploaded files')}
           actions={
             c.access === 'edit' ? (
               <Button size="sm" variant="subtle" leftIcon={<UploadIcon boxSize={4} />} onClick={uploadHere.onOpen} data-testid="upload-here">
-                Upload a file
+                {t('Upload a file')}
               </Button>
             ) : undefined
           }
         >
-          {data.datasets?.length ? data.datasets.map((d) => <DatasetRow key={d.id} d={d} />) : <Empty>No files here.</Empty>}
+          {data.datasets?.length ? data.datasets.map((d) => <DatasetRow key={d.id} d={d} />) : <Empty>{t('No files here.')}</Empty>}
         </Panel>
       )}
       <UploadDialog isOpen={uploadHere.isOpen} onClose={uploadHere.onClose} collectionId={c.id} />
@@ -462,7 +463,7 @@ function CollectionView({ id }: { id: number }) {
       <MoveDialog
         isOpen={move.isOpen}
         onClose={move.onClose}
-        title={`Move “${c.name}”`}
+        title={t('Move “{name}”', { name: c.name })}
         current={c.parent_id}
         allowRoot
         exclude={c.id}
@@ -482,23 +483,23 @@ function ArchiveView() {
     try {
       await fn();
     } catch (e) {
-      toast({ status: 'error', title: 'Could not restore', description: apiErrorMessage(e, 'Please try again'), duration: 5000 });
+      toast({ status: 'error', title: t('Could not restore'), description: apiErrorMessage(e, t('Please try again')), duration: 5000 });
     }
   };
   return (
     <VStack align="stretch" spacing={4}>
-      <PageHeader title="Archive" subtitle="Archived questions, dashboards and collections. Restore them, or delete them for good." />
+      <PageHeader title={t('Archive')} subtitle={t('Archived questions, dashboards and collections. Restore them, or delete them for good.')} />
       {isPending && <Skeleton h="160px" borderRadius="xl" />}
       {error && (
         <Alert status="error" borderRadius="xl">
           <AlertIcon />
-          {apiErrorMessage(error, 'Could not load the archive')}
+          {apiErrorMessage(error, t('Could not load the archive'))}
         </Alert>
       )}
       {data && (
         <>
-          <Panel title="Collections">
-            {data.collections.length === 0 && <Empty>No archived collections.</Empty>}
+          <Panel title={t('Collections')}>
+            {data.collections.length === 0 && <Empty>{t('No archived collections.')}</Empty>}
             {data.collections.map((c) => (
               <ArchiveRow
                 key={`c${c.id}`}
@@ -509,8 +510,8 @@ function ArchiveView() {
               />
             ))}
           </Panel>
-          <Panel title="Dashboards">
-            {data.dashboards.length === 0 && <Empty>No archived dashboards.</Empty>}
+          <Panel title={t('Dashboards')}>
+            {data.dashboards.length === 0 && <Empty>{t('No archived dashboards.')}</Empty>}
             {data.dashboards.map((d) => (
               <ArchiveRow
                 key={`d${d.id}`}
@@ -523,7 +524,7 @@ function ArchiveView() {
             ))}
           </Panel>
           {(data.datasets?.length ?? 0) > 0 && (
-            <Panel title="Uploaded files">
+            <Panel title={t('Uploaded files')}>
               {data.datasets!.map((d) => (
                 <ArchiveRow
                   key={`f${d.id}`}
@@ -536,8 +537,8 @@ function ArchiveView() {
               ))}
             </Panel>
           )}
-          <Panel title="Questions">
-            {data.questions.length === 0 && <Empty>No archived questions.</Empty>}
+          <Panel title={t('Questions')}>
+            {data.questions.length === 0 && <Empty>{t('No archived questions.')}</Empty>}
             {data.questions.map((q) => {
               const Icon = KIND_ICON[q.kind];
               return (
@@ -557,12 +558,12 @@ function ArchiveView() {
       <ConfirmDialog
         isOpen={deleting !== null}
         onClose={() => setDeleting(null)}
-        title="Delete for good?"
-        confirmLabel="Delete"
+        title={t('Delete for good?')}
+        confirmLabel={t('Delete')}
         body={
           deleting?.kind === 'collection'
-            ? `“${deleting.name}” and everything inside it (questions, dashboards and collections) will be deleted. This cannot be undone.`
-            : `“${deleting?.name}” will be deleted. This cannot be undone.`
+            ? t('“{name}” and everything inside it (questions, dashboards and collections) will be deleted. This cannot be undone.', { name: deleting.name })
+            : t('“{name}” will be deleted. This cannot be undone.', { name: deleting?.name })
         }
         onConfirm={async () => {
           if (!deleting) return;
@@ -586,15 +587,15 @@ function ArchiveRow({ icon, name, detail, onRestore, onDelete }: { icon: ReactNo
         </Text>
         {detail && (
           <Text fontSize="xs" color="mutedText">
-            was in {detail}
+            {t('was in {name}', { name: detail })}
           </Text>
         )}
       </Box>
       <Button size="xs" variant="subtle" leftIcon={<RefreshIcon boxSize={3} />} onClick={onRestore}>
-        Restore
+        {t('Restore')}
       </Button>
       <Button size="xs" variant="ghost" colorScheme="red" leftIcon={<TrashIcon boxSize={3} />} onClick={onDelete}>
-        Delete
+        {t('Delete')}
       </Button>
     </Stack>
   );

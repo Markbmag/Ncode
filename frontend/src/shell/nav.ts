@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { IconProps } from '@chakra-ui/react';
 import { BellIcon, ChartIcon, CodeIcon, FolderIcon, HomeIcon, LayoutIcon, MergeIcon, SearchIcon, ShieldIcon, TableIcon, UploadIcon } from '../icons';
+import { t } from '../i18n/index.ts';
 
 export interface NavItem {
   to: string;
@@ -12,15 +13,15 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Home', icon: HomeIcon },
-  { to: '/search', label: 'Search', icon: SearchIcon },
-  { to: '/browse', label: 'Browse', icon: TableIcon },
-  { to: '/library', label: 'Library', icon: FolderIcon },
-  { to: '/questions', label: 'New question', icon: ChartIcon, end: true },
-  { to: '/sql', label: 'SQL editor', icon: CodeIcon },
-  { to: '/combine', label: 'Combine', icon: MergeIcon },
-  { to: '/datasets', label: 'Uploads', icon: UploadIcon },
-  { to: '/dashboards', label: 'Dashboards', icon: LayoutIcon },
-  { to: '/subscriptions', label: 'Subscriptions', icon: BellIcon },
-  { to: '/admin', label: 'Admin', icon: ShieldIcon, adminOnly: true },
+  { to: '/', label: t('Home'), icon: HomeIcon },
+  { to: '/search', label: t('Search'), icon: SearchIcon },
+  { to: '/browse', label: t('Browse'), icon: TableIcon },
+  { to: '/library', label: t('Library'), icon: FolderIcon },
+  { to: '/questions', label: t('New question'), icon: ChartIcon, end: true },
+  { to: '/sql', label: t('SQL editor'), icon: CodeIcon },
+  { to: '/combine', label: t('Combine'), icon: MergeIcon },
+  { to: '/datasets', label: t('Uploads'), icon: UploadIcon },
+  { to: '/dashboards', label: t('Dashboards'), icon: LayoutIcon },
+  { to: '/subscriptions', label: t('Subscriptions'), icon: BellIcon },
+  { to: '/admin', label: t('Admin'), icon: ShieldIcon, adminOnly: true },
 ];

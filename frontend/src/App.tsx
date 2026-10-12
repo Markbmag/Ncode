@@ -8,6 +8,7 @@ import { queryClient } from './lib/queryClient';
 import Login from './Login';
 import { AppRoutes } from './routes';
 import { WorkspaceProvider } from './workspace/WorkspaceProvider';
+import { t } from './i18n/index.ts';
 
 // Public links and embeds (M8) open without signing in.
 const PublicPage = lazy(() => import('./public/PublicPage'));
@@ -42,7 +43,7 @@ function SignedInApp() {
       .catch((err: unknown) => {
         setUser(null);
         if (!(axios.isAxiosError(err) && err.response)) {
-          setNotice('The server is not reachable. Make sure the backend is running.');
+          setNotice(t('The server is not reachable. Make sure the backend is running.'));
         }
       })
       .finally(() => setChecking(false));
@@ -53,7 +54,7 @@ function SignedInApp() {
     const handler = () => {
       queryClient.clear(); // never show one user's data to the next
       setUser(null);
-      setNotice('Your session has expired. Please sign in again.');
+      setNotice(t('Your session has expired. Please sign in again.'));
     };
     window.addEventListener(UNAUTHORIZED_EVENT, handler);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler);

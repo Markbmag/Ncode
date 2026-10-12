@@ -5,11 +5,12 @@ import type { SchemaInfo } from '../../query/draft';
 import { joinSuggestions } from '../../query/joins';
 import type { Join, JoinType, QuerySpec } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
+import { t } from '../../i18n/index.ts';
 
 const TYPES: { value: JoinType; label: string; hint: string }[] = [
-  { value: 'left', label: 'Left join', hint: 'Keep every row of the data so far, add matches where they exist' },
-  { value: 'inner', label: 'Inner join', hint: 'Only rows that have a match on both sides' },
-  { value: 'full', label: 'Full join', hint: 'Every row from both sides (not on MySQL / MariaDB)' },
+  { value: 'left', label: t('Left join'), hint: t('Keep every row of the data so far, add matches where they exist') },
+  { value: 'inner', label: t('Inner join'), hint: t('Only rows that have a match on both sides') },
+  { value: 'full', label: t('Full join'), hint: t('Every row from both sides (not on MySQL / MariaDB)') },
 ];
 
 interface JoinEditorProps {
@@ -62,11 +63,11 @@ export function JoinEditor({ spec, schema, onChange }: JoinEditorProps) {
                 {join.alias && join.alias !== join.table && (
                   <Text as="span" color="faintText" fontWeight={400}>
                     {' '}
-                    as {join.alias}
+                    {t('as {alias}', { alias: join.alias })}
                   </Text>
                 )}
               </Text>
-              <Select size="xs" maxW="120px" value={join.type} onChange={(e) => update(i, { ...join, type: e.target.value as JoinType })} aria-label="Join type">
+              <Select size="xs" maxW="120px" value={join.type} onChange={(e) => update(i, { ...join, type: e.target.value as JoinType })} aria-label={t('Join type')}>
                 {TYPES.map((t) => (
                   <option key={t.value} value={t.value} title={t.hint}>
                     {t.label}
@@ -74,31 +75,31 @@ export function JoinEditor({ spec, schema, onChange }: JoinEditorProps) {
                 ))}
               </Select>
               {!custom && (
-                <Tooltip label="The join follows the foreign keys declared in the database" hasArrow>
+                <Tooltip label={t('The join follows the foreign keys declared in the database')} hasArrow>
                   <Badge bg="panelBg" color="mutedText" textTransform="none">
-                    automatic{via.length > 0 ? ` · via ${via.map((v) => humanize(v.table)).join(', ')}` : ''}
+                    {via.length > 0 ? t('automatic · via {tables}', { tables: via.map((v) => humanize(v.table)).join(', ') }) : t('automatic')}
                   </Badge>
                 </Tooltip>
               )}
-              <IconButton aria-label="Remove join" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => update(i, null)} ml="auto" />
+              <IconButton aria-label={t('Remove join')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => update(i, null)} ml="auto" />
             </Flex>
             {custom && (
               <VStack align="stretch" spacing={1} pl={6}>
                 {(join.on ?? []).map((pair, p) => (
                   <HStack key={p} spacing={2}>
-                    <ColumnSelect options={before} value={pair.left || undefined} onChange={(left) => update(i, { ...join, on: join.on!.map((x, k) => (k === p ? { ...x, left } : x)) })} aria-label="Column so far" />
+                    <ColumnSelect options={before} value={pair.left || undefined} onChange={(left) => update(i, { ...join, on: join.on!.map((x, k) => (k === p ? { ...x, left } : x)) })} aria-label={t('Column so far')} />
                     <Text fontSize="sm">=</Text>
-                    <ColumnSelect options={rightOptions} value={pair.right || undefined} onChange={(right) => update(i, { ...join, on: join.on!.map((x, k) => (k === p ? { ...x, right } : x)) })} aria-label="Column of the joined table" />
+                    <ColumnSelect options={rightOptions} value={pair.right || undefined} onChange={(right) => update(i, { ...join, on: join.on!.map((x, k) => (k === p ? { ...x, right } : x)) })} aria-label={t('Column of the joined table')} />
                     {join.on!.length > 1 && (
-                      <IconButton aria-label="Remove condition" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => update(i, { ...join, on: join.on!.filter((_, k) => k !== p) })} />
+                      <IconButton aria-label={t('Remove condition')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => update(i, { ...join, on: join.on!.filter((_, k) => k !== p) })} />
                     )}
                   </HStack>
                 ))}
                 <HStack spacing={2}>
                   <Button size="xs" variant="ghost" leftIcon={<PlusIcon boxSize={3} />} onClick={() => update(i, { ...join, on: [...(join.on ?? []), { left: '', right: '' }] })}>
-                    Another condition
+                    {t('Another condition')}
                   </Button>
-                  <Input size="xs" maxW="140px" value={join.alias ?? ''} placeholder="alias" onChange={(e) => update(i, { ...join, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label="Alias" />
+                  <Input size="xs" maxW="140px" value={join.alias ?? ''} placeholder={t('alias')} onChange={(e) => update(i, { ...join, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label={t('Alias')} />
                 </HStack>
               </VStack>
             )}
@@ -108,18 +109,18 @@ export function JoinEditor({ spec, schema, onChange }: JoinEditorProps) {
 
       <Menu isLazy>
         <MenuButton as={Button} size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} alignSelf="flex-start" data-testid="add-join">
-          Join data
+          {t('Join data')}
         </MenuButton>
         <MenuList maxH="360px" overflowY="auto" fontSize="sm">
           {suggestions.length > 0 && (
-            <MenuGroup title="Related (foreign keys)">
+            <MenuGroup title={t('Related (foreign keys)')}>
               {suggestions.map((s) => (
                 <MenuItem key={s.table} onClick={() => addAuto(s.table)} data-testid={`join-suggestion-${s.table}`}>
                   <Flex direction="column">
                     <Text>{humanize(s.table)}</Text>
                     {s.via.length > 0 && (
                       <Text fontSize="xs" color="faintText">
-                        via {s.via.map(humanize).join(' → ')}
+                        {t('via {tables}', { tables: s.via.map(humanize).join(' → ') })}
                       </Text>
                     )}
                   </Flex>
@@ -129,7 +130,7 @@ export function JoinEditor({ spec, schema, onChange }: JoinEditorProps) {
           )}
           {suggestions.length > 0 && others.length > 0 && <MenuDivider />}
           {others.length > 0 && (
-            <MenuGroup title="Other tables (you give the condition)">
+            <MenuGroup title={t('Other tables (you give the condition)')}>
               {others.map((t) => (
                 <MenuItem key={t} onClick={() => addCustom(t)}>
                   {humanize(t)}

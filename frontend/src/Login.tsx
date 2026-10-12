@@ -6,6 +6,7 @@ import axios from 'axios';
 import { http, setToken } from './api';
 import type { LoginResponse, User } from './api';
 import { ColorModeButton, Logo } from './components/Sidebar';
+import { t } from './i18n/index.ts';
 
 interface LoginProps {
   onLoggedIn: (user: User) => void;
@@ -29,12 +30,12 @@ function Login({ onLoggedIn, notice }: LoginProps) {
       onLoggedIn(res.data.user);
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
-        setError('Wrong username or password.');
+        setError(t('Wrong username or password.'));
       } else if (axios.isAxiosError(err) && err.response?.status === 429) {
         const wait = err.response.headers['retry-after'];
-        setError(`Too many attempts. Try again in ${wait ?? 'a few'} seconds.`);
+        setError(wait ? t('Too many attempts. Try again in {n} seconds.', { n: wait }) : t('Too many attempts. Try again in a few seconds.'));
       } else {
-        setError('The server is not reachable. Make sure the backend is running.');
+        setError(t('The server is not reachable. Make sure the backend is running.'));
       }
     } finally {
       setLoading(false);
@@ -70,10 +71,10 @@ function Login({ onLoggedIn, notice }: LoginProps) {
           <Logo />
           <Box>
             <Text fontSize="xl" fontWeight={650}>
-              Sign in
+              {t('Sign in')}
             </Text>
             <Text fontSize="sm" color="mutedText">
-              Use the account your administrator created for you.
+              {t('Use the account your administrator created for you.')}
             </Text>
           </Box>
           {(notice || error) && (
@@ -83,11 +84,11 @@ function Login({ onLoggedIn, notice }: LoginProps) {
             </Alert>
           )}
           <FormControl>
-            <FormLabel fontSize="sm">Username</FormLabel>
+            <FormLabel fontSize="sm">{t('Username')}</FormLabel>
             <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus />
           </FormControl>
           <FormControl>
-            <FormLabel fontSize="sm">Password</FormLabel>
+            <FormLabel fontSize="sm">{t('Password')}</FormLabel>
             <Input
               type="password"
               value={password}
@@ -95,8 +96,8 @@ function Login({ onLoggedIn, notice }: LoginProps) {
               autoComplete="current-password"
             />
           </FormControl>
-          <Button type="submit" size="lg" isLoading={loading} loadingText="Signing in">
-            Sign in
+          <Button type="submit" size="lg" isLoading={loading} loadingText={t('Signing in')}>
+            {t('Sign in')}
           </Button>
         </VStack>
       </Box>

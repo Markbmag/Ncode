@@ -34,6 +34,7 @@ import { ParametersBar } from '../library/ParametersBar';
 import { bindSpec, shapeOf, specParams, syncBuilderParams, valuesFromSearch, valuesToSearch } from '../library/params';
 import type { ParamShape, ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
+import { t, tn } from '../i18n/index.ts';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
 const draftKey = (connection: string) => `ncode_question_${connection}`;
@@ -128,7 +129,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const prepared = useMemo(() => {
     if (!prepared0) return null;
     const bound = bindSpec(prepared0.spec, paramDefs, paramValues);
-    const problems = [...prepared0.problems, ...bound.missing.map((m) => `Give a value for “${m}”`)];
+    const problems = [...prepared0.problems, ...bound.missing.map((m) => t('Give a value for “{name}”', { name: m }))];
     return { spec: bound.value, problems };
   }, [prepared0, paramDefs, paramValues]);
   const preparedJson = prepared ? JSON.stringify(prepared.spec) : '';
@@ -187,7 +188,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
     return (
       <Alert status="error" borderRadius="xl">
         <AlertIcon />
-        {apiErrorMessage(schemaQuery.error, 'Could not read the database structure')}
+        {apiErrorMessage(schemaQuery.error, t('Could not read the database structure'))}
       </Alert>
     );
 
@@ -205,8 +206,8 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const builder = (
     <Box h="100%" overflowY="auto" pr={{ base: 0, lg: 3 }} pb={6} data-testid="builder">
       <VStack align="stretch" spacing={4}>
-        <Step title="Data" color="brand.300" testId="step-data">
-          <Select size="sm" value={validDraft?.source.table ?? ''} onChange={(e) => pickSource(e.target.value)} placeholder="Pick a table…" aria-label="Table">
+        <Step title={t('Data')} color="brand.300" testId="step-data">
+          <Select size="sm" value={validDraft?.source.table ?? ''} onChange={(e) => pickSource(e.target.value)} placeholder={t('Pick a table…')} aria-label={t('Table')}>
             {tableNames.map((t) => (
               <option key={t} value={t}>
                 {humanize(t)}
@@ -218,15 +219,15 @@ export function Builder({ connection, saved = null }: { connection: string; save
 
         {validDraft && (
           <>
-            <Step title="Join" color="teal.300" testId="step-join">
+            <Step title={t('Join')} color="teal.300" testId="step-join">
               <JoinEditor spec={validDraft} schema={schema} onChange={(joins) => update({ joins })} />
             </Step>
 
-            <Step title="Custom columns" color="cyan.300" hint="Formulas such as [total] - [discount] or round([total] / [qty], 2).">
+            <Step title={t('Custom columns')} color="cyan.300" hint={t('Formulas such as [total] - [discount] or round([total] / [qty], 2).')}>
               <CustomColumnsEditor columns={validDraft.expressions ?? []} onChange={(expressions) => update({ expressions })} options={baseOptions} />
             </Step>
 
-            <Step title="Filter" color="purple.300" testId="step-filter">
+            <Step title={t('Filter')} color="purple.300" testId="step-filter">
               <FilterEditor
                 group={validDraft.filters ?? EMPTY_GROUP}
                 onChange={(filters) => update({ filters })}
@@ -235,7 +236,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
               />
             </Step>
 
-            <Step title="Summarise" color="green.300" testId="step-summarise">
+            <Step title={t('Summarise')} color="green.300" testId="step-summarise">
               <SummarizeEditor
                 aggregations={validDraft.aggregations ?? []}
                 breakouts={validDraft.breakouts ?? []}
@@ -246,21 +247,21 @@ export function Builder({ connection, saved = null }: { connection: string; save
             </Step>
 
             {summarised ? (
-              <Step title="Filter the summary" color="pink.300" hint="Like HAVING in SQL: e.g. only groups whose total is above 1000.">
-                <FilterEditor group={validDraft.having ?? EMPTY_GROUP} onChange={(having) => update({ having })} options={outputOptions} emptyText="Every group is shown." />
+              <Step title={t('Filter the summary')} color="pink.300" hint={t('Like HAVING in SQL: e.g. only groups whose total is above 1000.')}>
+                <FilterEditor group={validDraft.having ?? EMPTY_GROUP} onChange={(having) => update({ having })} options={outputOptions} emptyText={t('Every group is shown.')} />
               </Step>
             ) : (
               <Step
-                title="Columns"
+                title={t('Columns')}
                 color="blue.300"
                 actions={
                   <Button size="xs" variant="ghost" onClick={() => setShowFields((v) => !v)}>
-                    {showFields ? 'Done' : 'Choose'}
+                    {showFields ? t('Done') : t('Choose')}
                   </Button>
                 }
               >
                 <Text fontSize="sm" color="mutedText">
-                  {validDraft.fields?.length ? `${validDraft.fields.length} chosen` : 'All columns'}
+                  {validDraft.fields?.length ? tn(validDraft.fields.length, '{n} chosen', '{n} chosen') : t('All columns')}
                 </Text>
                 <Collapse in={showFields} animateOpacity>
                   <Wrap spacing={2} pt={2}>
@@ -285,15 +286,15 @@ export function Builder({ connection, saved = null }: { connection: string; save
               </Step>
             )}
 
-            <Step title="Sort" color="orange.300">
+            <Step title={t('Sort')} color="orange.300">
               <SortEditor order={validDraft.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => update({ order })} />
             </Step>
 
-            <Step title="Calculate" color="teal.200" testId="step-calculate" hint="On the rows returned: vs. last year, running totals, shares, ranks, outliers.">
+            <Step title={t('Calculate')} color="teal.200" testId="step-calculate" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')}>
               <TransformsEditor transforms={validDraft.transforms ?? []} columns={state.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
             </Step>
 
-            <Step title="Row limit" color="gray.400">
+            <Step title={t('Row limit')} color="gray.400">
               <HStack>
                 <Input
                   size="sm"
@@ -304,10 +305,10 @@ export function Builder({ connection, saved = null }: { connection: string; save
                   placeholder={String(ws.limits.query_default_rows)}
                   value={validDraft.limit ?? ''}
                   onChange={(e) => update({ limit: e.target.value ? Math.min(Number(e.target.value), ws.limits.query_max_rows ?? 10000) : null })}
-                  aria-label="Row limit"
+                  aria-label={t('Row limit')}
                 />
                 <Text fontSize="xs" color="faintText">
-                  at most {(ws.limits.query_max_rows ?? 10000).toLocaleString()}
+                  {t('at most {n}', { n: (ws.limits.query_max_rows ?? 10000).toLocaleString() })}
                 </Text>
               </HStack>
             </Step>
@@ -336,7 +337,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
         onVizChange={setViz}
         empty={
           <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
-            {validDraft ? 'Run the question to see the result (Ctrl/Cmd + Enter).' : 'Pick a table to start. The result appears here while you build.'}
+            {validDraft ? t('Run the question to see the result (Ctrl/Cmd + Enter).') : t('Pick a table to start. The result appears here while you build.')}
           </Flex>
         }
       />
@@ -347,7 +348,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
     <Flex direction="column" h="100%" gap={3}>
       <QuestionHeader
         engine={conn?.engine}
-        title="New question"
+        title={t('New question')}
         subtitle={
           <>
             {conn?.label}
@@ -356,7 +357,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
         }
         saved={saved}
         dirty={dirty}
-        defaultName={validDraft ? humanize(validDraft.source.table) : 'Question'}
+        defaultName={validDraft ? humanize(validDraft.source.table) : t('Question')}
         payload={() => (prepared0 && prepared0.problems.length === 0 ? { kind: 'builder', spec: prepared0.spec, viz, parameters: paramDefs } : null)}
         onRevert={() => {
           if (!saved) return;
@@ -374,24 +375,24 @@ export function Builder({ connection, saved = null }: { connection: string; save
           }
         }}
       >
-        <Tooltip label="Run automatically after each change" hasArrow>
+        <Tooltip label={t('Run automatically after each change')} hasArrow>
           <HStack spacing={1.5}>
             <Switch size="sm" id="auto-preview" isChecked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
             <Text as="label" htmlFor="auto-preview" fontSize="xs" color="mutedText">
-              Live preview
+              {t('Live preview')}
             </Text>
           </HStack>
         </Tooltip>
-        {summarised && <Badge colorScheme="green">summarised</Badge>}
+        {summarised && <Badge colorScheme="green">{t('summarised')}</Badge>}
         <Button size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />} onClick={sqlModal.onOpen} isDisabled={!prepared || prepared.problems.length > 0} data-testid="view-sql">
-          View SQL
+          {t('View SQL')}
         </Button>
         <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={runNow} isDisabled={!prepared || prepared.problems.length > 0} data-testid="run-question">
-          Run
+          {t('Run')}
         </Button>
         {!saved && (
           <Button size="sm" variant="ghost" onClick={() => setDraft(null)} isDisabled={!draft}>
-            Start over
+            {t('Start over')}
           </Button>
         )}
       </QuestionHeader>
@@ -425,8 +426,8 @@ function ModelPicker({ onPick }: { onPick: (id: number) => void }) {
   const models = useQuestions({ models: true, limit: 100 });
   if (!models.data?.length) return null;
   return (
-    <Select size="sm" mt={2} value="" onChange={(e) => e.target.value && onPick(Number(e.target.value))} aria-label="Start from a model" data-testid="model-picker">
-      <option value="">… or start from a model</option>
+    <Select size="sm" mt={2} value="" onChange={(e) => e.target.value && onPick(Number(e.target.value))} aria-label={t('Start from a model')} data-testid="model-picker">
+      <option value="">{t('… or start from a model')}</option>
       {models.data.map((m) => (
         <option key={m.id} value={m.id}>
           {m.name}

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { t } from './i18n/index.ts';
 
 const TOKEN_KEY = 'ncode_token';
 export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
@@ -48,7 +49,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
       const first: unknown = detail[0];
       if (typeof first === 'object' && first !== null && 'msg' in first) return String((first as { msg: unknown }).msg);
     }
-    if (!error.response) return 'Сервер недоступен. Проверьте, что backend запущен.';
+    if (!error.response) return t('The server is not reachable. Make sure the backend is running.');
   }
   return fallback;
 }
