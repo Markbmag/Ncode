@@ -7,6 +7,7 @@ import type { VizState } from '../viz/state';
 import type { DashboardSummary } from '../dashboards/types';
 import type { Dataset, FederatedSpec } from '../federation/types';
 import type { ParameterDef } from './params';
+import { t } from '../i18n/index.ts';
 
 export { flattenTree } from './tree.ts';
 export type { TreeNode } from './tree.ts';
@@ -188,4 +189,4 @@ export const library = {
   favorite: (id: number, on: boolean) => after(on ? http.put(`/api/questions/${id}/favorite`) : http.delete(`/api/questions/${id}/favorite`)),
 };
 
-export const kindLabel: Record<QuestionKind, string> = { builder: 'Question', sql: 'SQL', federated: 'Multi-source' };
+export const kindLabel: Record<QuestionKind, string> = { builder: t('Question'), sql: 'SQL', federated: t('Multi-source') };

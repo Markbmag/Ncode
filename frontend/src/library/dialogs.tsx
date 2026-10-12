@@ -9,6 +9,7 @@ import { apiErrorMessage } from '../api';
 import { PlusIcon, XIcon } from '../icons';
 import { flattenTree, library, libraryKeys, useCollections, usePeople } from './api';
 import type { CollectionInfo, Grant } from './api';
+import { t } from '../i18n/index.ts';
 
 // ---------------------------------------------------------------- collection picker
 
@@ -44,14 +45,14 @@ export function CollectionPicker({ value, onChange, allowRoot = false, exclude =
       size="sm"
       value={value === null ? '' : String(value)}
       onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-      aria-label="Collection"
+      aria-label={t('Collection')}
       data-testid="collection-picker"
     >
-      {allowRoot ? <option value="">Top level</option> : value === null && <option value="">Choose…</option>}
+      {allowRoot ? <option value="">{t('Top level')}</option> : value === null && <option value="">{t('Choose…')}</option>}
       {nodes.map((n) => (
         <option key={n.id} value={n.id}>
           {'  '.repeat(n.depth)}
-          {n.mine ? 'My collection' : n.name}
+          {n.mine ? t('My collection') : n.name}
         </option>
       ))}
     </Select>
@@ -82,7 +83,7 @@ export function DialogShell({ isOpen, onClose, title, children, submitLabel, onS
       await onSubmit();
       onClose();
     } catch (e) {
-      setError(apiErrorMessage(e, 'That did not work'));
+      setError(apiErrorMessage(e, t('That did not work')));
     } finally {
       setBusy(false);
     }
@@ -113,7 +114,7 @@ export function DialogShell({ isOpen, onClose, title, children, submitLabel, onS
         </ModalBody>
         <ModalFooter gap={2}>
           <Button size="sm" variant="ghost" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button size="sm" type="submit" colorScheme={danger ? 'red' : undefined} variant={danger ? 'solid' : 'brand'} isLoading={busy} isDisabled={!canSubmit} data-testid="dialog-submit">
             {submitLabel}
@@ -146,7 +147,7 @@ export function SaveQuestionDialog(props: SaveDialogProps) {
   return props.isOpen ? <SaveQuestionForm {...props} /> : null;
 }
 
-function SaveQuestionForm({ isOpen, onClose, title = 'Save question', defaultName, defaultCollection, onSave }: SaveDialogProps) {
+function SaveQuestionForm({ isOpen, onClose, title = t('Save question'), defaultName, defaultCollection, onSave }: SaveDialogProps) {
   const { data } = useCollections();
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState('');
@@ -157,22 +158,22 @@ function SaveQuestionForm({ isOpen, onClose, title = 'Save question', defaultNam
       isOpen={isOpen}
       onClose={onClose}
       title={title}
-      submitLabel="Save"
+      submitLabel={t('Save')}
       canSubmit={name.trim() !== '' && collection !== null}
       onSubmit={() => onSave({ name: name.trim(), description: description.trim() || null, collection_id: collection as number })}
     >
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Name</FormLabel>
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={200} data-testid="save-name" />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} />
       </FormControl>
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Collection</FormLabel>
+        <FormLabel fontSize="sm">{t('Collection')}</FormLabel>
         <CollectionPicker value={collection} onChange={setPicked} />
-        <FormHelperText fontSize="xs">Only collections you can edit are listed. Your own collection is private.</FormHelperText>
+        <FormHelperText fontSize="xs">{t('Only collections you can edit are listed. Your own collection is private.')}</FormHelperText>
       </FormControl>
     </DialogShell>
   );
@@ -197,9 +198,9 @@ export function MoveDialog(props: MoveDialogProps) {
 function MoveForm({ isOpen, onClose, title, current, allowRoot = false, exclude = null, onMove }: MoveDialogProps) {
   const [target, setTarget] = useState<number | null>(current);
   return (
-    <DialogShell isOpen={isOpen} onClose={onClose} title={title} submitLabel="Move" canSubmit={target !== current && (allowRoot || target !== null)} onSubmit={() => onMove(target)}>
+    <DialogShell isOpen={isOpen} onClose={onClose} title={title} submitLabel={t('Move')} canSubmit={target !== current && (allowRoot || target !== null)} onSubmit={() => onMove(target)}>
       <FormControl>
-        <FormLabel fontSize="sm">Move to</FormLabel>
+        <FormLabel fontSize="sm">{t('Move to')}</FormLabel>
         <CollectionPicker value={target} onChange={setTarget} allowRoot={allowRoot} exclude={exclude} />
       </FormControl>
     </DialogShell>
@@ -230,20 +231,20 @@ function CollectionForm({ isOpen, onClose, collection, parentId, onDone }: Colle
     onDone?.(saved);
   };
   return (
-    <DialogShell isOpen={isOpen} onClose={onClose} title={collection ? 'Edit collection' : 'New collection'} submitLabel={collection ? 'Save' : 'Create'} canSubmit={name.trim() !== ''} onSubmit={save}>
+    <DialogShell isOpen={isOpen} onClose={onClose} title={collection ? t('Edit collection') : t('New collection')} submitLabel={collection ? t('Save') : t('Create')} canSubmit={name.trim() !== ''} onSubmit={save}>
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Name</FormLabel>
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={120} data-testid="collection-name" />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
       </FormControl>
       {!collection && (
         <FormControl>
-          <FormLabel fontSize="sm">Inside</FormLabel>
+          <FormLabel fontSize="sm">{t('Inside')}</FormLabel>
           <CollectionPicker value={parent} onChange={setParent} allowRoot />
-          <FormHelperText fontSize="xs">A collection at the top level is yours; share it to let others see it.</FormHelperText>
+          <FormHelperText fontSize="xs">{t('A collection at the top level is yours; share it to let others see it.')}</FormHelperText>
         </FormControl>
       )}
     </DialogShell>
@@ -252,7 +253,7 @@ function CollectionForm({ isOpen, onClose, collection, parentId, onDone }: Colle
 
 // ---------------------------------------------------------------- sharing
 
-const who = (g: Grant) => (g.user ? g.user : g.group ? `Group “${g.group}”` : g.role === 'all' ? 'Everyone' : `All with role "${g.role}"`);
+const who = (g: Grant) => (g.user ? g.user : g.group ? t('Group “{group}”', { group: g.group }) : g.role === 'all' ? t('Everyone') : t('All with role "{role}"', { role: g.role }));
 
 interface ShareDialogProps {
   isOpen: boolean;
@@ -269,7 +270,7 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
   const current = useQuery({ queryKey: libraryKeys.grants(collection.id), queryFn: () => library.grants(collection.id), gcTime: 0 });
   const [edited, setGrants] = useState<Grant[] | null>(null); // null = unchanged
   const grants = edited ?? current.data ?? null;
-  const loadError = current.isError ? apiErrorMessage(current.error, 'Could not read who has access') : null;
+  const loadError = current.isError ? apiErrorMessage(current.error, t('Could not read who has access')) : null;
   const [pick, setPick] = useState('');
   const [level, setLevel] = useState<'view' | 'edit'>('view');
 
@@ -292,16 +293,15 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
     <DialogShell
       isOpen={isOpen}
       onClose={onClose}
-      title={`Share “${collection.name}”`}
-      submitLabel="Save access"
+      title={t('Share “{name}”', { name: collection.name })}
+      submitLabel={t('Save access')}
       size="lg"
       canSubmit={grants !== null}
       onSubmit={() => library.setGrants(collection.id, own)}
     >
       <Text fontSize="sm" color="mutedText">
-        People you add here see everything in this collection and in the collections inside it. <b>Can edit</b> lets them save, move and archive
-        questions; only you (the owner) and admins can share, move or archive the collection itself. Running a question also needs access to its
-        database.
+        {t('People you add here see everything in this collection and in the collections inside it.')} <b>{t('Can edit')}</b>{' '}
+        {t('lets them save, move and archive questions; only you (the owner) and admins can share, move or archive the collection itself. Running a question also needs access to its database.')}
       </Text>
       {loadError && (
         <Alert status="error" borderRadius="md" fontSize="sm">
@@ -314,7 +314,7 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
         <VStack align="stretch" spacing={2} data-testid="grants">
           {own.length === 0 && inherited.length === 0 && (
             <Text fontSize="sm" color="faintText">
-              Only you and admins have access.
+              {t('Only you and admins have access.')}
             </Text>
           )}
           {own.map((g) => (
@@ -322,11 +322,11 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
               <Text fontSize="sm" flex={1}>
                 {who(g)}
               </Text>
-              <Select size="xs" maxW="120px" value={g.level} onChange={(e) => setOwn(own.map((x) => (who(x) === who(g) ? { ...x, level: e.target.value as 'view' | 'edit' } : x)))} aria-label={`Access of ${who(g)}`}>
-                <option value="view">Can view</option>
-                <option value="edit">Can edit</option>
+              <Select size="xs" maxW="120px" value={g.level} onChange={(e) => setOwn(own.map((x) => (who(x) === who(g) ? { ...x, level: e.target.value as 'view' | 'edit' } : x)))} aria-label={t('Access of {name}', { name: who(g) })}>
+                <option value="view">{t('Can view')}</option>
+                <option value="edit">{t('Can edit')}</option>
               </Select>
-              <IconButton aria-label={`Remove ${who(g)}`} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setOwn(own.filter((x) => who(x) !== who(g)))} />
+              <IconButton aria-label={t('Remove {name}', { name: who(g) })} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setOwn(own.filter((x) => who(x) !== who(g)))} />
             </Flex>
           ))}
           {inherited.map((g) => (
@@ -335,18 +335,18 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
                 {who(g)}
               </Text>
               <Text fontSize="xs">
-                {g.level === 'edit' ? 'Can edit' : 'Can view'} · from “{g.inherited_from?.name}”
+                {t(g.level === 'edit' ? 'Can edit · from “{name}”' : 'Can view · from “{name}”', { name: g.inherited_from?.name })}
               </Text>
             </Flex>
           ))}
           <HStack pt={2} borderTop="1px solid" borderColor="lineColor">
-            <Select size="sm" value={pick} onChange={(e) => setPick(e.target.value)} placeholder="Add a person, a group or everyone…" aria-label="Person to add" data-testid="share-pick">
-              {!taken.has('Everyone') && <option value="role:all">Everyone (all signed-in users)</option>}
+            <Select size="sm" value={pick} onChange={(e) => setPick(e.target.value)} placeholder={t('Add a person, a group or everyone…')} aria-label={t('Person to add')} data-testid="share-pick">
+              {!taken.has(t('Everyone')) && <option value="role:all">{t('Everyone (all signed-in users)')}</option>}
               {(people.data?.groups ?? [])
-                .filter((g) => !taken.has(`Group “${g}”`))
+                .filter((g) => !taken.has(t('Group “{group}”', { group: g })))
                 .map((g) => (
                   <option key={`g-${g}`} value={`group:${g}`}>
-                    Group: {g}
+                    {t('Group: {group}', { group: g })}
                   </option>
                 ))}
               {(people.data?.users ?? [])
@@ -357,12 +357,12 @@ function ShareForm({ isOpen, onClose, collection }: ShareDialogProps) {
                   </option>
                 ))}
             </Select>
-            <Select size="sm" maxW="130px" value={level} onChange={(e) => setLevel(e.target.value as 'view' | 'edit')} aria-label="Access to give">
-              <option value="view">Can view</option>
-              <option value="edit">Can edit</option>
+            <Select size="sm" maxW="130px" value={level} onChange={(e) => setLevel(e.target.value as 'view' | 'edit')} aria-label={t('Access to give')}>
+              <option value="view">{t('Can view')}</option>
+              <option value="edit">{t('Can edit')}</option>
             </Select>
             <Button size="sm" leftIcon={<PlusIcon boxSize={3} />} onClick={add} isDisabled={!pick} data-testid="share-add">
-              Add
+              {t('Add')}
             </Button>
           </HStack>
         </VStack>

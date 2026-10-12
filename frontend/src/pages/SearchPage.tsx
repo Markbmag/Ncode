@@ -8,6 +8,7 @@ import { ScopeModal } from '../components/ScopeModal';
 import { SearchBar } from '../components/SearchBar';
 import { SearchProgress } from '../components/SearchProgress';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t } from '../i18n/index.ts';
 
 export default function SearchPage() {
   const ws = useWorkspace();
@@ -29,10 +30,10 @@ export default function SearchPage() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  let scopeLabel = 'All tables';
-  if (scope.tables.length > 0) scopeLabel = `${scope.tables.length}${tableList ? ` of ${tableList.length}` : ''} tables`;
-  else if (tableList) scopeLabel = `All ${tableList.length} tables`;
-  if (excludePatterns.length > 0) scopeLabel += ` · ${excludePatterns.length} skipped`;
+  let scopeLabel = t('All tables');
+  if (scope.tables.length > 0) scopeLabel = tableList ? t('{n} of {total} tables', { n: scope.tables.length, total: tableList.length }) : t('{n} tables', { n: scope.tables.length });
+  else if (tableList) scopeLabel = t('All {n} tables', { n: tableList.length });
+  if (excludePatterns.length > 0) scopeLabel += t(' · {n} skipped', { n: excludePatterns.length });
   const scopeCustom = scope.tables.length > 0 || excludePatterns.length > 0;
 
   const running = state.phase === 'running';
@@ -74,7 +75,7 @@ export default function SearchPage() {
       <ResultsPanel key={ws.searchCount} state={state} connectionLabel={ws.active?.label ?? ''} onOpenTable={ws.openInExplorer} />
     );
   } else {
-    content = <ReadyState connectionLabel={ws.active?.label ?? 'your database'} scopeLabel={scopeLabel} />;
+    content = <ReadyState connectionLabel={ws.active?.label ?? t('your database')} scopeLabel={scopeLabel} />;
   }
 
   return (

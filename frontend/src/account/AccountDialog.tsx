@@ -5,6 +5,7 @@ import {
 } from '@chakra-ui/react';
 import { apiErrorMessage, http, setToken } from '../api';
 import { subscriptions } from '../automation/api';
+import { t } from '../i18n/index.ts';
 
 /** Your account: the email address for subscriptions, and your password. */
 export function AccountDialog({ username, email, onClose, onEmail }: { username: string; email: string | null; onClose: () => void; onEmail: (e: string | null) => void }) {
@@ -20,9 +21,9 @@ export function AccountDialog({ username, email, onClose, onEmail }: { username:
     setError(null);
     try {
       onEmail(await subscriptions.setMyEmail(address.trim()));
-      toast({ status: 'success', title: 'Email saved', duration: 1500 });
+      toast({ status: 'success', title: t('Email saved'), duration: 1500 });
     } catch (e) {
-      setError(apiErrorMessage(e, 'That did not work'));
+      setError(apiErrorMessage(e, t('That did not work')));
     } finally {
       setBusy(null);
     }
@@ -36,9 +37,9 @@ export function AccountDialog({ username, email, onClose, onEmail }: { username:
       setCurrent('');
       setNext('');
       setRepeat('');
-      toast({ status: 'success', title: 'Password changed', description: 'Other browsers where you were signed in are signed out.', duration: 4000 });
+      toast({ status: 'success', title: t('Password changed'), description: t('Other browsers where you were signed in are signed out.'), duration: 4000 });
     } catch (e) {
-      setError(apiErrorMessage(e, 'That did not work'));
+      setError(apiErrorMessage(e, t('That did not work')));
     } finally {
       setBusy(null);
     }
@@ -48,41 +49,41 @@ export function AccountDialog({ username, email, onClose, onEmail }: { username:
     <Modal isOpen onClose={onClose} size="md" isCentered>
       <ModalOverlay />
       <ModalContent data-testid="account-dialog">
-        <ModalHeader fontSize="md">Your account · {username}</ModalHeader>
+        <ModalHeader fontSize="md">{t('Your account · {name}', { name: username })}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={5}>
           <VStack align="stretch" spacing={4}>
             <Box>
               <Text fontSize="sm" color="mutedText" mb={2}>
-                Subscriptions and alerts that include you are sent to this address. Nobody else sees it.
+                {t('Subscriptions and alerts that include you are sent to this address. Nobody else sees it.')}
               </Text>
               <HStack>
                 <Input size="sm" type="email" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="you@company.com" data-testid="account-email" />
                 <Button size="sm" onClick={() => void saveEmail()} isLoading={busy === 'email'} isDisabled={address.trim() === (email ?? '')} data-testid="account-email-save">
-                  Save
+                  {t('Save')}
                 </Button>
               </HStack>
             </Box>
             <Divider />
             <VStack align="stretch" spacing={2}>
               <Text fontSize="sm" fontWeight={600}>
-                Change your password
+                {t('Change your password')}
               </Text>
               <FormControl>
-                <FormLabel fontSize="xs">Current password</FormLabel>
+                <FormLabel fontSize="xs">{t('Current password')}</FormLabel>
                 <Input size="sm" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" data-testid="pw-current" />
               </FormControl>
               <FormControl>
-                <FormLabel fontSize="xs">New password (at least 8 characters)</FormLabel>
+                <FormLabel fontSize="xs">{t('New password (at least 8 characters)')}</FormLabel>
                 <Input size="sm" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" data-testid="pw-new" />
               </FormControl>
               <FormControl isInvalid={mismatch}>
-                <FormLabel fontSize="xs">New password again</FormLabel>
+                <FormLabel fontSize="xs">{t('New password again')}</FormLabel>
                 <Input size="sm" type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" data-testid="pw-repeat" />
               </FormControl>
               <Button size="sm" variant="brand" alignSelf="flex-start" onClick={() => void savePassword()} isLoading={busy === 'password'}
                 isDisabled={!current || next.length < 8 || next !== repeat} data-testid="pw-save">
-                Change password
+                {t('Change password')}
               </Button>
             </VStack>
             {error && (

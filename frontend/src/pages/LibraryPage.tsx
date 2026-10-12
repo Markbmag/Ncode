@@ -196,7 +196,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
           )}
         </MenuList>
       </Menu>
-      <MoveDialog isOpen={move.isOpen} onClose={move.onClose} title={t('Move “{name}”', { name: q.name })} current={q.collection_id} onMove={(t) => library.updateQuestion(q.id, { collection_id: t as number })} />
+      <MoveDialog isOpen={move.isOpen} onClose={move.onClose} title={t('Move “{name}”', { name: q.name })} current={q.collection_id} onMove={(target) => library.updateQuestion(q.id, { collection_id: target as number })} />
     </Flex>
   );
 }

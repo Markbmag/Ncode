@@ -27,6 +27,7 @@ import {
 import type { FilterValues } from '../dashboards/logic';
 import { REFRESH_CHOICES } from '../dashboards/types';
 import type { Dashboard, DashCard, Definition } from '../dashboards/types';
+import { t } from '../i18n/index.ts';
 
 const ROW_HEIGHT = 40;
 const MARGIN = 12;
@@ -39,10 +40,10 @@ export default function DashboardPage() {
   if (query.isError || !query.data)
     return (
       <Alert status="error" borderRadius="xl" flexDirection="column" alignItems="flex-start" gap={2}>
-        <Text fontWeight={600}>This dashboard could not be opened</Text>
-        <Text fontSize="sm">{apiErrorMessage(query.error, 'It may have been deleted, or it was not shared with you.')}</Text>
+        <Text fontWeight={600}>{t('This dashboard could not be opened')}</Text>
+        <Text fontSize="sm">{apiErrorMessage(query.error, t('It may have been deleted, or it was not shared with you.'))}</Text>
         <Button as={RouterLink} to="/dashboards" size="sm">
-          All dashboards
+          {t('All dashboards')}
         </Button>
       </Alert>
     );
@@ -119,7 +120,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
   const enterTv = () => {
-    void frame.current?.requestFullscreen?.().catch(() => toast({ status: 'warning', title: 'Full screen is not available in this browser' }));
+    void frame.current?.requestFullscreen?.().catch(() => toast({ status: 'warning', title: t('Full screen is not available in this browser') }));
   };
 
   // ------------------------------------------------------------------ editing
@@ -147,9 +148,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
     try {
       await dashboards.save(dashboard.id, toDefinition({ ...draft, settings: { ...draft.settings, refresh: refreshEvery as Definition['settings']['refresh'] } }));
       setDraft(null);
-      toast({ status: 'success', title: 'Dashboard saved', duration: 1500 });
+      toast({ status: 'success', title: t('Dashboard saved'), duration: 1500 });
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     } finally {
       setSaving(false);
     }
@@ -159,7 +160,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
     try {
       await fn();
     } catch (e) {
-      toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again'), duration: 5000 });
+      toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 5000 });
     }
   };
 
@@ -192,7 +193,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       {!tv && (
         <HStack spacing={1} fontSize="xs" color="mutedText" mb={1} className="no-print">
           <Link as={RouterLink} to="/dashboards">
-            Dashboards
+            {t('Dashboards')}
           </Link>
           {dashboard.path.map((p) => (
             <HStack key={p.id} spacing={1}>
@@ -212,17 +213,17 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
             </Text>
             {!tv && (
               <IconButton
-                aria-label={dashboard.favorite ? 'Remove from favourites' : 'Add to favourites'}
+                aria-label={dashboard.favorite ? t('Remove from favourites') : t('Add to favourites')}
                 size="xs"
                 variant="ghost"
                 className="no-print"
                 color={dashboard.favorite ? 'yellow.400' : 'faintText'}
                 icon={<StarIcon boxSize={4} fill={dashboard.favorite ? 'currentColor' : 'none'} />}
-                onClick={() => void act('Could not change favourites', () => dashboards.favorite(dashboard.id, !dashboard.favorite))}
+                onClick={() => void act(t('Could not change favourites'), () => dashboards.favorite(dashboard.id, !dashboard.favorite))}
               />
             )}
-            {!canEdit && !tv && <Badge className="no-print">view only</Badge>}
-            {editing && <Badge colorScheme="orange">editing</Badge>}
+            {!canEdit && !tv && <Badge className="no-print">{t('view only')}</Badge>}
+            {editing && <Badge colorScheme="orange">{t('editing')}</Badge>}
           </HStack>
           {dashboard.description && !tv && (
             <Text fontSize="sm" color="mutedText" noOfLines={2}>
@@ -234,84 +235,84 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         {editing ? (
           <HStack spacing={2} wrap="wrap" className="no-print">
             <Button size="sm" variant="subtle" leftIcon={<ChartIcon boxSize={4} />} onClick={addQuestion.onOpen} data-testid="add-question-card">
-              Question
+              {t('Question')}
             </Button>
             <Button size="sm" variant="subtle" leftIcon={<PencilIcon boxSize={4} />} onClick={() => setEditingCard({ key: '', kind: 'text', text: '', layout: { x: 0, y: 0, w: 6, h: 3 } })} data-testid="add-text-card">
-              Text
+              {t('Text')}
             </Button>
             <Button size="sm" variant="subtle" leftIcon={<PlusIcon boxSize={4} />} onClick={() => setEditingCard({ key: '', kind: 'heading', text: '', layout: { x: 0, y: 0, w: 12, h: 1 } })} data-testid="add-heading-card">
-              Heading
+              {t('Heading')}
             </Button>
             <Button size="sm" variant="subtle" leftIcon={<SlidersIcon boxSize={4} />} onClick={filtersDialog.onOpen} data-testid="edit-filters">
-              Filters{def.filters.length ? ` (${def.filters.length})` : ''}
+              {def.filters.length ? t('Filters ({n})', { n: def.filters.length }) : t('Filters')}
             </Button>
-            <Button size="sm" variant="subtle" leftIcon={<LayoutIcon boxSize={4} />} onClick={() => change((d) => addTab(d, `Tab ${d.tabs.length + (d.tabs.length ? 1 : 2)}`))} data-testid="add-tab">
-              Tab
+            <Button size="sm" variant="subtle" leftIcon={<LayoutIcon boxSize={4} />} onClick={() => change((d) => addTab(d, t('Tab {n}', { n: d.tabs.length + (d.tabs.length ? 1 : 2) })))} data-testid="add-tab">
+              {t('Tab')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button size="sm" variant="brand" leftIcon={<SaveIcon boxSize={4} />} onClick={() => void save()} isLoading={saving} data-testid="save-dashboard">
-              Save
+              {t('Save')}
             </Button>
           </HStack>
         ) : (
           <HStack spacing={2} wrap="wrap" className="no-print">
-            <Tooltip label={`Last refreshed ${new Date(lastRefresh).toLocaleTimeString()}`} hasArrow>
-              <IconButton aria-label="Refresh all cards" size="sm" variant="subtle" icon={<RefreshIcon boxSize={4} />} onClick={refreshAll} data-testid="refresh-dashboard" />
+            <Tooltip label={t('Last refreshed {time}', { time: new Date(lastRefresh).toLocaleTimeString() })} hasArrow>
+              <IconButton aria-label={t('Refresh all cards')} size="sm" variant="subtle" icon={<RefreshIcon boxSize={4} />} onClick={refreshAll} data-testid="refresh-dashboard" />
             </Tooltip>
-            <Select size="sm" w="170px" value={refreshEvery} onChange={(e) => setRefreshEvery(Number(e.target.value))} aria-label="Auto-refresh" data-testid="auto-refresh">
+            <Select size="sm" w="170px" value={refreshEvery} onChange={(e) => setRefreshEvery(Number(e.target.value))} aria-label={t('Auto-refresh')} data-testid="auto-refresh">
               {REFRESH_CHOICES.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {r.value ? `Every ${r.label}` : 'Auto-refresh off'}
+                  {r.value ? t('Every {interval}', { interval: r.label }) : t('Auto-refresh off')}
                 </option>
               ))}
             </Select>
             {!tv && (
               <>
-                <Tooltip label="Subscriptions: send it by email or to a chat" hasArrow>
-                  <IconButton aria-label="Subscriptions" size="sm" variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
+                <Tooltip label={t('Subscriptions: send it by email or to a chat')} hasArrow>
+                  <IconButton aria-label={t('Subscriptions')} size="sm" variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
                 </Tooltip>
                 <Button size="sm" variant="subtle" onClick={enterTv} data-testid="tv-mode">
-                  TV mode
+                  {t('TV mode')}
                 </Button>
                 {canEdit && (
                   <Button size="sm" variant="brand" leftIcon={<PencilIcon boxSize={4} />} onClick={startEdit} data-testid="edit-dashboard">
-                    Edit
+                    {t('Edit')}
                   </Button>
                 )}
                 <Menu isLazy placement="bottom-end">
-                  <MenuButton as={IconButton} aria-label="More actions" size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="dashboard-menu" />
+                  <MenuButton as={IconButton} aria-label={t('More actions')} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="dashboard-menu" />
                   <MenuList fontSize="sm">
-                    <MenuItem onClick={() => window.print()}>Print / save as PDF</MenuItem>
+                    <MenuItem onClick={() => window.print()}>{t('Print / save as PDF')}</MenuItem>
                     {ws.isAdmin && (
                       <MenuItem icon={<GlobeIcon boxSize={4} />} onClick={share.onOpen} data-testid="dashboard-share">
-                        Public link / embed…
+                        {t('Public link / embed…')}
                       </MenuItem>
                     )}
-                    <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act('Could not duplicate', async () => navigate(`/dashboards/${(await dashboards.duplicate(dashboard.id)).id}`))}>
-                      Duplicate
+                    <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/dashboards/${(await dashboards.duplicate(dashboard.id)).id}`))}>
+                      {t('Duplicate')}
                     </MenuItem>
                     {canEdit && (
                       <>
                         <MenuItem icon={<PencilIcon boxSize={4} />} onClick={details.onOpen}>
-                          Rename / describe…
+                          {t('Rename / describe…')}
                         </MenuItem>
                         <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
-                          Move…
+                          {t('Move…')}
                         </MenuItem>
                         <MenuDivider />
                         <MenuItem
                           icon={<ArchiveIcon boxSize={4} />}
                           onClick={() =>
-                            void act('Could not archive', async () => {
+                            void act(t('Could not archive'), async () => {
                               await dashboards.update(dashboard.id, { archived: true });
-                              toast({ status: 'info', title: `“${dashboard.name}” archived`, description: 'Restore it from Library → Archive.' });
+                              toast({ status: 'info', title: t('“{name}” archived', { name: dashboard.name }), description: t('Restore it from Library → Archive.') });
                               navigate('/dashboards');
                             })
                           }
                         >
-                          Archive
+                          {t('Archive')}
                         </MenuItem>
                       </>
                     )}
@@ -321,7 +322,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
             )}
             {tv && (
               <Button size="sm" variant="ghost" onClick={() => void document.exitFullscreen()}>
-                Exit TV mode
+                {t('Exit TV mode')}
               </Button>
             )}
           </HStack>
@@ -338,23 +339,23 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       {/* tabs */}
       {def.tabs.length > 0 && (
         <HStack spacing={1} mb={3} borderBottom="1px solid" borderColor="lineColor" overflowX="auto" data-testid="dashboard-tabs">
-          {def.tabs.map((t) => {
-            const active = t.id === activeTab;
+          {def.tabs.map((tab) => {
+            const active = tab.id === activeTab;
             return (
-              <HStack key={t.id} spacing={0} borderBottom="2px solid" borderColor={active ? 'brand.400' : 'transparent'} mb="-1px">
-                {editing && renamingTab === t.id ? (
+              <HStack key={tab.id} spacing={0} borderBottom="2px solid" borderColor={active ? 'brand.400' : 'transparent'} mb="-1px">
+                {editing && renamingTab === tab.id ? (
                   <Input
                     size="xs"
                     w="140px"
                     autoFocus
-                    defaultValue={t.name}
+                    defaultValue={tab.name}
                     onBlur={(e) => {
-                      const name = e.target.value.trim() || t.name;
-                      change((d) => ({ ...d, tabs: d.tabs.map((x) => (x.id === t.id ? { ...x, name: name.slice(0, 80) } : x)) }));
+                      const name = e.target.value.trim() || tab.name;
+                      change((d) => ({ ...d, tabs: d.tabs.map((x) => (x.id === tab.id ? { ...x, name: name.slice(0, 80) } : x)) }));
                       setRenamingTab(null);
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                    aria-label="Tab name"
+                    aria-label={t('Tab name')}
                   />
                 ) : (
                   <Button
@@ -363,22 +364,22 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                     borderRadius="0"
                     fontWeight={active ? 700 : 500}
                     color={active ? 'bodyText' : 'mutedText'}
-                    onClick={() => setTab(t.id)}
-                    onDoubleClick={() => editing && setRenamingTab(t.id)}
-                    data-testid={`tab-${t.id}`}
+                    onClick={() => setTab(tab.id)}
+                    onDoubleClick={() => editing && setRenamingTab(tab.id)}
+                    data-testid={`tab-${tab.id}`}
                   >
-                    {t.name}
+                    {tab.name}
                   </Button>
                 )}
                 {editing && (
-                  <IconButton aria-label={`Remove tab ${t.name}`} size="xs" variant="ghost" icon={<XIcon boxSize={2.5} />} onClick={() => change((d) => removeTab(d, t.id))} />
+                  <IconButton aria-label={t('Remove tab {name}', { name: tab.name })} size="xs" variant="ghost" icon={<XIcon boxSize={2.5} />} onClick={() => change((d) => removeTab(d, tab.id))} />
                 )}
               </HStack>
             );
           })}
           {editing && (
             <Text fontSize="2xs" color="faintText" pl={2} whiteSpace="nowrap">
-              double-click a tab to rename it
+              {t('double-click a tab to rename it')}
             </Text>
           )}
         </HStack>
@@ -388,10 +389,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       {tabCards.length === 0 && (
         <Flex direction="column" align="center" justify="center" gap={3} py={16} border="1px dashed" borderColor="lineColor" borderRadius="2xl" color="mutedText" textAlign="center">
           <LayoutIcon boxSize={8} />
-          <Text fontSize="sm">{editing ? 'Add saved questions, text and headings with the buttons above.' : 'This dashboard is empty.'}</Text>
+          <Text fontSize="sm">{editing ? t('Add saved questions, text and headings with the buttons above.') : t('This dashboard is empty.')}</Text>
           {!editing && canEdit && (
             <Button size="sm" variant="brand" onClick={startEdit}>
-              Add cards
+              {t('Add cards')}
             </Button>
           )}
         </Flex>
@@ -435,7 +436,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         isOpen={addQuestion.isOpen}
         onClose={addQuestion.onClose}
         onAdd={(q) =>
-          void act('Could not add the question', async () => {
+          void act(t('Could not add the question'), async () => {
             // its parameters and tables are needed to connect filters before the dashboard is saved
             const full = (await http.get<SavedQuestion>(`/api/questions/${q.id}`)).data;
             addCard({ kind: 'question', question_id: q.id, question: cardQuestion(full) });
@@ -470,7 +471,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       <MoveDialog
         isOpen={move.isOpen}
         onClose={move.onClose}
-        title={`Move “${dashboard.name}”`}
+        title={t('Move “{name}”', { name: dashboard.name })}
         current={dashboard.collection_id}
         onMove={(target) => dashboards.update(dashboard.id, { collection_id: target as number })}
       />
@@ -500,17 +501,17 @@ function DetailsDialog({ dashboard, onClose }: { dashboard: Dashboard; onClose: 
     <DialogShell
       isOpen
       onClose={onClose}
-      title="Rename / describe"
-      submitLabel="Save"
+      title={t('Rename / describe')}
+      submitLabel={t('Save')}
       canSubmit={name.trim() !== ''}
       onSubmit={() => dashboards.update(dashboard.id, { name: name.trim(), description: description.trim() || null })}
     >
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Name</FormLabel>
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} autoFocus />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} />
       </FormControl>
     </DialogShell>

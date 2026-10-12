@@ -2,6 +2,7 @@ import { Box, HStack, Select, Text } from '@chakra-ui/react';
 import { engineMeta } from '../lib/engines';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { EngineBadge } from './EngineBadge';
+import { tn } from '../i18n/index.ts';
 
 /** The active database: a title on wide screens, a picker on phones (where the sidebar is hidden). */
 export function ConnectionHeader() {
@@ -26,7 +27,7 @@ export function ConnectionHeader() {
             </Text>
             <Text fontSize="sm" color="mutedText">
               {engineMeta(active.engine).label} · {active.database}
-              {tables && ` · ${tables.length} tables`}
+              {tables && ` · ${tn(tables.length, '{n} table', '{n} tables')}`}
             </Text>
           </Box>
         </HStack>

@@ -16,6 +16,7 @@ import { activeMappings, editorParams } from './logic';
 import type { FilterValues } from './logic';
 import { Markdown } from './Markdown';
 import type { DashCard, DashFilter } from './types';
+import { t, tn } from '../i18n/index.ts';
 
 interface Props {
   dashboardId: number;
@@ -42,7 +43,7 @@ export function DashboardCard(props: Props) {
     return (
       <Frame editing={editing} onEdit={props.onEdit} onRemove={props.onRemove} plain>
         <Text fontSize="xl" fontWeight={700} noOfLines={1} data-testid="heading-card">
-          {card.text || 'Heading'}
+          {card.text || t('Heading')}
         </Text>
       </Frame>
     );
@@ -90,8 +91,8 @@ function Frame({
           {status}
           {editing ? (
             <HStack spacing={0} className="no-drag">
-              {onEdit && <IconButton aria-label="Card settings" size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={onEdit} data-testid="card-edit" />}
-              {onRemove && <IconButton aria-label="Remove card" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} data-testid="card-remove" />}
+              {onEdit && <IconButton aria-label={t('Card settings')} size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={onEdit} data-testid="card-edit" />}
+              {onRemove && <IconButton aria-label={t('Remove card')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} data-testid="card-remove" />}
             </HStack>
           ) : (
             menu
@@ -139,7 +140,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
     if (vizState.mode === 'table') return { version: 1, type: 'table' };
     return effectiveViz(vizState, result).spec;
   }, [result, vizState]);
-  const title = card.title || q?.name || (q?.state === 'hidden' ? 'Not shared with you' : 'Question');
+  const title = card.title || q?.name || (q?.state === 'hidden' ? t('Not shared with you') : t('Question'));
   const name = safeFilename(title);
   const filtering = activeMappings(card, filters, values);
 
@@ -149,7 +150,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
       const res = await http.get<Blob>(`${tasks}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers: endpoints?.headers });
       saveBlob(`${name}.xlsx`, res.data);
     } catch (error) {
-      toast({ status: 'error', title: 'Excel export failed', description: await apiErrorMessageAsync(error, 'Refresh the card and retry') });
+      toast({ status: 'error', title: t('Excel export failed'), description: await apiErrorMessageAsync(error, t('Refresh the card and retry')) });
     }
   };
   const exportPng = () => {
@@ -170,42 +171,42 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const status = (
     <HStack spacing={1.5}>
       {filtering.length > 0 && (
-        <Tooltip label={`Filtered by ${filtering.map((f) => f.label).join(', ')}`} hasArrow>
+        <Tooltip label={t('Filtered by {filters}', { filters: filtering.map((f) => f.label).join(', ') })} hasArrow>
           <Badge fontSize="2xs" colorScheme="purple" variant="subtle">
-            {filtering.length} filter{filtering.length > 1 ? 's' : ''}
+            {tn(filtering.length, '{n} filter', '{n} filters')}
           </Badge>
         </Tooltip>
       )}
-      {q?.state === 'archived' && <Badge fontSize="2xs">archived</Badge>}
+      {q?.state === 'archived' && <Badge fontSize="2xs">{t('archived')}</Badge>}
       {busy && result && <Spinner size="xs" color="faintText" />}
     </HStack>
   );
   const menu = runnable ? (
     <Menu isLazy placement="bottom-end">
-      <MenuButton as={IconButton} aria-label={`Actions for ${title}`} size="xs" variant="ghost" icon={<MoreIcon boxSize={4} />} className="no-print" data-testid="card-menu" />
+      <MenuButton as={IconButton} aria-label={t('Actions for {name}', { name: title })} size="xs" variant="ghost" icon={<MoreIcon boxSize={4} />} className="no-print" data-testid="card-menu" />
       <MenuList fontSize="sm">
         <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={() => setRetry((n) => n + 1)}>
-          Refresh
+          {t('Refresh')}
         </MenuItem>
         {!endpoints && (
           <MenuItem icon={<CodeIcon boxSize={4} />} onClick={openInEditor} data-testid="card-open">
-            Open in editor
+            {t('Open in editor')}
           </MenuItem>
         )}
         <MenuDivider />
         {canDownload && (
           <>
             <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!result} onClick={() => result && downloadText(`${name}.csv`, buildCsvFromArrays(result.columns.map((c) => c.name), result.rows, ';'))}>
-              CSV (for Excel)
+              {t('CSV (for Excel)')}
             </MenuItem>
             <MenuItem icon={<DownloadIcon boxSize={4} />} isDisabled={!run.taskId || !result} onClick={() => void exportXlsx()}>
-              Excel workbook
+              {t('Excel workbook')}
             </MenuItem>
           </>
         )}
         {spec && !['table', 'kpi', 'pivot'].includes(spec.type) && (
           <MenuItem icon={<DownloadIcon boxSize={4} />} onClick={exportPng}>
-            Chart as PNG
+            {t('Chart as PNG')}
           </MenuItem>
         )}
       </MenuList>
@@ -213,18 +214,18 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   ) : null;
 
   let body: React.ReactNode;
-  if (!q || q.state === 'hidden') body = <Message>This question is not shared with you.</Message>;
-  else if (q.state === 'deleted') body = <Message>The question on this card was deleted.</Message>;
+  if (!q || q.state === 'hidden') body = <Message>{t('This question is not shared with you.')}</Message>;
+  else if (q.state === 'deleted') body = <Message>{t('The question on this card was deleted.')}</Message>;
   else if (run.status === 'error')
     body = (
-      <Message tone="error" action={<Button size="xs" variant="subtle" onClick={() => setRetry((n) => n + 1)}>Try again</Button>}>
+      <Message tone="error" action={<Button size="xs" variant="subtle" onClick={() => setRetry((n) => n + 1)}>{t('Try again')}</Button>}>
         {run.error}
       </Message>
     );
   else if (!result || !spec)
     body = (
       <Flex h="100%" align="center" justify="center" gap={2} color="mutedText" fontSize="sm">
-        <Spinner size="sm" /> {run.status === 'queued' ? 'Waiting…' : 'Loading…'}
+        <Spinner size="sm" /> {run.status === 'queued' ? t('Waiting…') : t('Loading…')}
       </Flex>
     );
   else body = <Visualization result={result} viz={spec} chartRef={chartRef} />;
@@ -241,8 +242,8 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
       status={
         editing && runnable ? (
           <HStack spacing={1}>
-            <Tooltip label={vizState.mode === 'table' ? 'Show as chart' : 'Show as table'} hasArrow>
-              <IconButton aria-label="Table or chart" size="xs" variant="ghost" className="no-drag" icon={vizState.mode === 'table' ? <ChartIcon boxSize={3} /> : <TableIcon boxSize={3} />} onClick={flipViz} />
+            <Tooltip label={vizState.mode === 'table' ? t('Show as chart') : t('Show as table')} hasArrow>
+              <IconButton aria-label={t('Table or chart')} size="xs" variant="ghost" className="no-drag" icon={vizState.mode === 'table' ? <ChartIcon boxSize={3} /> : <TableIcon boxSize={3} />} onClick={flipViz} />
             </Tooltip>
           </HStack>
         ) : (

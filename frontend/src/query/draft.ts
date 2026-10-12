@@ -9,6 +9,7 @@ import { bestPath } from './joins.ts';
 import { operatorInfo, valueComplete } from './operators.ts';
 import type { Aggregation, Breakout, Expr, FilterGroup, FilterNode, QuerySpec } from './types.ts';
 import { isGroup } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 export interface SchemaInfo {
   tables: SchemaTable[];
@@ -30,22 +31,22 @@ export interface QueryTable {
 }
 
 export const AGGREGATES: { fn: Aggregation['fn']; label: string; needsColumn: boolean }[] = [
-  { fn: 'count', label: 'Count of rows', needsColumn: false },
-  { fn: 'count_distinct', label: 'Number of distinct', needsColumn: true },
-  { fn: 'sum', label: 'Sum of', needsColumn: true },
-  { fn: 'avg', label: 'Average of', needsColumn: true },
-  { fn: 'min', label: 'Minimum of', needsColumn: true },
-  { fn: 'max', label: 'Maximum of', needsColumn: true },
+  { fn: 'count', label: t('Count of rows'), needsColumn: false },
+  { fn: 'count_distinct', label: t('Number of distinct'), needsColumn: true },
+  { fn: 'sum', label: t('Sum of'), needsColumn: true },
+  { fn: 'avg', label: t('Average of'), needsColumn: true },
+  { fn: 'min', label: t('Minimum of'), needsColumn: true },
+  { fn: 'max', label: t('Maximum of'), needsColumn: true },
 ];
 
 export const BUCKETS: { value: NonNullable<Breakout['bucket']>; label: string }[] = [
-  { value: 'minute', label: 'Minute' },
-  { value: 'hour', label: 'Hour' },
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'quarter', label: 'Quarter' },
-  { value: 'year', label: 'Year' },
+  { value: 'minute', label: t('Minute') },
+  { value: 'hour', label: t('Hour') },
+  { value: 'day', label: t('Day') },
+  { value: 'week', label: t('Week') },
+  { value: 'month', label: t('Month') },
+  { value: 'quarter', label: t('Quarter') },
+  { value: 'year', label: t('Year') },
 ];
 
 export function newSpec(connection: string, table: string): QuerySpec {
@@ -111,7 +112,7 @@ export function columnOptions(spec: QuerySpec, schema: SchemaInfo, upToCustom?: 
     out.push({
       ref: custom.name,
       label: custom.name,
-      table: 'Custom',
+      table: t('Custom'),
       column: custom.name,
       type: inferType(custom.expr, (ref) => out.find((o) => o.ref === ref || o.column === ref)?.type ?? 'unknown'),
     });
@@ -229,7 +230,7 @@ export function prepareSpec(spec: QuerySpec, schema: SchemaInfo): Prepared {
 
   for (const custom of spec.expressions ?? []) {
     for (const ref of formulaRefs(custom.expr)) {
-      if (!known.has(ref) && !options.some((o) => o.column === ref)) problems.push(`Custom column "${custom.name}" uses unknown column [${ref}]`);
+      if (!known.has(ref) && !options.some((o) => o.column === ref)) problems.push(t('Custom column "{name}" uses unknown column [{ref}]', { name: custom.name, ref }));
     }
   }
 

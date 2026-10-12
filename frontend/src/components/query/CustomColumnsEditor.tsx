@@ -7,6 +7,7 @@ import { FormulaError, FUNCTIONS, formatFormula, parseFormula } from '../../quer
 import type { CustomColumn } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { t } from '../../i18n/index.ts';
 
 interface CustomColumnsEditorProps {
   columns: CustomColumn[];
@@ -63,10 +64,10 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
     try {
       expr = parseFormula(text);
     } catch (e) {
-      error = e instanceof FormulaError ? e.message : 'Invalid formula';
+      error = e instanceof FormulaError ? e.message : t('Invalid formula');
     }
   }
-  const nameError = !name.trim() ? (text.trim() ? 'Give it a name' : null) : !NAME.test(name.trim()) ? 'Letters, digits, spaces, _' : taken.includes(name.trim()) ? 'Name already used' : null;
+  const nameError = !name.trim() ? (text.trim() ? t('Give it a name') : null) : !NAME.test(name.trim()) ? t('Letters, digits, spaces, _') : taken.includes(name.trim()) ? t('Name already used') : null;
   const valid = expr !== null && !nameError && name.trim() !== '';
   const changed = name !== initialName || text !== initialText;
 
@@ -77,7 +78,7 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
   return (
     <Box data-testid={isNew ? 'new-custom-column' : 'custom-column'}>
       <Flex gap={2} align="center">
-        <Input size="sm" maxW="160px" placeholder="name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Column name" />
+        <Input size="sm" maxW="160px" placeholder={t('name')} value={name} onChange={(e) => setName(e.target.value)} aria-label={t('Column name')} />
         <Text fontSize="sm" color="mutedText">
           =
         </Text>
@@ -89,15 +90,15 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && save()}
           isInvalid={!!error}
-          aria-label="Formula"
+          aria-label={t('Formula')}
         />
-        <InsertColumn options={options} onPick={(ref) => setText((t) => `${t}${t && !t.endsWith(' ') ? ' ' : ''}[${ref}]`)} />
+        <InsertColumn options={options} onPick={(ref) => setText((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}[${ref}]`)} />
         {(isNew || changed) && (
           <Button size="sm" onClick={save} isDisabled={!valid}>
-            {isNew ? 'Add' : 'Save'}
+            {isNew ? t('Add') : t('Save')}
           </Button>
         )}
-        {onRemove && <IconButton aria-label="Remove custom column" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} />}
+        {onRemove && <IconButton aria-label={t('Remove custom column')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} />}
       </Flex>
       {(error || nameError) && (
         <Text fontSize="xs" color="red.300" mt={1}>
@@ -112,18 +113,18 @@ function InsertColumn({ options, onPick }: { options: PickOption[]; onPick: (ref
   return (
     <Popover placement="bottom-end" isLazy>
       <PopoverTrigger>
-        <IconButton aria-label="Insert a column or see functions" size="sm" icon={<PlusIcon boxSize={3.5} />} />
+        <IconButton aria-label={t('Insert a column or see functions')} size="sm" icon={<PlusIcon boxSize={3.5} />} />
       </PopoverTrigger>
       <PopoverContent w="320px">
         <PopoverArrow />
         <PopoverBody>
           <VStack align="stretch" spacing={2}>
             <Text fontSize="xs" fontWeight={700}>
-              Insert a column
+              {t('Insert a column')}
             </Text>
             <ColumnSelect options={options} value={undefined} onChange={(ref) => ref && onPick(ref)} />
             <Text fontSize="xs" fontWeight={700} pt={1}>
-              Functions
+              {t('Functions')}
             </Text>
             {Object.values(FUNCTIONS).map((f) => (
               <Text key={f.help} fontSize="xs" fontFamily="mono" color="mutedText">
@@ -131,7 +132,7 @@ function InsertColumn({ options, onPick }: { options: PickOption[]; onPick: (ref
               </Text>
             ))}
             <HStack fontSize="xs" color="mutedText">
-              <Text>Operators: + − × ÷ ( ). Texts in 'quotes'.</Text>
+              <Text>{t("Operators: + − × ÷ ( ). Texts in 'quotes'.")}</Text>
             </HStack>
           </VStack>
         </PopoverBody>

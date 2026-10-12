@@ -11,6 +11,7 @@
  * the name has no spaces. Strings use 'single' or "double" quotes.
  */
 import type { Condition, Expr, FilterOp, FunctionName, Literal } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 export class FormulaError extends Error {
   readonly position: number;
@@ -21,16 +22,16 @@ export class FormulaError extends Error {
 }
 
 export const FUNCTIONS: Record<string, { min: number; max: number; help: string }> = {
-  coalesce: { min: 1, max: 20, help: 'coalesce(a, b, …) — the first value that is not empty' },
-  nullif: { min: 2, max: 2, help: 'nullif(a, b) — empty when a equals b' },
-  lower: { min: 1, max: 1, help: 'lower(text)' },
-  upper: { min: 1, max: 1, help: 'upper(text)' },
-  trim: { min: 1, max: 1, help: 'trim(text) — without leading/trailing spaces' },
-  length: { min: 1, max: 1, help: 'length(text)' },
-  abs: { min: 1, max: 1, help: 'abs(number)' },
-  round: { min: 1, max: 2, help: 'round(number, digits)' },
-  concat: { min: 2, max: 20, help: 'concat(a, b, …) — join texts' },
-  case: { min: 2, max: 99, help: 'case(condition, value, …, otherwise)' },
+  coalesce: { min: 1, max: 20, help: t('coalesce(a, b, …) — the first value that is not empty') },
+  nullif: { min: 2, max: 2, help: t('nullif(a, b) — empty when a equals b') },
+  lower: { min: 1, max: 1, help: t('lower(text)') },
+  upper: { min: 1, max: 1, help: t('upper(text)') },
+  trim: { min: 1, max: 1, help: t('trim(text) — without leading/trailing spaces') },
+  length: { min: 1, max: 1, help: t('length(text)') },
+  abs: { min: 1, max: 1, help: t('abs(number)') },
+  round: { min: 1, max: 2, help: t('round(number, digits)') },
+  concat: { min: 2, max: 20, help: t('concat(a, b, …) — join texts') },
+  case: { min: 2, max: 99, help: t('case(condition, value, …, otherwise)') },
 };
 
 type Token =
@@ -55,9 +56,9 @@ function tokenize(text: string): Token[] {
     const start = i;
     if (ch === '[') {
       const end = text.indexOf(']', i + 1);
-      if (end < 0) throw new FormulaError('A [column name] is not closed', i);
+      if (end < 0) throw new FormulaError(t('A [column name] is not closed'), i);
       const name = text.slice(i + 1, end).trim();
-      if (!name) throw new FormulaError('Empty [ ]', i);
+      if (!name) throw new FormulaError(t('Empty [ ]'), i);
       tokens.push({ kind: 'ref', value: name, pos: start });
       i = end + 1;
       continue;
@@ -66,7 +67,7 @@ function tokenize(text: string): Token[] {
       let value = '';
       i++;
       for (;;) {
-        if (i >= text.length) throw new FormulaError('A text in quotes is not closed', start);
+        if (i >= text.length) throw new FormulaError(t('A text in quotes is not closed'), start);
         if (text[i] === ch) {
           if (text[i + 1] === ch) {
             value += ch; // doubled quote = the quote itself
@@ -99,7 +100,7 @@ function tokenize(text: string): Token[] {
       i += op.length;
       continue;
     }
-    throw new FormulaError(`Unexpected "${ch}"`, i);
+    throw new FormulaError(t('Unexpected "{text}"', { text: ch }), i);
   }
   tokens.push({ kind: 'end', pos: text.length });
   return tokens;
@@ -119,18 +120,18 @@ class Parser {
     return this.tokens[this.i++];
   }
   private isOp(value: string): boolean {
-    const t = this.peek();
-    return t.kind === 'op' && t.value === value;
+    const tok = this.peek();
+    return tok.kind === 'op' && tok.value === value;
   }
   private expect(value: string): void {
-    const t = this.next();
-    if (t.kind !== 'op' || t.value !== value) throw new FormulaError(`Expected "${value}"`, t.pos);
+    const tok = this.next();
+    if (tok.kind !== 'op' || tok.value !== value) throw new FormulaError(t('Expected "{text}"', { text: value }), tok.pos);
   }
 
   parse(): Expr {
     const expr = this.additive();
-    const t = this.peek();
-    if (t.kind !== 'end') throw new FormulaError('Unexpected text after the formula', t.pos);
+    const tok = this.peek();
+    if (tok.kind !== 'end') throw new FormulaError(t('Unexpected text after the formula'), tok.pos);
     return expr;
   }
 
@@ -163,28 +164,28 @@ class Parser {
   }
 
   private primary(): Expr {
-    const t = this.next();
-    if (t.kind === 'num') return { value: t.value };
-    if (t.kind === 'str') return { value: t.value };
-    if (t.kind === 'ref') return { ref: t.value };
-    if (t.kind === 'op' && t.value === '(') {
+    const tok = this.next();
+    if (tok.kind === 'num') return { value: tok.value };
+    if (tok.kind === 'str') return { value: tok.value };
+    if (tok.kind === 'ref') return { ref: tok.value };
+    if (tok.kind === 'op' && tok.value === '(') {
       const inner = this.additive();
       this.expect(')');
       return inner;
     }
-    if (t.kind === 'ident') {
-      const lower = t.value.toLowerCase();
-      if (this.isOp('(')) return this.call(lower, t.pos);
+    if (tok.kind === 'ident') {
+      const lower = tok.value.toLowerCase();
+      if (this.isOp('(')) return this.call(lower, tok.pos);
       if (lower === 'null') return { value: null };
       if (lower === 'true' || lower === 'false') return { value: lower === 'true' };
-      return { ref: t.value };
+      return { ref: tok.value };
     }
-    throw new FormulaError(t.kind === 'end' ? 'The formula ends too early' : `Unexpected "${(t as { value: string }).value}"`, t.pos);
+    throw new FormulaError(tok.kind === 'end' ? t('The formula ends too early') : t('Unexpected "{text}"', { text: (tok as { value: string }).value }), tok.pos);
   }
 
   private call(name: string, pos: number): Expr {
     const info = FUNCTIONS[name];
-    if (!info) throw new FormulaError(`Unknown function ${name}()`, pos);
+    if (!info) throw new FormulaError(t('Unknown function {name}()', { name }), pos);
     this.expect('(');
     if (name === 'case') return this.caseCall(pos);
     const args: Expr[] = [];
@@ -196,11 +197,11 @@ class Parser {
       }
     }
     this.expect(')');
-    if (args.length < info.min || args.length > info.max) throw new FormulaError(`Wrong number of arguments: ${info.help}`, pos);
+    if (args.length < info.min || args.length > info.max) throw new FormulaError(t('Wrong number of arguments: {help}', { help: info.help }), pos);
     if (name === 'round') {
       const digits = args[1];
       if (digits !== undefined && !('value' in digits && Number.isInteger(digits.value))) {
-        throw new FormulaError('round(number, digits): digits must be a whole number', pos);
+        throw new FormulaError(t('round(number, digits): digits must be a whole number'), pos);
       }
       return { fn: 'round', args: [args[0]], digits: digits ? (digits as { value: number }).value : 0 };
     }
@@ -213,34 +214,34 @@ class Parser {
     for (;;) {
       const startPos = this.peek().pos;
       const left = this.additive();
-      const t = this.peek();
-      if (t.kind === 'op' && COMPARE.includes(t.value)) {
+      const tok = this.peek();
+      if (tok.kind === 'op' && COMPARE.includes(tok.value)) {
         this.next();
         const right = this.additive();
-        if (!('value' in right)) throw new FormulaError('Compare with a fixed value, e.g. [total] > 100', startPos);
+        if (!('value' in right)) throw new FormulaError(t('Compare with a fixed value, e.g. [total] > 100'), startPos);
         this.expect(',');
         const then = this.additive();
-        const op = (t.value === '<>' ? '!=' : t.value) as FilterOp;
+        const op = (tok.value === '<>' ? '!=' : tok.value) as FilterOp;
         const when: Condition = 'ref' in left ? { ref: left.ref, op, value: right.value } : { expr: left, op, value: right.value };
         branches.push({ when, then });
       } else {
         otherwise = left;
       }
       if (this.isOp(',')) {
-        if (otherwise !== undefined) throw new FormulaError('The "otherwise" value must come last', this.peek().pos);
+        if (otherwise !== undefined) throw new FormulaError(t('The "otherwise" value must come last'), this.peek().pos);
         this.next();
         continue;
       }
       break;
     }
     this.expect(')');
-    if (branches.length === 0) throw new FormulaError('case() needs at least one condition: case([x] > 1, value, otherwise)', pos);
+    if (branches.length === 0) throw new FormulaError(t('case() needs at least one condition: case([x] > 1, value, otherwise)'), pos);
     return otherwise === undefined ? { case: branches } : { case: branches, else: otherwise };
   }
 }
 
 export function parseFormula(text: string): Expr {
-  if (!text.trim()) throw new FormulaError('Write a formula', 0);
+  if (!text.trim()) throw new FormulaError(t('Write a formula'), 0);
   return new Parser(tokenize(text)).parse();
 }
 
