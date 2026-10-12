@@ -3,6 +3,8 @@
  * question from M4 on. Column references are result column names.
  */
 
+import { t } from '../i18n/index.ts';
+
 export type ChartType =
   | 'table' | 'bar' | 'line' | 'area' | 'combo' | 'pie' | 'scatter'
   | 'kpi' | 'gauge' | 'pivot' | 'histogram' | 'heatmap' | 'funnel';
@@ -65,17 +67,17 @@ export interface VizSpec {
 }
 
 export const CHART_TYPES: { type: ChartType; label: string; hint: string }[] = [
-  { type: 'table', label: 'Table', hint: 'The rows as they are' },
-  { type: 'bar', label: 'Bar', hint: 'Compare categories; grouped, stacked or 100 %' },
-  { type: 'line', label: 'Line', hint: 'Trend over time' },
-  { type: 'area', label: 'Area', hint: 'Trend of one total, or stacked parts' },
-  { type: 'combo', label: 'Combo', hint: 'Bars and lines on one axis' },
-  { type: 'pie', label: 'Pie / donut', hint: 'Share of a whole (up to 6 parts)' },
-  { type: 'scatter', label: 'Scatter', hint: 'Two numbers against each other; bubbles for a third' },
-  { type: 'kpi', label: 'Number', hint: 'One headline value with change and trend' },
-  { type: 'gauge', label: 'Gauge', hint: 'One value against a range' },
-  { type: 'pivot', label: 'Pivot table', hint: 'Rows × columns with totals' },
-  { type: 'histogram', label: 'Histogram', hint: 'How values are distributed' },
-  { type: 'heatmap', label: 'Heatmap', hint: 'A value for each pair of two dimensions' },
-  { type: 'funnel', label: 'Funnel', hint: 'Steps that get smaller' },
+  { type: 'table', label: t('Table'), hint: t('The rows as they are') },
+  { type: 'bar', label: t('Bar'), hint: t('Compare categories; grouped, stacked or 100 %') },
+  { type: 'line', label: t('Line'), hint: t('Trend over time') },
+  { type: 'area', label: t('Area'), hint: t('Trend of one total, or stacked parts') },
+  { type: 'combo', label: t('Combo'), hint: t('Bars and lines on one axis') },
+  { type: 'pie', label: t('Pie / donut'), hint: t('Share of a whole (up to 6 parts)') },
+  { type: 'scatter', label: t('Scatter'), hint: t('Two numbers against each other; bubbles for a third') },
+  { type: 'kpi', label: t('Number'), hint: t('One headline value with change and trend') },
+  { type: 'gauge', label: t('Gauge'), hint: t('One value against a range') },
+  { type: 'pivot', label: t('Pivot table'), hint: t('Rows × columns with totals') },
+  { type: 'histogram', label: t('Histogram'), hint: t('How values are distributed') },
+  { type: 'heatmap', label: t('Heatmap'), hint: t('A value for each pair of two dimensions') },
+  { type: 'funnel', label: t('Funnel'), hint: t('Steps that get smaller') },
 ];

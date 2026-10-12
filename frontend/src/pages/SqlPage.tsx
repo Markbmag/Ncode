@@ -30,6 +30,7 @@ import type { ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import type { Transform } from '../query/types';
+import { t, tn } from '../i18n/index.ts';
 
 interface Incoming {
   connection?: string;
@@ -165,7 +166,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
       <SchemaTree
         tables={schemaQuery.data?.tables}
         loading={schemaQuery.isPending}
-        error={schemaQuery.isError ? apiErrorMessage(schemaQuery.error, 'Could not read the structure') : null}
+        error={schemaQuery.isError ? apiErrorMessage(schemaQuery.error, t('Could not read the structure')) : null}
         onInsert={(t) => editor.current?.insert(t)}
         onInsertSelect={(table) => editor.current?.insert(`SELECT *\nFROM ${quote(table)}\n`)}
         onReload={reloadSchema}
@@ -187,38 +188,38 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
       )}
       <Flex align="center" gap={2} px={3} py={2} borderTop="1px solid" borderColor="lineColor" wrap="wrap">
         <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={() => execute(text)} isDisabled={!text.trim()} data-testid="run-sql">
-          Run
+          {t('Run')}
         </Button>
         <Text fontSize="xs" color="faintText">
-          Ctrl/Cmd + Enter · runs the selection if there is one
+          {t('Ctrl/Cmd + Enter · runs the selection if there is one')}
         </Text>
         <Box flex={1} />
         {text.trim() && check && (
-          <Tooltip label={check.ok ? 'This query passes the read-only check' : check.error} hasArrow>
+          <Tooltip label={check.ok ? t('This query passes the read-only check') : check.error} hasArrow>
             <Badge colorScheme={check.ok ? 'green' : 'red'} display="flex" alignItems="center" gap={1} maxW="320px" data-testid="sql-check">
               {check.ok ? <CheckIcon boxSize={3} /> : null}
               <Text as="span" noOfLines={1}>
-                {check.ok ? 'read-only' : check.error}
+                {check.ok ? t('read-only') : check.error}
               </Text>
             </Badge>
           </Tooltip>
         )}
-        <Select size="xs" maxW="110px" value={limit} onChange={(e) => setLimit(Number(e.target.value))} aria-label="Row limit">
+        <Select size="xs" maxW="110px" value={limit} onChange={(e) => setLimit(Number(e.target.value))} aria-label={t('Row limit')}>
           {LIMITS.filter((l) => l <= (ws.limits.query_max_rows ?? 10000)).map((l) => (
             <option key={l} value={l}>
-              {l.toLocaleString()} rows
+              {tn(l, '{n} row', '{n} rows')}
             </option>
           ))}
         </Select>
         <Button size="xs" variant="subtle" leftIcon={<SparklesIcon boxSize={3} />} onClick={format} isDisabled={!text.trim()}>
-          Format
+          {t('Format')}
         </Button>
         <Button size="xs" variant={showCalc ? 'brand' : 'subtle'} onClick={() => setShowCalc((v) => !v)} data-testid="toggle-calculations">
-          Calculations{transforms.length ? ` (${transforms.length})` : ''}
+          {transforms.length ? t('Calculations ({n})', { n: transforms.length }) : t('Calculations')}
         </Button>
         <Menu isLazy>
           <MenuButton as={Button} size="xs" variant="subtle" rightIcon={<ChevronDownIcon boxSize={3} />} isDisabled={history.length === 0}>
-            History
+            {t('History')}
           </MenuButton>
           <MenuList maxW="480px" maxH="360px" overflowY="auto">
             {history.map((h) => (
@@ -251,7 +252,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
         onVizChange={setViz}
         empty={
           <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
-            Write a SELECT and press Ctrl/Cmd + Enter. Only read-only queries run.
+            {t('Write a SELECT and press Ctrl/Cmd + Enter. Only read-only queries run.')}
           </Flex>
         }
       />
@@ -262,11 +263,11 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
     <Flex direction="column" h="100%" gap={3}>
       <QuestionHeader
         engine={engine}
-        title="SQL editor"
-        subtitle={`${conn?.label ?? connection} · read-only`}
+        title={t('SQL editor')}
+        subtitle={t('{name} · read-only', { name: conn?.label ?? connection })}
         saved={saved}
         dirty={dirty}
-        defaultName="SQL query"
+        defaultName={t('SQL query')}
         payload={() => (text.trim() ? { kind: 'sql', connection, spec: { sql: text, limit, ...(transforms.length ? { transforms } : {}) }, viz, parameters: paramDefs } : null)}
         onRevert={() => {
           if (!saved || !savedSpec) return;

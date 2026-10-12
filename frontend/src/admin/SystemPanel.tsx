@@ -4,6 +4,7 @@ import { DownloadIcon, PlusIcon, TrashIcon } from '../icons';
 import { saveBlob } from '../lib/csv';
 import { Panel } from './Panel';
 import { people, useBackups, useReady } from './peopleApi';
+import { t } from '../i18n/index.ts';
 
 const size = (bytes: number) =>
   bytes > 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes > 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -13,38 +14,39 @@ export function SystemPanel() {
   const toast = useToast();
   const backups = useBackups();
   const ready = useReady();
-  const fail = (what: string) => (e: unknown) => toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+  const fail = (what: string) => (e: unknown) => toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
   const download = async (name: string) => {
     try {
       const res = await http.get<Blob>(`/api/admin/backups/${encodeURIComponent(name)}`, { responseType: 'blob' });
       saveBlob(name, res.data);
     } catch (e) {
-      fail('Download failed')(e);
+      fail(t('Download failed'))(e);
     }
   };
   const checks = ready.data?.checks ?? {};
   return (
     <VStack align="stretch" spacing={6}>
       <Panel
-        title="Backups"
-        subtitle="A backup holds Ncode's own database (users, library, dashboards, settings) and the uploaded files - not the databases you connect to. One is made automatically every night (NCODE_BACKUP_HOUR) and the last NCODE_BACKUP_KEEP are kept."
+        title={t('Backups')}
+        subtitle={t("A backup holds Ncode's own database (users, library, dashboards, settings) and the uploaded files - not the databases you connect to. One is made automatically every night (NCODE_BACKUP_HOUR) and the last NCODE_BACKUP_KEEP are kept.")}
         actions={
-          <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={() => void people.backupNow().then(() => toast({ status: 'success', title: 'Backup made', duration: 1500 })).catch(fail('The backup failed'))} data-testid="backup-now">
-            Back up now
+          <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={() => void people.backupNow().then(() => toast({ status: 'success', title: t('Backup made'), duration: 1500 })).catch(fail(t('The backup failed')))} data-testid="backup-now">
+            {t('Back up now')}
           </Button>
         }
       >
         <Alert status="warning" borderRadius="md" fontSize="sm" mb={3}>
           <AlertIcon />
           <Box>
-            The encryption key is not in the backups. Keep a copy of <Code fontSize="xs">backend/data/secret.key</Code> (or <Code fontSize="xs">NCODE_SECRET_KEY</Code>)
-            somewhere safe: without it, saved database and email passwords cannot be read after a restore.
+            {t('The encryption key is not in the backups. Keep a copy of {file} (or {env}) somewhere safe: without it, saved database and email passwords cannot be read after a restore.').split(/(\{file\}|\{env\})/).map((part, i) =>
+              part === '{file}' ? <Code key={i} fontSize="xs">backend/data/secret.key</Code> : part === '{env}' ? <Code key={i} fontSize="xs">NCODE_SECRET_KEY</Code> : part,
+            )}
           </Box>
         </Alert>
         {backups.isPending && <Skeleton h="60px" />}
         {backups.data?.backups.length === 0 && (
           <Text fontSize="sm" color="mutedText">
-            No backups yet.
+            {t('No backups yet.')}
           </Text>
         )}
         <VStack align="stretch" spacing={2}>
@@ -58,35 +60,35 @@ export function SystemPanel() {
                   {new Date(b.created_at * 1000).toLocaleString()} · {size(b.size)}
                 </Text>
               </Box>
-              <Badge>{b.auto ? 'automatic' : 'by hand'}</Badge>
-              <IconButton aria-label="Download" size="sm" icon={<DownloadIcon boxSize={4} />} onClick={() => void download(b.name)} />
-              <IconButton aria-label="Delete" size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />}
-                onClick={() => window.confirm(`Delete ${b.name}?`) && void people.deleteBackup(b.name).catch(fail('Could not delete'))} />
+              <Badge>{b.auto ? t('automatic') : t('by hand')}</Badge>
+              <IconButton aria-label={t('Download')} size="sm" icon={<DownloadIcon boxSize={4} />} onClick={() => void download(b.name)} />
+              <IconButton aria-label={t('Delete')} size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />}
+                onClick={() => window.confirm(t('Delete {name}?', { name: b.name })) && void people.deleteBackup(b.name).catch(fail(t('Could not delete')))} />
             </Flex>
           ))}
         </VStack>
         <Text fontSize="xs" color="mutedText" mt={3}>
-          Folder on the server: <Code fontSize="xs">{backups.data?.folder}</Code>
-          {backups.data ? ` · ${size(backups.data.disk_free)} free` : ''}. To restore: stop the server, then{' '}
-          <Code fontSize="xs">python -m app.manage restore &lt;file.zip&gt;</Code> (in Docker: see the README).
+          {t('Folder on the server:')} <Code fontSize="xs">{backups.data?.folder}</Code>
+          {backups.data ? ` · ${t('{size} free', { size: size(backups.data.disk_free) })}` : ''}. {t('To restore: stop the server, then')}{' '}
+          <Code fontSize="xs">python -m app.manage restore &lt;file.zip&gt;</Code> {t('(in Docker: see the README).')}
         </Text>
       </Panel>
 
-      <Panel title="Health" subtitle="What load balancers and monitoring see: /api/health (alive), /api/health/ready (ready), /metrics (Prometheus, admins or NCODE_METRICS_TOKEN).">
+      <Panel title={t('Health')} subtitle={t('What load balancers and monitoring see: /api/health (alive), /api/health/ready (ready), /metrics (Prometheus, admins or NCODE_METRICS_TOKEN).')}>
         {!ready.data && <Skeleton h="60px" />}
         {ready.data && (
           <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} data-testid="health">
-            <Tile label="Status" value={ready.data.status === 'ok' ? 'ready' : 'not ready'} good={ready.data.status === 'ok'} />
-            <Tile label="App database" value={String(checks.app_db ?? '?')} good={checks.app_db === 'ok'} />
-            <Tile label="Scheduler" value={String(checks.scheduler ?? '?')} good={checks.scheduler === 'running'} />
-            <Tile label="Disk free" value={checks.disk_free_mb !== undefined ? size(Number(checks.disk_free_mb) * 1024 * 1024) : '?'} good={Number(checks.disk_free_mb) > 1024} />
-            <Tile label="Up for" value={`${Math.floor(ready.data.uptime_sec / 3600)} h ${Math.floor((ready.data.uptime_sec % 3600) / 60)} min`} good />
-            <Tile label="Last backup" value={checks.last_backup_at ? new Date(Number(checks.last_backup_at) * 1000).toLocaleString() : 'none'} good={!!checks.last_backup_at} />
+            <Tile label={t('Status')} value={ready.data.status === 'ok' ? t('ready') : t('not ready')} good={ready.data.status === 'ok'} />
+            <Tile label={t('App database')} value={String(checks.app_db ?? '?')} good={checks.app_db === 'ok'} />
+            <Tile label={t('Scheduler')} value={String(checks.scheduler ?? '?')} good={checks.scheduler === 'running'} />
+            <Tile label={t('Disk free')} value={checks.disk_free_mb !== undefined ? size(Number(checks.disk_free_mb) * 1024 * 1024) : '?'} good={Number(checks.disk_free_mb) > 1024} />
+            <Tile label={t('Up for')} value={t('{h} h {m} min', { h: Math.floor(ready.data.uptime_sec / 3600), m: Math.floor((ready.data.uptime_sec % 3600) / 60) })} good />
+            <Tile label={t('Last backup')} value={checks.last_backup_at ? new Date(Number(checks.last_backup_at) * 1000).toLocaleString() : t('none')} good={!!checks.last_backup_at} />
           </SimpleGrid>
         )}
         <HStack mt={3}>
           <Button size="xs" variant="ghost" onClick={() => void ready.refetch()}>
-            Check again
+            {t('Check again')}
           </Button>
         </HStack>
       </Panel>

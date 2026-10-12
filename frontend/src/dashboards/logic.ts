@@ -6,6 +6,7 @@
  */
 import type { ParameterDef } from '../library/params.ts';
 import type { CardLayout, CardQuestion, DashCard, DashFilter, Definition, FilterType, Mapping, Tab } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 export const GRID_COLS = 12;
 
@@ -129,7 +130,7 @@ export function toDefinition(def: Definition): Definition {
 export function addTab(def: Definition, name: string): Definition {
   const id = newKey('t', def.tabs.map((t) => t.id));
   if (def.tabs.length === 0) {
-    const first: Tab = { id: newKey('t', [id]), name: 'Overview' };
+    const first: Tab = { id: newKey('t', [id]), name: t('Overview') };
     return { ...def, tabs: [first, { id, name }], cards: def.cards.map((c) => ({ ...c, tab: first.id })) };
   }
   return { ...def, tabs: [...def.tabs, { id, name }] };

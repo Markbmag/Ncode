@@ -13,6 +13,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { TableProfile } from '../analysis/TableProfile';
 import { Highlight } from './Highlight';
 import { RowDrawer } from './RowDrawer';
+import { t, tn } from '../i18n/index.ts';
 
 interface FilterState {
   q: string;
@@ -40,9 +41,9 @@ interface StructureResult {
 
 const PAGE_SIZES = [25, 50, 100, 200];
 const MODES: { value: MatchMode; label: string }[] = [
-  { value: 'contains', label: 'Contains' },
-  { value: 'starts_with', label: 'Starts with' },
-  { value: 'exact', label: 'Exact' },
+  { value: 'contains', label: t('Contains') },
+  { value: 'starts_with', label: t('Starts with') },
+  { value: 'exact', label: t('Exact') },
 ];
 
 function cellText(value: unknown): string {
@@ -114,7 +115,7 @@ export function TableExplorer({
         if (!cancelled) setResult({ key, data: res.data });
       })
       .catch((error: unknown) => {
-        if (!cancelled) setResult({ key, error: apiErrorMessage(error, 'Could not load this table') });
+        if (!cancelled) setResult({ key, error: apiErrorMessage(error, t('Could not load this table')) });
       });
     return () => {
       cancelled = true;
@@ -130,7 +131,7 @@ export function TableExplorer({
         if (!cancelled) setStructure({ table, columns: res.data.columns });
       })
       .catch((error: unknown) => {
-        if (!cancelled) setStructure({ table, error: apiErrorMessage(error, 'Could not read the table structure') });
+        if (!cancelled) setStructure({ table, error: apiErrorMessage(error, t('Could not read the table structure')) });
       });
     return () => {
       cancelled = true;
@@ -188,13 +189,13 @@ export function TableExplorer({
       });
       saveBlob(`${safeFilename('ncode', connectionLabel, table, applied.q)}.csv`, res.data);
       toast({
-        title: 'Export ready',
-        description: `Up to ${limits.max_export_rows.toLocaleString()} rows are included.`,
+        title: t('Export ready'),
+        description: t('Up to {n} rows are included.', { n: limits.max_export_rows.toLocaleString() }),
         status: 'success',
         duration: 3500,
       });
     } catch (err) {
-      toast({ title: 'Export failed', description: await apiErrorMessageAsync(err, 'Unexpected error'), status: 'error' });
+      toast({ title: t('Export failed'), description: await apiErrorMessageAsync(err, t('Unexpected error')), status: 'error' });
     } finally {
       setExporting(false);
     }
@@ -229,7 +230,7 @@ export function TableExplorer({
           <InputLeftElement pointerEvents="none" color="faintText">
             <SearchIcon boxSize={4} />
           </InputLeftElement>
-          <Input placeholder="Filter tables…" value={listFilter} onChange={(e) => setListFilter(e.target.value)} />
+          <Input placeholder={t('Filter tables…')} value={listFilter} onChange={(e) => setListFilter(e.target.value)} />
         </InputGroup>
         <VStack align="stretch" spacing={1} overflowY="auto" flex={1}>
           {tablesError && (
@@ -238,7 +239,7 @@ export function TableExplorer({
                 {tablesError}
               </Text>
               <Button size="xs" mt={2} variant="subtle" onClick={onReloadTables}>
-                Try again
+                {t('Try again')}
               </Button>
             </Box>
           )}
@@ -249,7 +250,7 @@ export function TableExplorer({
           )}
           {tables && visibleTables.length === 0 && (
             <Text fontSize="sm" color="mutedText" p={2}>
-              No tables match.
+              {t('No tables match.')}
             </Text>
           )}
           {visibleTables.slice(0, 400).map((t) => {
@@ -282,7 +283,7 @@ export function TableExplorer({
           })}
           {visibleTables.length > 400 && (
             <Text fontSize="xs" color="faintText" p={2}>
-              Showing 400 of {visibleTables.length}. Type to narrow the list.
+              {t('Showing 400 of {total}. Type to narrow the list.', { total: visibleTables.length })}
             </Text>
           )}
         </VStack>
@@ -305,9 +306,9 @@ export function TableExplorer({
             borderRadius="2xl"
           >
             <TableIcon boxSize={8} color="brand.300" />
-            <Text fontWeight={600}>Pick a table to see its rows</Text>
+            <Text fontWeight={600}>{t('Pick a table to see its rows')}</Text>
             <Text fontSize="sm" color="mutedText" maxW="380px">
-              Browse the data, sort by any column, filter by a phrase and export the result to CSV.
+              {t('Browse the data, sort by any column, filter by a phrase and export the result to CSV.')}
             </Text>
           </Flex>
         ) : (
@@ -319,13 +320,13 @@ export function TableExplorer({
                 </Text>
                 <ButtonGroup isAttached size="xs">
                   <Button variant={tab === 'data' ? 'brand' : 'subtle'} onClick={() => setTab('data')}>
-                    Data
+                    {t('Data')}
                   </Button>
                   <Button variant={tab === 'structure' ? 'brand' : 'subtle'} onClick={() => setTab('structure')}>
-                    Structure
+                    {t('Structure')}
                   </Button>
                   <Button variant={tab === 'profile' ? 'brand' : 'subtle'} onClick={() => setTab('profile')} data-testid="tab-profile">
-                    Profile
+                    {t('Profile')}
                   </Button>
                 </ButtonGroup>
                 <Button as={RouterLink} to={`/xray?connection=${encodeURIComponent(connectionKey)}&table=${encodeURIComponent(table)}`} size="xs" variant="ghost" data-testid="xray-table">
@@ -342,14 +343,14 @@ export function TableExplorer({
                     leftIcon={<DownloadIcon boxSize={4} />}
                     rightIcon={<ChevronDownIcon boxSize={4} />}
                   >
-                    Export CSV
+                    {t('Export CSV')}
                   </MenuButton>
                   <MenuList minW="270px">
                     <Text px={3} pb={1} fontSize="xs" color="faintText" fontWeight={600}>
-                      {filtering ? 'ALL MATCHES' : 'WHOLE TABLE'} · UP TO {limits.max_export_rows.toLocaleString()} ROWS
+                      {filtering ? t('ALL MATCHES') : t('WHOLE TABLE')} · {t('UP TO {n} ROWS', { n: limits.max_export_rows.toLocaleString() })}
                     </Text>
-                    <MenuItem onClick={() => void exportCsv(';')}>For Excel (semicolon)</MenuItem>
-                    <MenuItem onClick={() => void exportCsv(',')}>Standard (comma)</MenuItem>
+                    <MenuItem onClick={() => void exportCsv(';')}>{t('For Excel (semicolon)')}</MenuItem>
+                    <MenuItem onClick={() => void exportCsv(',')}>{t('Standard (comma)')}</MenuItem>
                   </MenuList>
                 </Menu>
               )}
@@ -373,7 +374,7 @@ export function TableExplorer({
                       <SearchIcon boxSize={4} />
                     </InputLeftElement>
                     <Input
-                      placeholder="Filter rows in this table…"
+                      placeholder={t('Filter rows in this table…')}
                       value={filterText}
                       onChange={(e) => setFilterText(e.target.value)}
                       onKeyDown={(e) => {
@@ -382,7 +383,7 @@ export function TableExplorer({
                     />
                   </InputGroup>
                   <Button size="sm" onClick={() => changeFilter({})}>
-                    Apply
+                    {t('Apply')}
                   </Button>
                   <ButtonGroup isAttached size="xs">
                     {MODES.map((m) => (
@@ -403,7 +404,7 @@ export function TableExplorer({
                       onChange={(e) => changeFilter({ caseSensitive: e.target.checked })}
                     />
                     <Text fontSize="xs" color="mutedText">
-                      Match case
+                      {t('Match case')}
                     </Text>
                   </HStack>
                   <HStack spacing={2}>
@@ -414,7 +415,7 @@ export function TableExplorer({
                       onChange={(e) => changeFilter({ includeNumbers: e.target.checked })}
                     />
                     <Text fontSize="xs" color="mutedText">
-                      Numbers & dates
+                      {t('Numbers & dates')}
                     </Text>
                   </HStack>
                   {filtering && (
@@ -426,7 +427,7 @@ export function TableExplorer({
                         changeFilter({ q: '' });
                       }}
                     >
-                      Clear filter
+                      {t('Clear filter')}
                     </Button>
                   )}
                 </Flex>
@@ -517,7 +518,7 @@ export function TableExplorer({
                           {data.rows.length === 0 && !data.note && (
                             <Tr>
                               <Td colSpan={Math.max(1, data.columns.length)} textAlign="center" py={10} color="mutedText" borderColor="lineColor">
-                                {filtering ? 'No rows match this filter.' : 'This table is empty.'}
+                                {filtering ? t('No rows match this filter.') : t('This table is empty.')}
                               </Td>
                             </Tr>
                           )}
@@ -537,12 +538,12 @@ export function TableExplorer({
                   <Flex justify="space-between" align="center" gap={3} wrap="wrap">
                     <HStack spacing={3}>
                       <Text fontSize="sm" color="mutedText">
-                        {data.rows.length > 0 ? `Rows ${rowsFrom}–${rowsTo}` : 'No rows'}
-                        {data.has_more && ' · more available'}
+                        {data.rows.length > 0 ? t('Rows {from}–{to}', { from: rowsFrom, to: rowsTo }) : t('No rows')}
+                        {data.has_more && t(' · more available')}
                       </Text>
                       {data.omitted.length > 0 && (
                         <Badge bg="chipBg" color="faintText" textTransform="none">
-                          {data.omitted.length} binary column{data.omitted.length === 1 ? '' : 's'} hidden
+                          {tn(data.omitted.length, '{n} binary column hidden', '{n} binary columns hidden')}
                         </Badge>
                       )}
                     </HStack>
@@ -558,15 +559,15 @@ export function TableExplorer({
                       >
                         {pageSizes.map((n) => (
                           <option key={n} value={n}>
-                            {n} per page
+                            {t('{n} per page', { n })}
                           </option>
                         ))}
                       </Select>
                       <Button size="sm" variant="subtle" isDisabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>
-                        Previous
+                        {t('Previous')}
                       </Button>
                       <Button size="sm" variant="subtle" isDisabled={!data.has_more || loading} onClick={() => setOffset(offset + pageSize)}>
-                        Next
+                        {t('Next')}
                       </Button>
                     </HStack>
                   </Flex>
@@ -589,7 +590,7 @@ export function TableExplorer({
                   <Table size="sm">
                     <Thead position="sticky" top={0} bg="panelBg">
                       <Tr>
-                        {['Column', 'Type', 'Nullable', 'Key'].map((h) => (
+                        {[t('Column'), t('Type'), t('Nullable'), t('Key')].map((h) => (
                           <Th key={h} borderColor="lineColor" color="mutedText">
                             {h}
                           </Th>
@@ -606,12 +607,12 @@ export function TableExplorer({
                             {c.type}
                           </Td>
                           <Td fontSize="sm" color="mutedText" borderColor="lineColor">
-                            {c.nullable ? 'yes' : 'no'}
+                            {c.nullable ? t('yes') : t('no')}
                           </Td>
                           <Td borderColor="lineColor">
                             {c.primary_key && (
                               <Badge colorScheme="brand" textTransform="none">
-                                primary key
+                                {t('primary key')}
                               </Badge>
                             )}
                           </Td>

@@ -9,6 +9,7 @@ import { useWorkspace } from '../workspace/useWorkspace';
 import { Builder } from './QuestionsPage';
 import { CombineWorkspace } from './CombinePage';
 import { SqlWorkbench } from './SqlPage';
+import { t } from '../i18n/index.ts';
 
 /** /questions/:id - a saved question, opened in the builder or the SQL editor. */
 export default function SavedQuestionPage() {
@@ -32,10 +33,10 @@ export default function SavedQuestionPage() {
   if (question.isError || !q)
     return (
       <Alert status="error" borderRadius="xl" flexDirection="column" alignItems="flex-start" gap={2}>
-        <AlertTitle>This question could not be opened</AlertTitle>
-        <AlertDescription fontSize="sm">{apiErrorMessage(question.error, 'It may have been deleted, or it was not shared with you.')}</AlertDescription>
+        <AlertTitle>{t('This question could not be opened')}</AlertTitle>
+        <AlertDescription fontSize="sm">{apiErrorMessage(question.error, t('It may have been deleted, or it was not shared with you.'))}</AlertDescription>
         <Button as={RouterLink} to="/library" size="sm">
-          Go to the library
+          {t('Go to the library')}
         </Button>
       </Alert>
     );
@@ -54,7 +55,7 @@ function NoDatabase({ q }: { q: SavedQuestion }) {
       <QuestionHeader title={q.name} saved={q} dirty={false} payload={() => null} defaultName={q.name} />
       <Alert status="warning" borderRadius="xl">
         <AlertIcon />
-        This question uses the database “{q.connection}”, which you do not have access to. Ask an admin for access to run it.
+        {t('This question uses the database “{name}”, which you do not have access to. Ask an admin for access to run it.', { name: q.connection })}
       </Alert>
     </VStack>
   );

@@ -219,4 +219,14 @@ export const AUTOMATION: Record<string, string> = {
   "On your website's server:": 'На сервере вашего сайта:',
   'Copy the code': 'Копировать код',
   'Never put the embedding key in a web page: sign the token on your server. Tokens must expire (at most 30 days).': 'Никогда не размещайте ключ встраивания на веб-странице: подписывайте токен на своём сервере. У токенов должен быть срок действия (не более 30 дней).',
+  // PublicPage.tsx
+  'This link does not exist or no longer works.': 'Эта ссылка не существует или больше не работает.',
+  'This could not be opened.': 'Не удалось открыть.',
+  'Shared with Ncode': 'Опубликовано с помощью Ncode',
+  'That did not work': 'Не получилось',
+  'This link is protected': 'Эта ссылка защищена паролем',
+  'Password': 'Пароль',
+  'Open': 'Открыть',
+  'Download CSV': 'Скачать CSV',
+  'Download Excel': 'Скачать Excel',
 };
