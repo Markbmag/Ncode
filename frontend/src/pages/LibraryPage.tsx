@@ -19,7 +19,7 @@ import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 import { DatasetRow } from './DatasetsPage';
 import { datasets } from '../federation/api';
 import { UploadDialog } from '../federation/UploadDialog';
-import { t } from '../i18n/index.ts';
+import { t, tc } from '../i18n/index.ts';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
@@ -119,7 +119,7 @@ function CollectionTree({ activeId, archive }: { activeId: number | null; archiv
       )}
       <Box pt={3}>
         <TreeLink to="/library/archive" active={archive} icon={<ArchiveIcon boxSize={4} />} testId="tree-archive">
-          {t('Archive')}
+          {tc('noun', 'Archive')}
         </TreeLink>
       </Box>
       <CollectionDialog isOpen={create.isOpen} onClose={create.onClose} parentId={null} onDone={(c) => navigate(`/library/c/${c.id}`)} />
@@ -488,7 +488,7 @@ function ArchiveView() {
   };
   return (
     <VStack align="stretch" spacing={4}>
-      <PageHeader title={t('Archive')} subtitle={t('Archived questions, dashboards and collections. Restore them, or delete them for good.')} />
+      <PageHeader title={tc('noun', 'Archive')} subtitle={t('Archived questions, dashboards and collections. Restore them, or delete them for good.')} />
       {isPending && <Skeleton h="160px" borderRadius="xl" />}
       {error && (
         <Alert status="error" borderRadius="xl">

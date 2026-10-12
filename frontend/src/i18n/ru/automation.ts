@@ -111,7 +111,7 @@ export const AUTOMATION: Record<string, string> = {
   'at minute': 'в минуту',
   '{schedule} · time zone {zone}': '{schedule} · часовой пояс {zone}',
   ' · the scheduler is switched off on this server: only "Send now" works': ' · планировщик на этом сервере выключен: работает только «Отправить сейчас»',
-  'To': 'Кому',
+  'To': 'По',
   'Filter values': 'Значения фильтров',
   'Empty filters use the dashboard\'s defaults. Relative dates (like "last 30 days") are worked out on each send.': 'Пустые фильтры берут значения по умолчанию из дашборда. Относительные даты (например, «последние 30 дней») вычисляются при каждой отправке.',
   'Parameter values': 'Значения параметров',
@@ -188,7 +188,7 @@ export const AUTOMATION: Record<string, string> = {
   '(cannot be shown: was the secret key changed?)': '(невозможно показать: возможно, секретный ключ был изменён?)',
   'Copy': 'Копировать',
   'Copy the link': 'Копировать ссылку',
-  'Stop this link': 'Отозвать эту ссылку',
+  'Stop this link': 'Отключить ссылку',
   'Revoke': 'Отозвать',
   'expired': 'срок истёк',
   'password': 'пароль',
@@ -229,4 +229,5 @@ export const AUTOMATION: Record<string, string> = {
   'Open': 'Открыть',
   'Download CSV': 'Скачать CSV',
   'Download Excel': 'Скачать Excel',
+  'recipients::To': 'Кому',
 };

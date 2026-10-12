@@ -10,7 +10,7 @@ import type { VizSpec } from '../viz/types';
 import { useQueryLog, useUsage } from './api';
 import type { LoggedQuery } from './api';
 import { Panel } from './Panel';
-import { t, tn } from '../i18n/index.ts';
+import { t, tn, tc } from '../i18n/index.ts';
 
 const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? t('{s} s', { s: v.toFixed(2) }) : t('{s} s', { s: Math.round(v) }));
 
@@ -93,7 +93,7 @@ export function UsagePanel() {
               />
             </Panel>
             <Panel title={t('People')}>
-              <Small head={[t('Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
+              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
             </Panel>
             <Panel title={t('Where queries come from')}>
               <Small head={[t('Source'), t('Queries')]} rows={u.sources.map((s) => [s.source, s.queries])} />

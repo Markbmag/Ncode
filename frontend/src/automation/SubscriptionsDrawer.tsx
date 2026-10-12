@@ -7,7 +7,7 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { locale, t, tn } from '../i18n/index.ts';
+import { locale, t, tn, tc } from '../i18n/index.ts';
 import { BellIcon, MailIcon, PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../icons';
 import { FilterBar } from '../dashboards/FilterBar';
 import { runValues } from '../dashboards/logic';
@@ -361,7 +361,7 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
             </Text>
           </Section>
 
-          <Section title={t('To')}>
+          <Section title={tc('recipients', 'To')}>
             <Recipients body={body} set={set} options={options} isAdmin={ws.isAdmin} me={ws.user.username} />
           </Section>
 

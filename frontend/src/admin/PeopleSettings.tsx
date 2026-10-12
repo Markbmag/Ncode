@@ -14,7 +14,7 @@ import { useWorkspace } from '../workspace/useWorkspace';
 import { Panel } from './Panel';
 import { connectionsValue, people, useAdminUsers, useGroups, useRowRules } from './peopleApi';
 import type { AdminUser, Group } from './peopleApi';
-import { t, tn } from '../i18n/index.ts';
+import { t, tn, tc } from '../i18n/index.ts';
 
 const when = (ts: number | null) => (ts ? new Date(ts * 1000).toLocaleString() : t('never'));
 
@@ -100,7 +100,7 @@ function Users() {
         <Table size="sm" data-testid="users-table">
           <Thead>
             <Tr>
-              <Th textTransform="none">{t('Name')}</Th>
+              <Th textTransform="none">{tc('person', 'Name')}</Th>
               <Th textTransform="none">{t('Groups')}</Th>
               <Th textTransform="none">{t('Databases')}</Th>
               <Th textTransform="none">{t('Last sign-in')}</Th>
@@ -337,7 +337,7 @@ function GroupDialog({ group, onClose }: { group: Group | null; onClose: () => v
       onSubmit={() => people.saveGroup(group?.id ?? null, { name: name.trim(), description: description.trim() || null, connections, members })}
     >
       <FormControl isRequired>
-        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
+        <FormLabel fontSize="sm">{tc('person', 'Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoFocus data-testid="group-name" />
       </FormControl>
       <FormControl>

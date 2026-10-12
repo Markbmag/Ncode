@@ -4,7 +4,7 @@ import {
 } from '@chakra-ui/react';
 import { CollectionPicker, DialogShell } from '../library/dialogs';
 import { useCollections } from '../library/api';
-import { t } from '../i18n/index.ts';
+import { t, tc } from '../i18n/index.ts';
 import { UploadIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { datasets, formatBytes } from './api';
@@ -127,7 +127,7 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
                   <option value="auto">{t('Detect')}</option>
                   <option value="comma">{t('Comma ,')}</option>
                   <option value="semicolon">{t('Semicolon ;')}</option>
-                  <option value="tab">{t('Tab')}</option>
+                  <option value="tab">{tc('separator', 'Tab')}</option>
                   <option value="pipe">{t('Pipe')} |</option>
                 </Select>
               </FormControl>

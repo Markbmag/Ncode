@@ -4,6 +4,7 @@
  *   t('Save')                          -> "Сохранить" when Russian is chosen
  *   t('{n} rows found', { n: 12 })     -> placeholders in braces are filled in
  *   tn(n, '{n} row', '{n} rows')       -> plural: English one/other, Russian one/few/many
+ *   tc('noun', 'Archive')              -> same English word, its own Russian ("noun::Archive")
  *
  * The English text is the key, so anything without a translation simply stays English.
  * Russian texts live in src/i18n/ru/*.ts as { "English": "Русский" }; a plural entry is keyed
@@ -60,6 +61,15 @@ function fill(text: string, vars?: Vars): string {
 export function t(text: string, vars?: Vars): string {
   if (current === 'en') return fill(text, vars);
   return fill(RU[text] ?? text, vars);
+}
+
+/**
+ * The same English word with a different meaning: tc('noun', 'Archive') shows "Archive" in
+ * English and looks up "noun::Archive" in Russian (falling back to plain "Archive").
+ */
+export function tc(context: string, text: string, vars?: Vars): string {
+  if (current === 'en') return fill(text, vars);
+  return fill(RU[`${context}::${text}`] ?? RU[text] ?? text, vars);
 }
 
 /** Russian plural form: 1 / 2-4 / 5-20 (21 like 1, 22 like 2 ...). */

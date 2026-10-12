@@ -21,7 +21,7 @@ import { LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icon
 import { engineMeta } from '../lib/engines';
 import { queryKeys } from '../lib/queryClient';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { t, tn } from '../i18n/index.ts';
+import { t, tn, tc } from '../i18n/index.ts';
 
 function TableCard({ table, connection }: { table: SchemaTable; connection: string }) {
   const [editing, setEditing] = useState<SchemaColumn | null>(null);
@@ -107,8 +107,8 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
             <Table size="sm">
               <Thead>
                 <Tr>
-                  <Th>{t('From')}</Th>
-                  <Th>{t('To')}</Th>
+                  <Th>{tc('relationship', 'From')}</Th>
+                  <Th>{tc('relationship', 'To')}</Th>
                 </Tr>
               </Thead>
               <Tbody fontFamily="mono" fontSize="xs">

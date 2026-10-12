@@ -106,7 +106,7 @@ export const VIZ: Record<string, string> = {
   "Suffix": "Суффикс",
   "The others turn grey: good when one of them is the story": "Остальные станут серыми: удобно, когда важен один ряд",
   "Value": "Значение",
-  "Value column": "Столбец значения",
+  "Value column": "Столбец значений",
   "Values": "Значения",
   "X axis": "Ось X",
   "X axis title": "Заголовок оси X",

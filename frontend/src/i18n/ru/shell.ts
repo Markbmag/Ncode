@@ -172,7 +172,7 @@ export const SHELL: Record<string, string> = {
   'Browse the data, sort by any column, filter by a phrase and export the result to CSV.': 'Просматривайте данные, сортируйте по любому столбцу, фильтруйте по фразе и выгружайте результат в CSV.',
   'Data': 'Данные',
   'Structure': 'Структура',
-  'Profile': 'Профиль',
+  'Profile': 'Профиль данных',
   'ALL MATCHES': 'ВСЕ СОВПАДЕНИЯ',
   'WHOLE TABLE': 'ВСЯ ТАБЛИЦА',
   'UP TO {n} ROWS': 'ДО {n} СТРОК',
