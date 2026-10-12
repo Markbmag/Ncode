@@ -8,27 +8,28 @@ import { PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../icons';
 import { admin, useAdminSettings, useDestinations } from './api';
 import type { Destination, EmailSettings } from './api';
 import { Panel } from './Panel';
+import { t } from '../i18n/index.ts';
 
 const KIND_HELP: Record<string, { label: string; secret: string; help: string }> = {
   slack: {
     label: 'Slack',
-    secret: 'Webhook URL (https://hooks.slack.com/services/…)',
-    help: 'In Slack: Apps → Incoming Webhooks → Add to a channel, then copy the Webhook URL.',
+    secret: t('Webhook URL (https://hooks.slack.com/services/…)'),
+    help: t('In Slack: Apps → Incoming Webhooks → Add to a channel, then copy the Webhook URL.'),
   },
   teams: {
     label: 'Microsoft Teams',
-    secret: 'Workflow URL (https://…logic.azure.com/… or …/powerautomate/…)',
-    help: 'In the Teams channel: ⋯ → Workflows → "Post to a channel when a webhook request is received", then copy its URL.',
+    secret: t('Workflow URL (https://…logic.azure.com/… or …/powerautomate/…)'),
+    help: t('In the Teams channel: ⋯ → Workflows → "Post to a channel when a webhook request is received", then copy its URL.'),
   },
   telegram: {
     label: 'Telegram',
-    secret: 'Bot token (123456789:AA…)',
-    help: 'Create a bot with @BotFather, add it to the group or channel, and enter the chat id (groups start with -100…, or @channelname).',
+    secret: t('Bot token (123456789:AA…)'),
+    help: t('Create a bot with @BotFather, add it to the group or channel, and enter the chat id (groups start with -100…, or @channelname).'),
   },
   webhook: {
-    label: 'Webhook (JSON)',
-    secret: 'URL (https://…)',
-    help: 'Ncode posts JSON: the title, a link and every card with its columns and first rows. Use it for n8n, Zapier, your own service…',
+    label: t('Webhook (JSON)'),
+    secret: t('URL (https://…)'),
+    help: t('Ncode posts JSON: the title, a link and every card with its columns and first rows. Use it for n8n, Zapier, your own service…'),
   },
 };
 
@@ -36,7 +37,7 @@ const KIND_HELP: Record<string, { label: string; secret: string; help: string }>
 export function DeliverySettings() {
   const settings = useAdminSettings();
   if (settings.isPending) return <Skeleton h="300px" borderRadius="2xl" />;
-  if (!settings.data) return <Text color="red.400">{apiErrorMessage(settings.error, 'Could not load the settings')}</Text>;
+  if (!settings.data) return <Text color="red.400">{apiErrorMessage(settings.error, t('Could not load the settings'))}</Text>;
   return (
     <VStack align="stretch" spacing={6}>
       <SiteAddress key={settings.data.general.site_url} current={settings.data.general.site_url} />
@@ -52,21 +53,21 @@ function SiteAddress({ current }: { current: string }) {
   const save = async () => {
     try {
       await admin.saveGeneral(url.trim());
-      toast({ status: 'success', title: 'Saved', duration: 1200 });
+      toast({ status: 'success', title: t('Saved'), duration: 1200 });
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   return (
-    <Panel title="Site address" subtitle="How people reach Ncode, e.g. https://ncode.company.local. Links in emails and public links start with it.">
+    <Panel title={t('Site address')} subtitle={t('How people reach Ncode, e.g. https://ncode.company.local. Links in emails and public links start with it.')}>
       <HStack maxW="640px">
         <Input size="sm" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={window.location.origin} data-testid="site-url" />
         <Button size="sm" variant="brand" onClick={() => void save()} isDisabled={url.trim() === current}>
-          Save
+          {t('Save')}
         </Button>
         {!current && (
           <Button size="sm" variant="ghost" onClick={() => setUrl(window.location.origin)}>
-            Use this one
+            {t('Use this one')}
           </Button>
         )}
       </HStack>
@@ -95,9 +96,9 @@ function EmailServer({ current }: { current: EmailSettings & { password_set: boo
       });
       setPassword('');
       setRemovePassword(false);
-      toast({ status: 'success', title: 'Email settings saved', duration: 1500 });
+      toast({ status: 'success', title: t('Email settings saved'), duration: 1500 });
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     } finally {
       setBusy(false);
     }
@@ -106,32 +107,32 @@ function EmailServer({ current }: { current: EmailSettings & { password_set: boo
     try {
       const out = await admin.testEmail(testTo.trim());
       toast(out.ok
-        ? { status: 'success', title: `Test email sent to ${testTo}`, duration: 3000 }
-        : { status: 'error', title: 'The test email was not sent', description: out.error, duration: 9000, isClosable: true });
+        ? { status: 'success', title: t('Test email sent to {to}', { to: testTo }), duration: 3000 }
+        : { status: 'error', title: t('The test email was not sent'), description: out.error, duration: 9000, isClosable: true });
     } catch (e) {
-      toast({ status: 'error', title: 'The test email was not sent', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('The test email was not sent'), description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   return (
     <Panel
-      title="Email server (SMTP)"
-      subtitle="Subscriptions and alerts are sent through it. The password is stored encrypted and never shown again."
-      actions={current.host && current.from_address ? <Badge colorScheme="green">set up</Badge> : <Badge>not set up</Badge>}
+      title={t('Email server (SMTP)')}
+      subtitle={t('Subscriptions and alerts are sent through it. The password is stored encrypted and never shown again.')}
+      actions={current.host && current.from_address ? <Badge colorScheme="green">{t('set up')}</Badge> : <Badge>{t('not set up')}</Badge>}
     >
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} maxW="900px">
         <FormControl gridColumn={{ md: 'span 2' }}>
-          <FormLabel fontSize="xs">Server</FormLabel>
+          <FormLabel fontSize="xs">{t('Server')}</FormLabel>
           <Input size="sm" value={form.host} onChange={(e) => set({ host: e.target.value })} placeholder="smtp.office365.com" data-testid="smtp-host" />
         </FormControl>
         <HStack align="flex-end">
           <FormControl>
-            <FormLabel fontSize="xs">Port</FormLabel>
+            <FormLabel fontSize="xs">{t('Port')}</FormLabel>
             <NumberInput size="sm" value={form.port} min={1} max={65535} onChange={(_t, n) => set({ port: Number.isNaN(n) ? 587 : n })}>
               <NumberInputField />
             </NumberInput>
           </FormControl>
           <FormControl>
-            <FormLabel fontSize="xs">Security</FormLabel>
+            <FormLabel fontSize="xs">{t('Security')}</FormLabel>
             <Select
               size="sm"
               value={form.security}
@@ -142,58 +143,58 @@ function EmailServer({ current }: { current: EmailSettings & { password_set: boo
             >
               <option value="starttls">STARTTLS</option>
               <option value="ssl">SSL/TLS</option>
-              <option value="none">None</option>
+              <option value="none">{t('None')}</option>
             </Select>
           </FormControl>
         </HStack>
         <FormControl>
-          <FormLabel fontSize="xs">User name</FormLabel>
+          <FormLabel fontSize="xs">{t('User name')}</FormLabel>
           <Input size="sm" value={form.username} onChange={(e) => set({ username: e.target.value })} autoComplete="off" />
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="xs">Password</FormLabel>
+          <FormLabel fontSize="xs">{t('Password')}</FormLabel>
           <Input
             size="sm"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={current.password_set ? '•••••••• (unchanged)' : ''}
+            placeholder={current.password_set ? t('•••••••• (unchanged)') : ''}
             autoComplete="new-password"
             isDisabled={removePassword}
           />
           {current.password_set && (
             <Checkbox size="sm" mt={1} isChecked={removePassword} onChange={(e) => setRemovePassword(e.target.checked)}>
-              Remove the password
+              {t('Remove the password')}
             </Checkbox>
           )}
         </FormControl>
         <Box />
         <FormControl>
-          <FormLabel fontSize="xs">From address</FormLabel>
+          <FormLabel fontSize="xs">{t('From address')}</FormLabel>
           <Input size="sm" value={form.from_address} onChange={(e) => set({ from_address: e.target.value })} placeholder="reports@company.com" data-testid="smtp-from" />
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="xs">From name</FormLabel>
+          <FormLabel fontSize="xs">{t('From name')}</FormLabel>
           <Input size="sm" value={form.from_name} onChange={(e) => set({ from_name: e.target.value })} />
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="xs">Reply-to (optional)</FormLabel>
+          <FormLabel fontSize="xs">{t('Reply-to (optional)')}</FormLabel>
           <Input size="sm" value={form.reply_to} onChange={(e) => set({ reply_to: e.target.value })} />
         </FormControl>
         <FormControl gridColumn={{ md: 'span 3' }}>
-          <FormLabel fontSize="xs">Allowed domains for typed-in addresses (optional)</FormLabel>
+          <FormLabel fontSize="xs">{t('Allowed domains for typed-in addresses (optional)')}</FormLabel>
           <Input size="sm" value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="company.com, partner.com" />
-          <FormHelperText fontSize="xs">Empty: any address. Otherwise people (not admins) may only send to these domains, so reports do not leave the company by mistake.</FormHelperText>
+          <FormHelperText fontSize="xs">{t('Empty: any address. Otherwise people (not admins) may only send to these domains, so reports do not leave the company by mistake.')}</FormHelperText>
         </FormControl>
       </SimpleGrid>
       <Flex mt={4} gap={3} wrap="wrap" align="center">
         <Button size="sm" variant="brand" onClick={() => void save()} isLoading={busy} data-testid="save-email">
-          Save
+          {t('Save')}
         </Button>
         <Box flex={1} />
-        <Input size="sm" maxW="240px" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="send a test to…" />
+        <Input size="sm" maxW="240px" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder={t('send a test to…')} />
         <Button size="sm" variant="subtle" leftIcon={<SendIcon boxSize={3.5} />} onClick={() => void test()} isDisabled={!testTo.includes('@') || !current.host}>
-          Send test
+          {t('Send test')}
         </Button>
       </Flex>
     </Panel>
@@ -207,32 +208,32 @@ function Destinations() {
   const test = async (d: Destination) => {
     try {
       const out = await admin.testDestination(d.id);
-      toast(out.ok ? { status: 'success', title: `Test message sent to ${d.name}`, duration: 2500 } : { status: 'error', title: 'Not sent', description: out.error, duration: 9000, isClosable: true });
+      toast(out.ok ? { status: 'success', title: t('Test message sent to {name}', { name: d.name }), duration: 2500 } : { status: 'error', title: t('Not sent'), description: out.error, duration: 9000, isClosable: true });
     } catch (e) {
-      toast({ status: 'error', title: 'Not sent', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('Not sent'), description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   const remove = async (d: Destination) => {
     try {
       await admin.deleteDestination(d.id);
     } catch (e) {
-      toast({ status: 'error', title: 'Could not delete', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('Could not delete'), description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   return (
     <Panel
-      title="Chats and webhooks"
-      subtitle="Places subscriptions and alerts can post to. Everyone can choose them; only admins see their addresses (and only the last characters)."
+      title={t('Chats and webhooks')}
+      subtitle={t('Places subscriptions and alerts can post to. Everyone can choose them; only admins see their addresses (and only the last characters).')}
       actions={
         <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={() => setEditing('new')} data-testid="add-destination">
-          Add
+          {t('Add')}
         </Button>
       }
     >
       <VStack align="stretch" spacing={2}>
         {list.data?.length === 0 && !editing && (
           <Text fontSize="sm" color="mutedText">
-            None yet: add a Slack channel, a Teams channel, a Telegram chat or any webhook.
+            {t('None yet: add a Slack channel, a Teams channel, a Telegram chat or any webhook.')}
           </Text>
         )}
         {list.data?.map((d) =>
@@ -247,14 +248,14 @@ function Destinations() {
                 </Text>
                 <Text fontSize="xs" color="mutedText" fontFamily="mono" noOfLines={1}>
                   {d.secret_hint}
-                  {d.config.chat_id ? ` · chat ${d.config.chat_id}` : ''}
+                  {d.config.chat_id ? ` · ${t('chat {id}', { id: d.config.chat_id })}` : ''}
                 </Text>
               </Box>
-              <Tooltip label="Send a test message" hasArrow>
-                <IconButton aria-label="Test" size="sm" icon={<SendIcon boxSize={3.5} />} onClick={() => void test(d)} />
+              <Tooltip label={t('Send a test message')} hasArrow>
+                <IconButton aria-label={t('Test')} size="sm" icon={<SendIcon boxSize={3.5} />} onClick={() => void test(d)} />
               </Tooltip>
-              <IconButton aria-label="Edit" size="sm" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(d)} />
-              <IconButton aria-label="Delete" size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={3.5} />} onClick={() => void remove(d)} />
+              <IconButton aria-label={t('Edit')} size="sm" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(d)} />
+              <IconButton aria-label={t('Delete')} size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={3.5} />} onClick={() => void remove(d)} />
             </Flex>
           ),
         )}
@@ -278,7 +279,7 @@ function DestinationForm({ current, onDone }: { current: Destination | null; onD
       await admin.saveDestination(current?.id ?? null, { name: name.trim(), kind, secret: secret.trim(), chat_id: chatId.trim() });
       onDone();
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     } finally {
       setBusy(false);
     }
@@ -287,7 +288,7 @@ function DestinationForm({ current, onDone }: { current: Destination | null; onD
     <Box border="1px solid" borderColor="brand.400" borderRadius="xl" p={3}>
       <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
         <FormControl>
-          <FormLabel fontSize="xs">Kind</FormLabel>
+          <FormLabel fontSize="xs">{t('Kind')}</FormLabel>
           <Select size="sm" value={kind} onChange={(e) => setKind(e.target.value as Destination['kind'])} data-testid="destination-kind">
             {Object.entries(KIND_HELP).map(([k, v]) => (
               <option key={k} value={k}>
@@ -297,16 +298,16 @@ function DestinationForm({ current, onDone }: { current: Destination | null; onD
           </Select>
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="xs">Name people see</FormLabel>
+          <FormLabel fontSize="xs">{t('Name people see')}</FormLabel>
           <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="#sales" maxLength={120} data-testid="destination-name" />
         </FormControl>
         <FormControl gridColumn={{ md: kind === 'telegram' ? undefined : 'span 2' }}>
           <FormLabel fontSize="xs">{help.secret}</FormLabel>
-          <Input size="sm" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={current ? '(unchanged)' : ''} autoComplete="off" data-testid="destination-secret" />
+          <Input size="sm" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={current ? t('(unchanged)') : ''} autoComplete="off" data-testid="destination-secret" />
         </FormControl>
         {kind === 'telegram' && (
           <FormControl>
-            <FormLabel fontSize="xs">Chat id</FormLabel>
+            <FormLabel fontSize="xs">{t('Chat id')}</FormLabel>
             <Input size="sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="-1001234567890" />
           </FormControl>
         )}
@@ -316,10 +317,10 @@ function DestinationForm({ current, onDone }: { current: Destination | null; onD
       </Text>
       <HStack mt={3}>
         <Button size="sm" variant="brand" onClick={() => void save()} isLoading={busy} isDisabled={!name.trim() || (!current && !secret.trim())} data-testid="save-destination">
-          Save
+          {t('Save')}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </HStack>
     </Box>

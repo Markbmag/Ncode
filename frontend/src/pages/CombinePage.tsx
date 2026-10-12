@@ -16,6 +16,7 @@ import { Step } from '../components/query/Step';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import { CodeEditor } from '../components/sql/CodeEditor';
+import { t, tn } from '../i18n/index.ts';
 import { ChartIcon, CodeIcon, MergeIcon, PencilIcon, PlusIcon, RefreshIcon, TableIcon, UploadIcon, XIcon } from '../icons';
 import { libraryKeys, useQuestion } from '../library/api';
 import type { SavedQuestion } from '../library/api';
@@ -237,7 +238,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
     <Box h="100%" overflowY="auto" pr={{ base: 0, lg: 3 }} pb={6} data-testid="combine-steps">
       <VStack align="stretch" spacing={4}>
         <Step
-          title="Sources"
+          title={t('Sources')}
           color="brand.300"
           testId="step-sources"
           actions={
@@ -249,13 +250,13 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
               isDisabled={draft.sources.length >= MAX_SOURCES || !canEdit}
               data-testid="add-source"
             >
-              Add source
+              {t('Add source')}
             </Button>
           }
         >
           {draft.sources.length === 0 ? (
             <Text fontSize="sm" color="mutedText">
-              Add up to {MAX_SOURCES} sources: saved questions, tables, SQL on any of your databases, or uploaded files.
+              {t('Add up to {max} sources: saved questions, tables, SQL on any of your databases, or uploaded files.', { max: MAX_SOURCES })}
             </Text>
           ) : (
             <VStack align="stretch" spacing={1.5}>
@@ -275,7 +276,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
 
         {draft.sources.length > 0 && (
           <Step
-            title={mode === 'sql' ? 'Combine with SQL' : 'Join'}
+            title={mode === 'sql' ? t('Combine with SQL') : t('Join')}
             color="teal.300"
             testId="step-join"
             actions={
@@ -286,10 +287,10 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
                 onClick={() => update(mode === 'sql' ? { mode: 'join' } : { mode: 'sql', sql: draft.sql || defaultSql(draft) })}
                 data-testid="toggle-sql"
               >
-                {mode === 'sql' ? 'Use the join form' : 'Write SQL instead'}
+                {mode === 'sql' ? t('Use the join form') : t('Write SQL instead')}
               </Button>
             }
-            hint={mode === 'sql' ? 'DuckDB SQL over the sources, by their names. Read-only; files and settings cannot be reached.' : undefined}
+            hint={mode === 'sql' ? t('DuckDB SQL over the sources, by their names. Read-only; files and settings cannot be reached.') : undefined}
           >
             {mode === 'sql' ? (
               <Box h="200px" border="1px solid" borderColor="lineColor" borderRadius="md" overflow="hidden" data-testid="combine-sql">
@@ -309,16 +310,16 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
 
         {draft.sources.length > 0 && combined.length === 0 && (
           <Text fontSize="sm" color="mutedText" px={1}>
-            Run once to filter, summarise and sort the combined rows.
+            {t('Run once to filter, summarise and sort the combined rows.')}
           </Text>
         )}
 
         {combined.length > 0 && (
           <>
-            <Step title="Custom columns" color="cyan.300" hint="Formulas such as [planned] - [built].">
+            <Step title={t('Custom columns')} color="cyan.300" hint={t('Formulas such as [planned] - [built].')}>
               <CustomColumnsEditor columns={postSpec.expressions ?? []} onChange={(expressions) => updatePost({ expressions })} options={baseOptions} />
             </Step>
-            <Step title="Filter" color="purple.300" testId="step-filter">
+            <Step title={t('Filter')} color="purple.300" testId="step-filter">
               <FilterEditor
                 group={postSpec.filters ?? EMPTY_GROUP}
                 onChange={(filters) => updatePost({ filters })}
@@ -326,7 +327,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
                 params={{ names: paramDefs.map((d) => d.name), label: (name) => paramDefs.find((d) => d.name === name)?.label || name }}
               />
             </Step>
-            <Step title="Summarise" color="green.300" testId="step-summarise">
+            <Step title={t('Summarise')} color="green.300" testId="step-summarise">
               <SummarizeEditor
                 aggregations={postSpec.aggregations ?? []}
                 breakouts={postSpec.breakouts ?? []}
@@ -337,21 +338,21 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
               />
             </Step>
             {summarised ? (
-              <Step title="Filter the summary" color="pink.300">
-                <FilterEditor group={postSpec.having ?? EMPTY_GROUP} onChange={(having) => updatePost({ having })} options={outputOptions} emptyText="Every group is shown." />
+              <Step title={t('Filter the summary')} color="pink.300">
+                <FilterEditor group={postSpec.having ?? EMPTY_GROUP} onChange={(having) => updatePost({ having })} options={outputOptions} emptyText={t('Every group is shown.')} />
               </Step>
             ) : (
               <Step
-                title="Columns"
+                title={t('Columns')}
                 color="blue.300"
                 actions={
                   <Button size="xs" variant="ghost" onClick={() => setShowFields((v) => !v)}>
-                    {showFields ? 'Done' : 'Choose'}
+                    {showFields ? t('Done') : t('Choose')}
                   </Button>
                 }
               >
                 <Text fontSize="sm" color="mutedText">
-                  {postSpec.fields?.length ? `${postSpec.fields.length} chosen` : 'All columns'}
+                  {postSpec.fields?.length ? t('{n} chosen', { n: postSpec.fields.length }) : t('All columns')}
                 </Text>
                 <Collapse in={showFields} animateOpacity>
                   <Wrap spacing={2} pt={2}>
@@ -375,13 +376,13 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
                 </Collapse>
               </Step>
             )}
-            <Step title="Sort" color="orange.300">
+            <Step title={t('Sort')} color="orange.300">
               <SortEditor order={postSpec.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => updatePost({ order })} />
             </Step>
-            <Step title="Calculate" color="teal.200" hint="On the rows returned: vs. last year, running totals, shares, ranks, outliers.">
+            <Step title={t('Calculate')} color="teal.200" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')}>
               <TransformsEditor transforms={draft.transforms ?? []} columns={state.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
             </Step>
-            <Step title="Row limit" color="gray.400">
+            <Step title={t('Row limit')} color="gray.400">
               <HStack>
                 <Input
                   size="sm"
@@ -392,10 +393,10 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
                   placeholder={String(ws.limits.query_default_rows ?? 2000)}
                   value={draft.limit ?? ''}
                   onChange={(e) => update({ limit: e.target.value ? Math.min(Number(e.target.value), ws.limits.query_max_rows ?? 10000) : null })}
-                  aria-label="Row limit"
+                  aria-label={t('Row limit')}
                 />
                 <Text fontSize="xs" color="faintText">
-                  rows shown · each source reads up to {(ws.limits.federation_source_rows ?? 100_000).toLocaleString()}
+                  {t('rows shown · each source reads up to {limit}', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString() })}
                 </Text>
               </HStack>
             </Step>
@@ -418,10 +419,10 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
         <Flex px={3} py={1.5} borderBottom="1px solid" borderColor="lineColor" align="center" gap={2}>
           <ButtonGroup size="xs" isAttached variant="outline">
             <Button onClick={() => setView('result')} isActive={view === 'result'} leftIcon={<TableIcon boxSize={3} />} data-testid="view-result">
-              Result
+              {t('Result')}
             </Button>
             <Button onClick={() => setView('report')} isActive={view === 'report'} leftIcon={<MergeIcon boxSize={3} />} data-testid="view-report">
-              Match report
+              {t('Match report')}
             </Button>
           </ButtonGroup>
           <MatchHeadline report={report} labels={labels} />
@@ -442,8 +443,8 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
             empty={
               <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
                 {draft.sources.length === 0
-                  ? 'Add the sources to combine. Each one is read on its database, then they are joined here.'
-                  : 'Run to see the combined rows (Ctrl/Cmd + Enter).'}
+                  ? t('Add the sources to combine. Each one is read on its database, then they are joined here.')
+                  : t('Run to see the combined rows (Ctrl/Cmd + Enter).')}
               </Flex>
             }
           />
@@ -455,11 +456,11 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
   return (
     <Flex direction="column" h="100%" gap={3}>
       <QuestionHeader
-        title="Combine sources"
-        subtitle={draft.sources.length ? draft.sources.map((s) => s.label || s.alias).join(' + ') : 'Join results from several databases and files'}
+        title={t('Combine sources')}
+        subtitle={draft.sources.length ? draft.sources.map((s) => s.label || s.alias).join(' + ') : t('Join results from several databases and files')}
         saved={saved}
         dirty={dirty}
-        defaultName={draft.sources.map((s) => s.label || s.alias).join(' + ') || 'Combined'}
+        defaultName={draft.sources.map((s) => s.label || s.alias).join(' + ') || t('Combined')}
         payload={() => (runnable ? { kind: 'federated', spec: prepared.spec, viz, parameters: paramDefs } : null)}
         onRevert={() => {
           if (!saved) return;
@@ -476,20 +477,20 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
           }
         }}
       >
-        <Tooltip label="Run automatically after each change" hasArrow>
+        <Tooltip label={t('Run automatically after each change')} hasArrow>
           <HStack spacing={1.5}>
             <Switch size="sm" id="combine-auto" isChecked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} />
             <Text as="label" htmlFor="combine-auto" fontSize="xs" color="mutedText">
-              Live preview
+              {t('Live preview')}
             </Text>
           </HStack>
         </Tooltip>
         <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={runNow} isDisabled={!runnable} data-testid="run-combined">
-          Run
+          {t('Run')}
         </Button>
         {!saved && (
           <Button size="sm" variant="ghost" onClick={() => setDraft(emptySpec())} isDisabled={draft.sources.length === 0}>
-            Start over
+            {t('Start over')}
           </Button>
         )}
       </QuestionHeader>
@@ -528,7 +529,7 @@ function MatchHeadline({ report, labels }: { report: FederationInfo; labels: Rec
   if (!worst) return null;
   return (
     <Badge colorScheme={worst.pct > 20 ? 'orange' : 'green'} fontSize="2xs" textTransform="none" data-testid="match-headline">
-      {worst.pct} % of keys without a match in {labels[worst.j.source] || worst.j.source}
+      {t('{pct} % of keys without a match in {source}', { pct: worst.pct, source: labels[worst.j.source] || worst.j.source })}
     </Badge>
   );
 }
@@ -545,7 +546,7 @@ function SourceRow({ source, first, preview, onEdit, onRemove }: {
   const Icon = ICONS[source.type];
   const cols = preview?.data?.federation?.combined_columns ?? [];
   const what =
-    source.type === 'question' ? 'saved question' : source.type === 'dataset' ? 'uploaded file' : source.type === 'sql' ? `SQL on ${source.connection}` : `${source.spec?.connection}: ${source.spec?.source.table}`;
+    source.type === 'question' ? t('saved question') : source.type === 'dataset' ? t('uploaded file') : source.type === 'sql' ? t('SQL on {connection}', { connection: source.connection }) : `${source.spec?.connection}: ${source.spec?.source.table}`;
   return (
     <Flex align="center" gap={2.5} border="1px solid" borderColor="lineColor" borderRadius="md" px={2.5} py={1.5} data-testid="source-row">
       <Icon boxSize={4} color="brand.400" flexShrink={0} />
@@ -559,23 +560,23 @@ function SourceRow({ source, first, preview, onEdit, onRemove }: {
           </Badge>
           {first && (
             <Badge fontSize="2xs" colorScheme="brand">
-              first
+              {t('first')}
             </Badge>
           )}
         </HStack>
         <Text as="div" fontSize="xs" color={preview?.isError ? 'red.400' : 'mutedText'} noOfLines={1}>
           {what}
           {' · '}
-          {!preview ? '' : preview.isPending ? <Spinner size="xs" /> : preview.isError ? apiErrorMessage(preview.error, 'Could not read it') : `${cols.length} columns: ${cols.map((c) => c.name).join(', ')}`}
+          {!preview ? '' : preview.isPending ? <Spinner size="xs" /> : preview.isError ? apiErrorMessage(preview.error, t('Could not read it')) : tn(cols.length, '{n} column: {names}', '{n} columns: {names}', { names: cols.map((c) => c.name).join(', ') })}
         </Text>
       </Box>
       {source.type === 'question' && source.question_id && (
         <Button as={RouterLink} to={`/questions/${source.question_id}`} size="xs" variant="ghost">
-          Open
+          {t('Open')}
         </Button>
       )}
-      {onEdit && <IconButton aria-label={`Change ${source.alias}`} size="xs" variant="ghost" icon={<PencilIcon boxSize={3.5} />} onClick={onEdit} />}
-      {onRemove && <IconButton aria-label={`Remove ${source.alias}`} size="xs" variant="ghost" icon={<XIcon boxSize={3.5} />} onClick={onRemove} />}
+      {onEdit && <IconButton aria-label={t('Change {name}', { name: source.alias })} size="xs" variant="ghost" icon={<PencilIcon boxSize={3.5} />} onClick={onEdit} />}
+      {onRemove && <IconButton aria-label={t('Remove {name}', { name: source.alias })} size="xs" variant="ghost" icon={<XIcon boxSize={3.5} />} onClick={onRemove} />}
     </Flex>
   );
 }

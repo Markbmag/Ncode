@@ -11,6 +11,7 @@ import type { XrayCard } from '../analysis/types';
 import { PageHeader } from '../components/PageHeader';
 import { Visualization } from '../components/viz/Visualization';
 import { dashboards, useCardRun } from '../dashboards/api';
+import { t } from '../i18n/index.ts';
 import { LayoutIcon, SparklesIcon } from '../icons';
 import { library, useCollections } from '../library/api';
 import { effectiveViz } from '../viz/state';
@@ -43,17 +44,17 @@ export default function XrayPage() {
     setSaving(true);
     try {
       const collection = cols.personal_id;
-      const board = await dashboards.create({ name: `X-ray: ${xray.data.title}`, description: 'Made by X-ray', collection_id: collection });
+      const board = await dashboards.create({ name: t('X-ray: {title}', { title: xray.data.title }), description: t('Made by X-ray'), collection_id: collection });
       const cards = [];
       for (const c of xray.data.cards) {
         const q = await library.createQuestion({ name: c.title, kind: 'builder', spec: c.spec, viz: c.viz, parameters: [], collection_id: collection });
         cards.push({ key: c.key.slice(0, 40), kind: 'question' as const, question_id: q.id, layout: c.layout });
       }
       await dashboards.save(board.id, { filters: [], tabs: [], cards, settings: {} });
-      toast({ status: 'success', title: 'Saved as a dashboard', description: 'The cards are saved questions in your collection.', duration: 3000 });
+      toast({ status: 'success', title: t('Saved as a dashboard'), description: t('The cards are saved questions in your collection.'), duration: 3000 });
       navigate(`/dashboards/${board.id}`);
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again'), duration: 6000 });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000 });
     } finally {
       setSaving(false);
     }
@@ -63,35 +64,35 @@ export default function XrayPage() {
     return (
       <Alert status="info" borderRadius="xl">
         <AlertIcon />
-        Open X-ray from a table (Browse → X-ray) or from a saved question (⋯ → X-ray).
+        {t('Open X-ray from a table (Browse → X-ray) or from a saved question (⋯ → X-ray).')}
       </Alert>
     );
 
   return (
     <VStack align="stretch" spacing={4}>
       <PageHeader
-        title={`X-ray${xray.data ? `: ${xray.data.title}` : ''}`}
-        subtitle="A first look, made automatically from what is in the data. Save it to keep and change it."
+        title={xray.data ? t('X-ray: {title}', { title: xray.data.title }) : t('X-ray')}
+        subtitle={t('A first look, made automatically from what is in the data. Save it to keep and change it.')}
         actions={
           <HStack>
             <Button size="sm" variant="subtle" onClick={() => setShowProfile((v) => !v)} isDisabled={!xray.data}>
-              {showProfile ? 'Hide' : 'Show'} the profile
+              {showProfile ? t('Hide the profile') : t('Show the profile')}
             </Button>
             <Button size="sm" variant="brand" leftIcon={<LayoutIcon boxSize={4} />} onClick={() => void save()} isLoading={saving} isDisabled={!xray.data?.cards?.length} data-testid="xray-save">
-              Save as dashboard
+              {t('Save as dashboard')}
             </Button>
           </HStack>
         }
       />
       {xray.isPending && (
         <Flex align="center" gap={3} color="mutedText" fontSize="sm">
-          <Spinner size="sm" /> Reading a sample and looking at every column…
+          <Spinner size="sm" /> {t('Reading a sample and looking at every column…')}
         </Flex>
       )}
       {xray.isError && (
         <Alert status="error" borderRadius="xl">
           <AlertIcon />
-          {apiErrorMessage(xray.error, 'The X-ray did not work')}
+          {apiErrorMessage(xray.error, t('The X-ray did not work'))}
         </Alert>
       )}
       {xray.data && (
@@ -103,7 +104,7 @@ export default function XrayPage() {
           </Collapse>
           {question && (
             <Text fontSize="xs" color="mutedText">
-              Over the table(s) of <RouterLink to={`/questions/${question}`}>the question</RouterLink>, with its filters.
+              {t('Over the table(s) of')} <RouterLink to={`/questions/${question}`}>{t('the question')}</RouterLink>{t(', with its filters.')}
             </Text>
           )}
           <Grid templateColumns={wide ? 'repeat(12, 1fr)' : '1fr'} autoRows={`${ROW_PX}px`} gap={3} data-testid="xray-grid">
@@ -120,7 +121,7 @@ export default function XrayPage() {
           </Grid>
           {(xray.data.cards ?? []).length <= 1 && (
             <Text fontSize="sm" color="mutedText">
-              <SparklesIcon boxSize={3.5} /> Not much to show: the table has few rows or no dates, numbers or categories.
+              <SparklesIcon boxSize={3.5} /> {t('Not much to show: the table has few rows or no dates, numbers or categories.')}
             </Text>
           )}
         </>

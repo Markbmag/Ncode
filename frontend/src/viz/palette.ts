@@ -6,6 +6,8 @@
  * The order is part of the colour-blind safety: slots are assigned in this order,
  * never cycled. More than 8 series fold into "Other".
  */
+import { t } from '../i18n/index.ts';
+
 export type Mode = 'light' | 'dark';
 
 export const CATEGORICAL: Record<Mode, string[]> = {
@@ -104,4 +106,4 @@ export function assignColors(names: string[], saved: Record<string, number> | un
   return out;
 }
 
-export const OTHER = 'Other';
+export const OTHER = t('Other');
