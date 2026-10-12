@@ -432,6 +432,9 @@ flowchart LR
 - **Robustness:** saved content that points at renamed/deleted tables or columns is detected and
   reported in one place (Admin → *Broken content*) instead of failing when opened; app-DB indexes;
   connection/DuckDB/thread leaks checked under load; a 50-user load test of dashboards.
+- **Already known from the audit:** Cyrillic names in the builder, Windows-1251 / decimal-comma uploads,
+  dashboard date range losing its start, Russian layout overflows, subscription defaults (every day,
+  browser time zone, filters kept), one date style per language.
 - **Upgrade safety:** `python -m app.manage check` (migrations, settings, connections, secret key,
   backups) and a documented upgrade procedure; release tags `v1.0` … `v1.1`.
 - **Done when:** the audit list is closed or consciously parked, Mark's checklists pass, and the
@@ -453,6 +456,10 @@ flowchart LR
 - **Verified content:** admins/analysts mark questions, dashboards, metrics as *verified* (badge,
   ranks first in search and pickers; editing the query removes the badge until re-verified).
 - **Helpful empty states and inline hints** on every page (one action + one example).
+- **Names people recognise:** display names for databases and tables (not only columns); file paths,
+  connection keys and setup locks shown to admins only; a calmer menu (grouped, no overlaps).
+- **Share for everyone:** a *Share* button on questions and dashboards that explains the options
+  (move to a shared collection, give a person or group access, admin-only public link).
 - **Done when:** a newcomer who has never seen Ncode completes the five checklist tasks on the demo
   database without help, in English and in Russian.
 
@@ -469,6 +476,10 @@ flowchart LR
   pivot chart; export keeps the layout in XLSX.
 - **Preview per step** (first rows after a join, a filter, a summary) and **undo / redo** for the
   builder and the SQL editor drafts.
+- **Saved questions open as a result** (chart full width) with *Edit*; destructive changes (other table,
+  start over) ask first; *Top N by…* shortcut; readable result column names.
+- **Dashboard filters connect themselves** to the obvious column of each card (only matching types);
+  cards a filter doesn't reach are marked.
 - **Better automatic chart choice** with a short reason ("line chart: one date and one number"); chart
   types that cannot work with the result are greyed out with the reason.
 - **Done when:** "scrap per line per week for the last quarter as a chart" takes ≤ 6 clicks from the
