@@ -218,6 +218,7 @@ from M0 on (DataDesk patched its schema with `try { ALTER TABLE }`; we won't).
 | `metrics`, `questions.model` | M7 | named aggregation; a flag that makes a saved question a model |
 | `subscriptions`, `subscription_runs`, `users.email` | M8 | schedule, recipients, options, alert condition (an alert is a subscription with a condition); the last 50 sends |
 | `destinations`, `app_settings` | M8 | Slack / Teams / Telegram / webhook targets and email, site and sharing settings (secrets encrypted) |
+| `groups`, `group_members`, `row_rules`, `permissions.group_id`, `users.last_login_at` | M9 | groups with databases and collection access, row-level rules per group |
 | `share_links` | M8 | public links (hashed + encrypted token, password, expiry, downloads) and per-item embedding settings |
 
 ---
@@ -238,7 +239,7 @@ Order is fixed; M0–M5 form **release v1.0 "Analytics core"**.
 | M6 | Delivered on the same branch; checklist: [docs/checklists/M6.md](checklists/M6.md) |
 | M7 | Delivered on the same branch; checklist: [docs/checklists/M7.md](checklists/M7.md) |
 | M8 | Delivered on the same branch; checklist: [docs/checklists/M8.md](checklists/M8.md); security review: [docs/security/M8-review.md](security/M8-review.md) |
-| M9 | Not started |
+| M9 | Delivered on the same branch; checklist: [docs/checklists/M9.md](checklists/M9.md). **All planned milestones are delivered** |
 
 ```mermaid
 flowchart LR
@@ -356,7 +357,7 @@ flowchart LR
 - **Public links** (signed, expiring, read-only, optional password) and signed **embedding**; security review before release.
 - Usage analytics and slow-query log (admin).
 
-### M9 · Admin & production — M (Docker deliberately deferred)
+### M9 · Admin & production — M
 
 - Users/groups admin UI with group permissions, audit viewer, row-level security (per-group column filters),
   SSO (OIDC / LDAP), app-DB backup/restore, metrics and health.
@@ -409,7 +410,8 @@ flowchart LR
 Sandboxed Python notebooks · Oracle / ClickHouse / BigQuery / Snowflake adapters · cross-filtering by
 clicking charts · question version history and diff · geographic maps · data quality rules and monitors ·
 natural-language questions (LLM) · mobile layout polish · chart images in emails (server-side rendering) ·
-scheduled exports to a shared folder / SFTP · public links created by non-admins (with an admin switch).
+scheduled exports to a shared folder / SFTP · public links created by non-admins (with an admin switch) ·
+SSO (OIDC / LDAP; moved out of M9 on request) · translated server messages.
 
 ---
 
