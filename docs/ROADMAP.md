@@ -432,6 +432,11 @@ flowchart LR
 - **Robustness:** saved content that points at renamed/deleted tables or columns is detected and
   reported in one place (Admin → *Broken content*) instead of failing when opened; app-DB indexes;
   connection/DuckDB/thread leaks checked under load; a 50-user load test of dashboards.
+- **First: the security bug from the audit** - row-level security bypassed through the result cache in
+  profile, X-ray and multi-source runs; then a cancel that can stop another user's query.
+- **Robust values:** NaN / infinity, JSON, big numbers, `TIME`, Unicode case-insensitive search on SQLite;
+  unexpected errors always answer with JSON (never "server not reachable"); edit conflicts detected
+  ("someone saved this meanwhile"); audit-log retention.
 - **Already known from the audit:** Cyrillic names in the builder, Windows-1251 / decimal-comma uploads,
   dashboard date range losing its start, Russian layout overflows, subscription defaults (every day,
   browser time zone, filters kept), one date style per language.
