@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 from ..appdb import AppDB, User
 from ..config import Settings
 from ..db import ConnectionRegistry, describe_error
+from ..rowsec import RowSecurityError
 from ..schema_graph import relationships
 from .compiler import CompileError, compile_spec, render_sql
 from ..content.store import ContentError
@@ -129,6 +130,7 @@ def register_query_routes(
     current_user: Callable[..., User],
     require_connection: Callable[[str, User], None],
     semantic: Any = None,
+    rowsec: Any = None,
 ) -> "QueryService":
     router = APIRouter(prefix="/api/query", tags=["query"])
 
@@ -140,7 +142,7 @@ def register_query_routes(
                 "Wait for one to finish or cancel it.",
             )
 
-    def compile_for(spec: QuerySpec, *, default_limit: int | None = None, max_limit: int | None = None):
+    def compile_for(spec: QuerySpec, *, user: User, default_limit: int | None = None, max_limit: int | None = None):
         key = spec.connection
         try:
             columns = registry.get_schema(key)
@@ -160,6 +162,11 @@ def register_query_routes(
             manual = semantic.foreign_keys(key)
             if manual:
                 foreign = {t: list(foreign.get(t, [])) + manual.get(t, []) for t in set(foreign) | set(manual)}
+        if rowsec is not None:  # row-level security (M9): the user's row conditions become part of the question
+            try:
+                spec = rowsec.apply_to_spec(spec, user, columns)
+            except RowSecurityError as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
         try:
             compiled = compile_spec(
                 spec,
@@ -187,6 +194,10 @@ def register_query_routes(
             rows = task.result.stats.row_count if task.result is not None else 0
             duration = (task.finished_at or time.time()) - task.created_at
             app_db.audit_finish(audit_id, task.status, rows, 1 if task.status == "error" else 0, duration)
+            m = getattr(app.state, "metrics", None)
+            if m is not None:
+                m.counter("ncode_queries_total", "Queries run, by kind and outcome", kind=task.kind, status=task.status)
+                m.observe("ncode_query_seconds", "Query duration", duration, kind=task.kind)
             if duration >= settings.slow_query_sec:  # also in Admin → Usage → Slow queries
                 slow_log.warning("slow query (%.1fs, %s, %s on %s): %s", duration, task.status, task.owner, task.connection,
                                  (task.result.sql if task.result is not None and task.result.sql else "")[:300])
@@ -208,7 +219,7 @@ def register_query_routes(
     def start_spec(user: User, spec: QuerySpec, wait_ms: int, refresh: bool, extra: dict[str, Any] | None = None):
         require_connection(spec.connection, user)
         check_capacity(user)
-        engine, compiled, sql = compile_for(spec)
+        engine, compiled, sql = compile_for(spec, user=user)
         statement = compiled.limited(1)  # one extra row tells us the result was cut off
         types = [c.type for c in compiled.columns]
         task = QueryTask(owner=user.username, connection=spec.connection, kind="builder")
@@ -232,7 +243,7 @@ def register_query_routes(
     @router.post("/compile")
     def compile_question(body: CompileRequest, user: User = Depends(current_user)):
         require_connection(body.spec.connection, user)
-        _engine, compiled, sql = compile_for(body.spec)
+        _engine, compiled, sql = compile_for(body.spec, user=user)
         return {
             "sql": sql,
             "columns": [{"name": c.name, "type": c.type} for c in compiled.columns],
@@ -242,6 +253,11 @@ def register_query_routes(
     # ------------------------------------------------------------------ SQL mode
     def guard(connection: str, sql: str, user: User):
         engine = registry.get_engine(connection)
+        if rowsec is not None:
+            try:
+                rowsec.check_sql(user, connection)
+            except RowSecurityError as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
         try:
             return engine, check_sql(sql, engine.dialect.name, allow_system=user.is_admin)
         except GuardError as exc:

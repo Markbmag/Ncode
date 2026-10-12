@@ -9,6 +9,7 @@ import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import axios from 'axios';
 import { apiErrorMessage, http } from '../api';
+import { t } from '../i18n/index.ts';
 import { Visualization } from '../components/viz/Visualization';
 import { CardEndpointsContext, useCardRun } from '../dashboards/api';
 import type { CardEndpoints } from '../dashboards/api';
@@ -79,7 +80,7 @@ export default function PublicPage({ mode }: { mode: Mode }) {
       .catch((e: unknown) => {
         if (!alive) return;
         const status = axios.isAxiosError(e) ? e.response?.status : undefined;
-        setError(status === 404 ? 'This link does not exist or no longer works.' : apiErrorMessage(e, 'This could not be opened.'));
+        setError(status === 404 ? t('This link does not exist or no longer works.') : apiErrorMessage(e, t('This could not be opened.')));
       });
     return () => {
       alive = false;
@@ -119,7 +120,7 @@ export default function PublicPage({ mode }: { mode: Mode }) {
       {body}
       {mode === 'public' && (
         <Text fontSize="xs" color="faintText" textAlign="center" mt={8}>
-          Shared with Ncode
+          {t('Shared with Ncode')}
         </Text>
       )}
     </Box>
@@ -136,7 +137,7 @@ function PasswordForm({ base, onAccess }: { base: string; onAccess: (a: string) 
     try {
       onAccess((await http.post<{ access: string }>(`${base}/unlock`, { password })).data.access);
     } catch (e) {
-      setError(apiErrorMessage(e, 'That did not work'));
+      setError(apiErrorMessage(e, t('That did not work')));
     } finally {
       setBusy(false);
     }
@@ -159,10 +160,10 @@ function PasswordForm({ base, onAccess }: { base: string; onAccess: (a: string) 
     >
       <HStack mb={4}>
         <LockIcon boxSize={5} />
-        <Text fontWeight={700}>This link is protected</Text>
+        <Text fontWeight={700}>{t('This link is protected')}</Text>
       </HStack>
       <FormControl>
-        <FormLabel fontSize="sm">Password</FormLabel>
+        <FormLabel fontSize="sm">{t('Password')}</FormLabel>
         <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus data-testid="public-password" />
       </FormControl>
       {error && (
@@ -171,7 +172,7 @@ function PasswordForm({ base, onAccess }: { base: string; onAccess: (a: string) 
         </Text>
       )}
       <Button type="submit" variant="brand" mt={4} w="100%" isLoading={busy} isDisabled={!password}>
-        Open
+        {t('Open')}
       </Button>
     </Box>
   );
@@ -302,9 +303,9 @@ function SharedQuestionView({ base, q, headers, titled }: { base: string; q: Sha
       {q.download && run.result && (
         <HStack mt={3} spacing={3} fontSize="sm">
           <Link onClick={() => run.result && downloadText(`${name}.csv`, buildCsvFromArrays(run.result.columns.map((c) => c.name), run.result.rows, ';'))}>
-            Download CSV
+            {t('Download CSV')}
           </Link>
-          <Link onClick={() => void xlsx()}>Download Excel</Link>
+          <Link onClick={() => void xlsx()}>{t('Download Excel')}</Link>
         </HStack>
       )}
     </Box>

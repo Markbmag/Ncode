@@ -10,8 +10,9 @@ import type { VizSpec } from '../viz/types';
 import { useQueryLog, useUsage } from './api';
 import type { LoggedQuery } from './api';
 import { Panel } from './Panel';
+import { locale, t, tc, tn } from '../i18n/index.ts';
 
-const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? `${v.toFixed(2)} s` : `${Math.round(v)} s`);
+const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? t('{s} s', { s: v.toFixed(2) }) : t('{s} s', { s: Math.round(v) }));
 
 /** Admin → Usage: how much Ncode is used, by whom, for what, and which queries are slow or fail. */
 export function UsagePanel() {
@@ -24,8 +25,8 @@ export function UsagePanel() {
         ? {
             columns: [
               { name: 'day', type: 'date', role: 'dimension' },
-              { name: 'queries', type: 'number', role: 'measure' },
-              { name: 'errors', type: 'number', role: 'measure' },
+              { name: t('queries'), type: 'number', role: 'measure' },
+              { name: t('errors'), type: 'number', role: 'measure' },
             ],
             rows: u.per_day.map((d) => [d.day, d.queries, d.errors]),
             stats: { duration_ms: 0, row_count: u.per_day.length, truncated: false, cached: false },
@@ -34,15 +35,15 @@ export function UsagePanel() {
         : null,
     [u],
   );
-  const chart: VizSpec = { version: 1, type: 'bar', x: 'day', series: [{ y: 'queries' }, { y: 'errors' }] };
+  const chart: VizSpec = { version: 1, type: 'bar', x: 'day', series: [{ y: t('queries') }, { y: t('errors') }] };
   return (
     <VStack align="stretch" spacing={6}>
       <HStack>
-        <Text fontSize="sm">Last</Text>
+        <Text fontSize="sm">{t('Last')}</Text>
         <Select size="sm" w="120px" value={days} onChange={(e) => setDays(Number(e.target.value))} data-testid="usage-days">
           {[7, 30, 90, 365].map((d) => (
             <option key={d} value={d}>
-              {d} days
+              {tn(d, '{n} day', '{n} days')}
             </option>
           ))}
         </Select>
@@ -51,27 +52,27 @@ export function UsagePanel() {
       {u && (
         <>
           <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={3} data-testid="usage-totals">
-            <Tile label="Queries" value={u.totals.queries.toLocaleString()} />
-            <Tile label="People" value={u.totals.people.toLocaleString()} />
-            <Tile label="Sign-ins" value={u.totals.logins.toLocaleString()} />
-            <Tile label="Failed" value={(u.totals.errors ?? 0).toLocaleString()} />
-            <Tile label={`Slower than ${u.slow_query_sec} s`} value={(u.totals.slow ?? 0).toLocaleString()} />
-            <Tile label="Average time" value={sec(u.totals.avg_sec)} />
+            <Tile label={t('Queries')} value={u.totals.queries.toLocaleString(locale())} />
+            <Tile label={t('People')} value={u.totals.people.toLocaleString(locale())} />
+            <Tile label={t('Sign-ins')} value={u.totals.logins.toLocaleString(locale())} />
+            <Tile label={t('Failed')} value={(u.totals.errors ?? 0).toLocaleString(locale())} />
+            <Tile label={t('Slower than {s} s', { s: u.slow_query_sec })} value={(u.totals.slow ?? 0).toLocaleString(locale())} />
+            <Tile label={t('Average time')} value={sec(u.totals.avg_sec)} />
           </SimpleGrid>
           {perDay && perDay.rows.length > 0 && (
-            <Panel title="Queries per day">
+            <Panel title={t('Queries per day')}>
               <Box h="240px">
                 <Visualization result={perDay} viz={chart} />
               </Box>
             </Panel>
           )}
           <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6}>
-            <Panel title="Most used questions">
+            <Panel title={t('Most used questions')}>
               <Small
-                head={['Question', 'Runs', 'Avg', 'Failed']}
+                head={[t('Question'), t('Runs'), t('Avg'), t('Failed')]}
                 rows={u.questions.map((q) => [
                   <Link key="n" as={RouterLink} to={`/questions/${q.id}`}>
-                    {q.name ?? `#${q.id} (deleted)`}
+                    {q.name ?? t('#{id} (deleted)', { id: q.id })}
                   </Link>,
                   q.runs,
                   sec(q.avg_sec),
@@ -79,32 +80,32 @@ export function UsagePanel() {
                 ])}
               />
             </Panel>
-            <Panel title="Most used dashboards">
+            <Panel title={t('Most used dashboards')}>
               <Small
-                head={['Dashboard', 'Card runs', 'People']}
+                head={[t('Dashboard'), t('Card runs'), t('People')]}
                 rows={u.dashboards.map((d) => [
                   <Link key="n" as={RouterLink} to={`/dashboards/${d.id}`}>
-                    {d.name ?? `#${d.id} (deleted)`}
+                    {d.name ?? t('#{id} (deleted)', { id: d.id })}
                   </Link>,
                   d.card_runs,
                   d.people,
                 ])}
               />
             </Panel>
-            <Panel title="People">
-              <Small head={['Name', 'Queries', 'Avg', 'Last']} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
+            <Panel title={t('People')}>
+              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString(locale())])} />
             </Panel>
-            <Panel title="Where queries come from">
-              <Small head={['Source', 'Queries']} rows={u.sources.map((s) => [s.source, s.queries])} />
+            <Panel title={t('Where queries come from')}>
+              <Small head={[t('Source'), t('Queries')]} rows={u.sources.map((s) => [s.source, s.queries])} />
             </Panel>
           </SimpleGrid>
         </>
       )}
-      <Panel title="Query log" subtitle="The slowest and the failed queries. A slow question may need a filter, a smaller date range or an index in the database.">
+      <Panel title={t('Query log')} subtitle={t('The slowest and the failed queries. A slow question may need a filter, a smaller date range or an index in the database.')}>
         <Tabs size="sm" variant="soft-rounded" colorScheme="purple" isLazy>
           <TabList mb={3}>
-            <Tab data-testid="slow-tab">Slow</Tab>
-            <Tab data-testid="errors-tab">Failed</Tab>
+            <Tab data-testid="slow-tab">{t('Slow')}</Tab>
+            <Tab data-testid="errors-tab">{t('Failed')}</Tab>
           </TabList>
           <TabPanels>
             <TabPanel p={0}>
@@ -135,7 +136,7 @@ function Small({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   if (!rows.length)
     return (
       <Text fontSize="sm" color="mutedText">
-        Nothing yet.
+        {t('Nothing yet.')}
       </Text>
     );
   return (
@@ -173,7 +174,7 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
   if (!rows.length)
     return (
       <Text fontSize="sm" color="mutedText">
-        {kind === 'slow' ? `No query took longer than ${log.data?.min_sec ?? 5} s.` : 'No query failed.'}
+        {kind === 'slow' ? t('No query took longer than {s} s.', { s: log.data?.min_sec ?? 5 }) : t('No query failed.')}
       </Text>
     );
   return (
@@ -181,11 +182,11 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
       <Table size="sm" data-testid={`log-${kind}`}>
         <Thead>
           <Tr>
-            <Th textTransform="none">When</Th>
-            <Th textTransform="none">Who</Th>
-            <Th textTransform="none">What</Th>
+            <Th textTransform="none">{t('When')}</Th>
+            <Th textTransform="none">{t('Who')}</Th>
+            <Th textTransform="none">{t('What')}</Th>
             <Th textTransform="none" isNumeric>
-              Time
+              {t('Time')}
             </Th>
           </Tr>
         </Thead>
@@ -193,7 +194,7 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
           {rows.map((r) => (
             <Tr key={r.id} verticalAlign="top">
               <Td fontSize="xs" whiteSpace="nowrap">
-                {new Date(r.ts * 1000).toLocaleString()}
+                {new Date(r.ts * 1000).toLocaleString(locale())}
               </Td>
               <Td fontSize="xs">
                 {r.username}
@@ -205,12 +206,12 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
                   {r.connection && <Badge fontSize="2xs" variant="outline">{r.connection}</Badge>}
                   {r.question_id && (
                     <Link as={RouterLink} to={`/questions/${r.question_id}`}>
-                      {r.question_name ?? `question ${r.question_id}`}
+                      {r.question_name ?? t('question {id}', { id: r.question_id })}
                     </Link>
                   )}
                   {r.dashboard_id && (
                     <Link as={RouterLink} to={`/dashboards/${r.dashboard_id}`} color="mutedText">
-                      on {r.dashboard_name ?? `dashboard ${r.dashboard_id}`}
+                      {t('on {name}', { name: r.dashboard_name ?? t('dashboard {id}', { id: r.dashboard_id }) })}
                     </Link>
                   )}
                 </HStack>

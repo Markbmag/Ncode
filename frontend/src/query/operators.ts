@@ -1,5 +1,6 @@
 import type { ColumnType } from '../api';
 import type { FilterOp } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 /** What kind of value input an operator needs in the filter editor. */
 export type ValueKind = 'none' | 'single' | 'pair' | 'list' | 'relative' | 'current';
@@ -12,20 +13,20 @@ export interface OperatorInfo {
 
 const O = (op: FilterOp, label: string, value: ValueKind): OperatorInfo => ({ op, label, value });
 
-const EMPTY = [O('is_null', 'is empty (null)', 'none'), O('not_null', 'is not empty (null)', 'none')];
+const EMPTY = [O('is_null', t('is empty (null)'), 'none'), O('not_null', t('is not empty (null)'), 'none')];
 
 export const OPERATORS: Record<'string' | 'number' | 'date' | 'boolean' | 'other', OperatorInfo[]> = {
   string: [
-    O('=', 'is', 'single'),
-    O('!=', 'is not', 'single'),
-    O('contains', 'contains', 'single'),
-    O('not_contains', 'does not contain', 'single'),
-    O('starts_with', 'starts with', 'single'),
-    O('ends_with', 'ends with', 'single'),
-    O('in', 'is one of', 'list'),
-    O('not_in', 'is none of', 'list'),
-    O('is_empty', 'is empty or blank', 'none'),
-    O('not_empty', 'has a value', 'none'),
+    O('=', t('is'), 'single'),
+    O('!=', t('is not'), 'single'),
+    O('contains', t('contains'), 'single'),
+    O('not_contains', t('does not contain'), 'single'),
+    O('starts_with', t('starts with'), 'single'),
+    O('ends_with', t('ends with'), 'single'),
+    O('in', t('is one of'), 'list'),
+    O('not_in', t('is none of'), 'list'),
+    O('is_empty', t('is empty or blank'), 'none'),
+    O('not_empty', t('has a value'), 'none'),
     ...EMPTY,
   ],
   number: [
@@ -35,22 +36,22 @@ export const OPERATORS: Record<'string' | 'number' | 'date' | 'boolean' | 'other
     O('>=', '≥', 'single'),
     O('<', '<', 'single'),
     O('<=', '≤', 'single'),
-    O('between', 'between', 'pair'),
-    O('in', 'is one of', 'list'),
-    O('not_in', 'is none of', 'list'),
+    O('between', t('between'), 'pair'),
+    O('in', t('is one of'), 'list'),
+    O('not_in', t('is none of'), 'list'),
     ...EMPTY,
   ],
   date: [
-    O('last', 'in the last', 'relative'),
-    O('current', 'this', 'current'),
-    O('between', 'between', 'pair'),
-    O('>=', 'on or after', 'single'),
-    O('<', 'before', 'single'),
-    O('=', 'on', 'single'),
+    O('last', t('in the last'), 'relative'),
+    O('current', t('this'), 'current'),
+    O('between', t('between'), 'pair'),
+    O('>=', t('on or after'), 'single'),
+    O('<', t('before'), 'single'),
+    O('=', t('on'), 'single'),
     ...EMPTY,
   ],
-  boolean: [O('is_true', 'is true', 'none'), O('is_false', 'is false', 'none'), ...EMPTY],
-  other: [O('=', 'is', 'single'), O('!=', 'is not', 'single'), ...EMPTY],
+  boolean: [O('is_true', t('is true'), 'none'), O('is_false', t('is false'), 'none'), ...EMPTY],
+  other: [O('=', t('is'), 'single'), O('!=', t('is not'), 'single'), ...EMPTY],
 };
 
 export function operatorGroup(type: ColumnType): keyof typeof OPERATORS {

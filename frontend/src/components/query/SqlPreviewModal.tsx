@@ -4,6 +4,7 @@ import { apiErrorMessage, http } from '../../api';
 import { CodeIcon, CopyIcon } from '../../icons';
 import { prettySql } from '../../query/prettySql';
 import type { QuerySpec } from '../../query/types';
+import { t } from '../../i18n/index.ts';
 
 interface SqlPreviewModalProps {
   isOpen: boolean;
@@ -28,14 +29,14 @@ export function SqlPreviewModal({ isOpen, onClose, spec, engine, onOpenInEditor 
     <Modal isOpen={isOpen} onClose={onClose} size="3xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>SQL for this question</ModalHeader>
+        <ModalHeader>{t('SQL for this question')}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           {compiled.isPending && <Skeleton h="200px" borderRadius="lg" />}
           {compiled.isError && (
             <Alert status="error" borderRadius="lg">
               <AlertIcon />
-              {apiErrorMessage(compiled.error, 'Could not build the SQL')}
+              {apiErrorMessage(compiled.error, t('Could not build the SQL'))}
             </Alert>
           )}
           {compiled.data && (
@@ -50,12 +51,12 @@ export function SqlPreviewModal({ isOpen, onClose, spec, engine, onOpenInEditor 
               variant="subtle"
               leftIcon={<CopyIcon boxSize={4} />}
               isDisabled={!sql}
-              onClick={() => void navigator.clipboard?.writeText(sql).then(() => toast({ title: 'SQL copied', status: 'success', duration: 1500 }))}
+              onClick={() => void navigator.clipboard?.writeText(sql).then(() => toast({ title: t('SQL copied'), status: 'success', duration: 1500 }))}
             >
-              Copy
+              {t('Copy')}
             </Button>
             <Button leftIcon={<CodeIcon boxSize={4} />} isDisabled={!sql} onClick={() => onOpenInEditor(sql)} data-testid="open-in-sql-editor">
-              Open in SQL editor
+              {t('Open in SQL editor')}
             </Button>
           </HStack>
         </ModalFooter>

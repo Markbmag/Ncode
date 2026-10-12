@@ -7,6 +7,7 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
+import { locale, t, tn, tc } from '../i18n/index.ts';
 import { BellIcon, MailIcon, PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../icons';
 import { FilterBar } from '../dashboards/FilterBar';
 import { runValues } from '../dashboards/logic';
@@ -69,7 +70,7 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
   return (
     <>
       <DrawerHeader fontSize="md" borderBottom="1px solid" borderColor="lineColor">
-        {editing ? (editing.id ? 'Edit' : editing.body.alert ? 'New alert' : 'New subscription') : 'Subscriptions and alerts'}
+        {editing ? (editing.id ? t('Edit') : editing.body.alert ? t('New alert') : t('New subscription')) : t('Subscriptions and alerts')}
         <Text fontSize="xs" color="mutedText" fontWeight={400} noOfLines={1}>
           {target.name}
         </Text>
@@ -84,13 +85,13 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
                 <Alert status="info" borderRadius="md" fontSize="sm">
                   <ChakraAlertIcon />
                   <Box>
-                    Email is not set up yet, so only Slack, Teams, Telegram or webhooks can be used.{' '}
+                    {t('Email is not set up yet, so only Slack, Teams, Telegram or webhooks can be used.')}{' '}
                     {ws.isAdmin ? (
                       <Link as={RouterLink} to="/admin?tab=delivery" textDecoration="underline">
-                        Set up email
+                        {t('Set up email')}
                       </Link>
                     ) : (
-                      'Ask an admin to set it up.'
+                      t('Ask an admin to set it up.')
                     )}
                   </Box>
                 </Alert>
@@ -99,8 +100,8 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
               {list.data?.length === 0 && (
                 <Text fontSize="sm" color="mutedText">
                   {target.type === 'dashboard'
-                    ? 'Get this dashboard by email or in a chat on a schedule: every morning, every Monday, on the first of the month…'
-                    : 'Get this question on a schedule, or set up an alert that only sends when something happens.'}
+                    ? t('Get this dashboard by email or in a chat on a schedule: every morning, every Monday, on the first of the month…')
+                    : t('Get this question on a schedule, or set up an alert that only sends when something happens.')}
                 </Text>
               )}
               {list.data?.map((s) => <Row key={s.id} sub={s} onEdit={() => edit(s)} />)}
@@ -109,11 +110,11 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
           <DrawerFooter borderTop="1px solid" borderColor="lineColor" gap={2}>
             {target.type === 'question' && (
               <Button size="sm" variant="subtle" leftIcon={<BellIcon boxSize={4} />} onClick={() => startNew(true)} data-testid="new-alert" isDisabled={!options.data}>
-                New alert
+                {t('New alert')}
               </Button>
             )}
             <Button size="sm" variant="brand" leftIcon={<PlusIcon boxSize={4} />} onClick={() => startNew(false)} data-testid="new-subscription" isDisabled={!options.data}>
-              New subscription
+              {t('New subscription')}
             </Button>
           </DrawerFooter>
         </>
@@ -125,7 +126,7 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
 // ---------------------------------------------------------------- one subscription in the list
 
 export function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <Badge fontSize="2xs">not sent yet</Badge>;
+  if (!status) return <Badge fontSize="2xs">{t('not sent yet')}</Badge>;
   const s = STATUS_LABEL[status] ?? { label: status, color: 'gray' };
   return (
     <Badge fontSize="2xs" colorScheme={s.color}>
@@ -141,7 +142,7 @@ function Row({ sub, onEdit }: { sub: Subscription; onEdit: () => void }) {
       await fn();
       if (done) toast({ status: 'success', title: done, duration: 2000 });
     } catch (e) {
-      toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   return (
@@ -153,22 +154,22 @@ function Row({ sub, onEdit }: { sub: Subscription; onEdit: () => void }) {
         </Text>
         <StatusBadge status={sub.running ? 'running' : sub.last_status} />
         {sub.can_manage && (
-          <Tooltip label={sub.enabled ? 'On: click to pause' : 'Paused: click to switch on'} hasArrow>
+          <Tooltip label={sub.enabled ? t('On: click to pause') : t('Paused: click to switch on')} hasArrow>
             <Box>
-              <Switch size="sm" isChecked={sub.enabled} onChange={(e) => void act('Could not change it', () => subscriptions.setEnabled(sub.id, e.target.checked))} aria-label="On or paused" />
+              <Switch size="sm" isChecked={sub.enabled} onChange={(e) => void act(t('Could not change it'), () => subscriptions.setEnabled(sub.id, e.target.checked))} aria-label={t('On or paused')} />
             </Box>
           </Tooltip>
         )}
       </Flex>
       <Text fontSize="xs" color="mutedText" mt={1}>
-        {sub.alert ? `${describeAlert(sub.alert)} · checked ${describeSchedule(sub.schedule).toLowerCase()}` : describeSchedule(sub.schedule)}
+        {sub.alert ? t('{alert} · checked {schedule}', { alert: describeAlert(sub.alert), schedule: describeSchedule(sub.schedule).toLowerCase() }) : describeSchedule(sub.schedule)}
         {' · '}
-        {recipientCount(sub.recipients)} recipient{recipientCount(sub.recipients) === 1 ? '' : 's'}
-        {!sub.can_manage && sub.owner && ` · set up by ${sub.owner}`}
+        {tn(recipientCount(sub.recipients), '{n} recipient', '{n} recipients')}
+        {!sub.can_manage && sub.owner && t(' · set up by {owner}', { owner: sub.owner })}
       </Text>
       <Text fontSize="xs" color="faintText">
-        Last {timeAgo(sub.last_run_at)}
-        {sub.enabled && sub.next_run_at ? ` · next ${timeAgo(sub.next_run_at)}` : ''}
+        {t('Last {when}', { when: timeAgo(sub.last_run_at) })}
+        {sub.enabled && sub.next_run_at ? t(' · next {when}', { when: timeAgo(sub.next_run_at) }) : ''}
       </Text>
       {sub.last_error && (
         <Text fontSize="xs" color="red.400" mt={1} noOfLines={2}>
@@ -179,15 +180,15 @@ function Row({ sub, onEdit }: { sub: Subscription; onEdit: () => void }) {
         {sub.can_manage ? (
           <>
             <Button size="xs" variant="ghost" leftIcon={<PencilIcon boxSize={3} />} onClick={onEdit} data-testid="edit-subscription">
-              Edit
+              {t('Edit')}
             </Button>
-            <Button size="xs" variant="ghost" leftIcon={<SendIcon boxSize={3} />} onClick={() => void act('Could not send', () => subscriptions.sendNow(sub.id), 'Sending now: the result shows here in a moment')} data-testid="send-now">
-              Send now
+            <Button size="xs" variant="ghost" leftIcon={<SendIcon boxSize={3} />} onClick={() => void act(t('Could not send'), () => subscriptions.sendNow(sub.id), t('Sending now: the result shows here in a moment'))} data-testid="send-now">
+              {t('Send now')}
             </Button>
           </>
         ) : (
-          <Button size="xs" variant="ghost" onClick={() => void act('Could not unsubscribe', () => subscriptions.unsubscribe(sub.id), 'You will not get this any more')}>
-            Unsubscribe me
+          <Button size="xs" variant="ghost" onClick={() => void act(t('Could not unsubscribe'), () => subscriptions.unsubscribe(sub.id), t('You will not get this any more'))}>
+            {t('Unsubscribe me')}
           </Button>
         )}
       </HStack>
@@ -224,10 +225,10 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
     try {
       if (id) await subscriptions.replace(id, full);
       else await subscriptions.create(full);
-      toast({ status: 'success', title: body.alert ? 'Alert saved' : 'Subscription saved', duration: 1500 });
+      toast({ status: 'success', title: body.alert ? t('Alert saved') : t('Subscription saved'), duration: 1500 });
       onDone();
     } catch (e) {
-      toast({ status: 'error', title: 'Could not save', description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     } finally {
       setBusy(false);
     }
@@ -239,7 +240,7 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
       await subscriptions.remove(id);
       onDone();
     } catch (e) {
-      toast({ status: 'error', title: 'Could not delete', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('Could not delete'), description: apiErrorMessage(e, t('Please try again')) });
     } finally {
       setBusy(false);
     }
@@ -249,7 +250,7 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
     try {
       setPreview(await subscriptions.preview(full));
     } catch (e) {
-      toast({ status: 'error', title: 'No preview', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('No preview'), description: apiErrorMessage(e, t('Please try again')) });
     } finally {
       setPreviewing(false);
     }
@@ -260,53 +261,53 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
       <DrawerBody py={4}>
         <VStack align="stretch" spacing={5}>
           {body.alert && (
-            <Section title="Send when">
+            <Section title={t('Send when')}>
               <Select size="sm" value={body.alert.type} onChange={(e) => set({ alert: { ...body.alert!, type: e.target.value as 'rows' } })} data-testid="alert-type">
-                <option value="rows">the question has results (any rows)</option>
-                <option value="above">a number goes above a value</option>
-                <option value="below">a number drops below a value</option>
+                <option value="rows">{t('the question has results (any rows)')}</option>
+                <option value="above">{t('a number goes above a value')}</option>
+                <option value="below">{t('a number drops below a value')}</option>
               </Select>
               {body.alert.type !== 'rows' && (
                 <HStack>
-                  <Input size="sm" placeholder="column (empty: the first number)" value={body.alert.column ?? ''} onChange={(e) => set({ alert: { ...body.alert!, column: e.target.value.trim() || null } })} />
+                  <Input size="sm" placeholder={t('column (empty: the first number)')} value={body.alert.column ?? ''} onChange={(e) => set({ alert: { ...body.alert!, column: e.target.value.trim() || null } })} />
                   <NumberInput size="sm" w="160px" value={body.alert.value ?? ''} onChange={(_t, n) => set({ alert: { ...body.alert!, value: Number.isNaN(n) ? null : n } })}>
-                    <NumberInputField placeholder="value" data-testid="alert-value" />
+                    <NumberInputField placeholder={t('value')} data-testid="alert-value" />
                   </NumberInput>
                 </HStack>
               )}
               <Text fontSize="xs" color="mutedText">
                 {body.alert.type === 'rows'
-                  ? 'Tip: filter the question so it only returns the rows that need attention (e.g. stock below 10).'
-                  : 'Checks the last row: for a question by month, that is the latest month.'}
+                  ? t('Tip: filter the question so it only returns the rows that need attention (e.g. stock below 10).')
+                  : t('Checks the last row: for a question by month, that is the latest month.')}
               </Text>
               <Checkbox size="sm" isChecked={body.alert.once} onChange={(e) => set({ alert: { ...body.alert!, once: e.target.checked } })}>
-                Only once, then switch the alert off
+                {t('Only once, then switch the alert off')}
               </Checkbox>
             </Section>
           )}
 
-          <Section title={body.alert ? 'Check' : 'When'}>
+          <Section title={body.alert ? t('Check') : t('When')}>
             <HStack wrap="wrap" spacing={2}>
               <Select size="sm" w="150px" value={s.every} onChange={(e) => set({ schedule: changeEvery(s, e.target.value as 'day') })} data-testid="schedule-every">
-                <option value="hour">Every hour</option>
-                <option value="day">Daily</option>
-                <option value="week">Weekly</option>
-                <option value="month">Monthly</option>
+                <option value="hour">{t('Every hour')}</option>
+                <option value="day">{t('Daily')}</option>
+                <option value="week">{t('Weekly')}</option>
+                <option value="month">{t('Monthly')}</option>
               </Select>
               {s.every === 'month' && (
-                <Select size="sm" w="150px" value={s.monthday} onChange={(e) => setSchedule({ monthday: Number(e.target.value) })} aria-label="Day of the month">
+                <Select size="sm" w="150px" value={s.monthday} onChange={(e) => setSchedule({ monthday: Number(e.target.value) })} aria-label={t('Day of the month')}>
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
                     <option key={d} value={d}>
-                      on the {d}.
+                      {t('on the {d}.', { d })}
                     </option>
                   ))}
-                  <option value={-1}>on the last day</option>
+                  <option value={-1}>{t('on the last day')}</option>
                 </Select>
               )}
               {s.every !== 'hour' ? (
                 <HStack spacing={1}>
-                  <Text fontSize="sm">at</Text>
-                  <Select size="sm" w="80px" value={s.hour} onChange={(e) => setSchedule({ hour: Number(e.target.value) })} aria-label="Hour" data-testid="schedule-hour">
+                  <Text fontSize="sm">{t('at')}</Text>
+                  <Select size="sm" w="80px" value={s.hour} onChange={(e) => setSchedule({ hour: Number(e.target.value) })} aria-label={t('Hour')} data-testid="schedule-hour">
                     {Array.from({ length: 24 }, (_, h) => (
                       <option key={h} value={h}>
                         {pad2(h)}
@@ -314,7 +315,7 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
                     ))}
                   </Select>
                   <Text>:</Text>
-                  <Select size="sm" w="80px" value={s.minute} onChange={(e) => setSchedule({ minute: Number(e.target.value) })} aria-label="Minute">
+                  <Select size="sm" w="80px" value={s.minute} onChange={(e) => setSchedule({ minute: Number(e.target.value) })} aria-label={t('Minute')}>
                     {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
                       <option key={m} value={m}>
                         {pad2(m)}
@@ -324,8 +325,8 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
                 </HStack>
               ) : (
                 <HStack spacing={1}>
-                  <Text fontSize="sm">at minute</Text>
-                  <Select size="sm" w="80px" value={s.minute} onChange={(e) => setSchedule({ minute: Number(e.target.value) })} aria-label="Minute">
+                  <Text fontSize="sm">{t('at minute')}</Text>
+                  <Select size="sm" w="80px" value={s.minute} onChange={(e) => setSchedule({ minute: Number(e.target.value) })} aria-label={t('Minute')}>
                     {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
                       <option key={m} value={m}>
                         :{pad2(m)}
@@ -355,51 +356,51 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
               </HStack>
             )}
             <Text fontSize="xs" color="mutedText" data-testid="schedule-text">
-              {describeSchedule(s)} · time zone {s.timezone}
-              {!options.scheduler && ' · the scheduler is switched off on this server: only "Send now" works'}
+              {t('{schedule} · time zone {zone}', { schedule: describeSchedule(s), zone: s.timezone })}
+              {!options.scheduler && t(' · the scheduler is switched off on this server: only "Send now" works')}
             </Text>
           </Section>
 
-          <Section title="To">
+          <Section title={tc('recipients', 'To')}>
             <Recipients body={body} set={set} options={options} isAdmin={ws.isAdmin} me={ws.user.username} />
           </Section>
 
           {target.type === 'dashboard' && (target.filters?.length ?? 0) > 0 && (
-            <Section title="Filter values">
+            <Section title={t('Filter values')}>
               <FilterBar filters={target.filters ?? []} values={filterValues} onChange={setFilterValues} />
               <Text fontSize="xs" color="mutedText">
-                Empty filters use the dashboard's defaults. Relative dates (like "last 30 days") are worked out on each send.
+                {t('Empty filters use the dashboard\'s defaults. Relative dates (like "last 30 days") are worked out on each send.')}
               </Text>
             </Section>
           )}
           {target.type === 'question' && (target.parameters?.length ?? 0) > 0 && (
-            <Section title="Parameter values">
+            <Section title={t('Parameter values')}>
               <Box border="1px solid" borderColor="lineColor" borderRadius="md">
                 <ParametersBar defs={target.parameters ?? []} values={paramValues} onValues={setParamValues} onDefs={null} />
               </Box>
             </Section>
           )}
 
-          <Section title="Content">
+          <Section title={t('Content')}>
             <FormControl>
-              <FormLabel fontSize="xs">Name (optional, used as the email subject)</FormLabel>
+              <FormLabel fontSize="xs">{t('Name (optional, used as the email subject)')}</FormLabel>
               <Input size="sm" value={body.name} maxLength={200} placeholder={target.name} onChange={(e) => set({ name: e.target.value })} />
             </FormControl>
             <FormControl>
-              <FormLabel fontSize="xs">Note above the results (optional)</FormLabel>
+              <FormLabel fontSize="xs">{t('Note above the results (optional)')}</FormLabel>
               <Textarea size="sm" rows={2} value={body.options.message} maxLength={2000} onChange={(e) => set({ options: { ...body.options, message: e.target.value } })} />
             </FormControl>
             <HStack spacing={4} wrap="wrap">
               <FormControl w="auto">
-                <FormLabel fontSize="xs">Attach the results</FormLabel>
+                <FormLabel fontSize="xs">{t('Attach the results')}</FormLabel>
                 <Select size="sm" w="170px" value={body.options.attach} onChange={(e) => set({ options: { ...body.options, attach: e.target.value as 'none' } })} data-testid="attach">
-                  <option value="none">No files</option>
-                  <option value="csv">CSV files</option>
-                  <option value="xlsx">Excel files</option>
+                  <option value="none">{t('No files')}</option>
+                  <option value="csv">{t('CSV files')}</option>
+                  <option value="xlsx">{t('Excel files')}</option>
                 </Select>
               </FormControl>
               <FormControl w="auto">
-                <FormLabel fontSize="xs">Rows shown per card</FormLabel>
+                <FormLabel fontSize="xs">{t('Rows shown per card')}</FormLabel>
                 <NumberInput size="sm" w="100px" min={1} max={50} value={body.options.rows} onChange={(_t, n) => set({ options: { ...body.options, rows: Number.isNaN(n) ? 10 : Math.min(50, Math.max(1, n)) } })}>
                   <NumberInputField />
                 </NumberInput>
@@ -407,16 +408,16 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
             </HStack>
             {!body.alert && (
               <Checkbox size="sm" isChecked={body.options.skip_empty} onChange={(e) => set({ options: { ...body.options, skip_empty: e.target.checked } })}>
-                Don't send when there are no results
+                {t("Don't send when there are no results")}
               </Checkbox>
             )}
             <Text fontSize="xs" color="mutedText">
-              Recipients see what you can see: the results are run with your permissions.
+              {t('Recipients see what you can see: the results are run with your permissions.')}
             </Text>
           </Section>
 
           {id && saved.data?.runs && saved.data.runs.length > 0 && (
-            <Section title="Recent sends">
+            <Section title={t('Recent sends')}>
               <VStack align="stretch" spacing={1}>
                 {saved.data.runs.slice(0, 8).map((r) => (
                   <RunLine key={r.id} run={r} />
@@ -428,18 +429,18 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
       </DrawerBody>
       <DrawerFooter borderTop="1px solid" borderColor="lineColor" gap={2}>
         {id && (
-          <IconButton aria-label="Delete" size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />} onClick={() => void remove()} isDisabled={busy} data-testid="delete-subscription" />
+          <IconButton aria-label={t('Delete')} size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />} onClick={() => void remove()} isDisabled={busy} data-testid="delete-subscription" />
         )}
         <Box flex={1} />
         <Button size="sm" variant="ghost" onClick={onDone}>
-          Back
+          {t('Back')}
         </Button>
         <Button size="sm" variant="subtle" onClick={() => void showPreview()} isLoading={previewing} data-testid="preview-subscription">
-          Preview
+          {t('Preview')}
         </Button>
         <Tooltip label={issue ?? ''} isDisabled={!issue} hasArrow>
           <Button size="sm" variant="brand" onClick={() => void save()} isLoading={busy} isDisabled={!!issue} data-testid="save-subscription">
-            Save
+            {t('Save')}
           </Button>
         </Tooltip>
       </DrawerFooter>
@@ -471,7 +472,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
     const ok = valid.filter((e) => !blocked.includes(e));
     set({ recipients: { ...r, emails: [...new Set([...r.emails, ...ok])] } });
     setError(
-      invalid.length ? `Not an address: ${invalid.join(', ')}` : blocked.length ? `Only ${options.allowed_domains.join(', ')} addresses: ${blocked.join(', ')}` : null,
+      invalid.length ? t('Not an address: {list}', { list: invalid.join(', ') }) : blocked.length ? t('Only {domains} addresses: {list}', { domains: options.allowed_domains.join(', '), list: blocked.join(', ') }) : null,
     );
     setTyped(invalid.join(' '));
   };
@@ -481,7 +482,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
         {r.users.map((u) => (
           <WrapItem key={u}>
             <Tag size="sm" colorScheme={noEmail.has(u) ? 'orange' : 'purple'} borderRadius="full">
-              <TagLabel>{u === me ? `${u} (you)` : u}</TagLabel>
+              <TagLabel>{u === me ? t('{name} (you)', { name: u }) : u}</TagLabel>
               <TagCloseButton onClick={() => set({ recipients: { ...r, users: r.users.filter((x) => x !== u) } })} />
             </Tag>
           </WrapItem>
@@ -497,13 +498,13 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
       </Wrap>
       {r.users.some((u) => noEmail.has(u)) && (
         <Text fontSize="xs" color="orange.400">
-          Orange names have no email address yet: they can add it with the envelope button next to their name (bottom left).
+          {t('Orange names have no email address yet: they can add it with the envelope button next to their name (bottom left).')}
         </Text>
       )}
       <HStack>
         <Select
           size="sm"
-          placeholder="Add a person…"
+          placeholder={t('Add a person…')}
           value=""
           onChange={(e) => e.target.value && set({ recipients: { ...r, users: [...r.users, e.target.value].sort() } })}
           data-testid="add-person"
@@ -511,7 +512,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
           {people.filter((p) => !r.users.includes(p.username)).map((p) => (
             <option key={p.username} value={p.username}>
               {p.username}
-              {p.has_email ? '' : ' (no email address)'}
+              {p.has_email ? '' : t(' (no email address)')}
             </option>
           ))}
         </Select>
@@ -519,7 +520,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
       <HStack align="flex-start">
         <Input
           size="sm"
-          placeholder="Other addresses, e.g. boss@company.com"
+          placeholder={t('Other addresses, e.g. boss@company.com')}
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
           onKeyDown={(e) => {
@@ -532,7 +533,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
           data-testid="add-emails"
         />
         <Button size="sm" variant="subtle" onClick={addTyped} isDisabled={!typed.trim()}>
-          Add
+          {t('Add')}
         </Button>
       </HStack>
       {error && (
@@ -542,7 +543,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
       )}
       {options.allowed_domains.length > 0 && !isAdmin && (
         <Text fontSize="xs" color="mutedText">
-          Addresses must end with {options.allowed_domains.map((d) => `@${d}`).join(', ')}.
+          {t('Addresses must end with {domains}.', { domains: options.allowed_domains.map((d) => `@${d}`).join(', ') })}
         </Text>
       )}
       {options.destinations.length > 0 && (
@@ -564,9 +565,9 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
       )}
       {options.destinations.length === 0 && isAdmin && (
         <Text fontSize="xs" color="mutedText">
-          Slack, Teams, Telegram and webhooks are added under{' '}
+          {t('Slack, Teams, Telegram and webhooks are added under')}{' '}
           <Link as={RouterLink} to="/admin?tab=delivery" textDecoration="underline">
-            Admin → Delivery
+            {t('Admin → Delivery')}
           </Link>
           .
         </Text>
@@ -582,9 +583,9 @@ function RunLine({ run }: { run: SubscriptionRun }) {
     <Box fontSize="xs" borderBottom="1px solid" borderColor="lineColor" pb={1}>
       <HStack>
         <StatusBadge status={run.status} />
-        <Text color="mutedText">{new Date(run.started_at * 1000).toLocaleString()}</Text>
-        <Text color="faintText">{run.trigger === 'manual' ? 'sent by hand' : 'on schedule'}</Text>
-        {sent > 0 && <Text color="faintText">· to {sent}</Text>}
+        <Text color="mutedText">{new Date(run.started_at * 1000).toLocaleString(locale())}</Text>
+        <Text color="faintText">{run.trigger === 'manual' ? t('sent by hand') : t('on schedule')}</Text>
+        {sent > 0 && <Text color="faintText">{t('· to {n}', { n: sent })}</Text>}
       </HStack>
       {run.detail?.condition && <Text color="mutedText">{run.detail.condition}</Text>}
       {run.detail?.reason && <Text color="mutedText">{run.detail.reason}</Text>}
@@ -609,17 +610,17 @@ function PreviewModal({ preview, onClose }: { preview: Preview; onClose: () => v
       {/* opened from the drawer: it must sit above it */}
       <ModalOverlay zIndex={1500} />
       <ModalContent containerProps={{ zIndex: 1500 }}>
-        <ModalHeader fontSize="md">Preview of the email</ModalHeader>
+        <ModalHeader fontSize="md">{t('Preview of the email')}</ModalHeader>
         <ModalCloseButton />
         <ModalBody pb={4}>
           {preview.alert && (
             <Alert status={preview.alert.met ? 'warning' : 'info'} borderRadius="md" fontSize="sm" mb={3}>
               <ChakraAlertIcon />
-              {preview.alert.met ? `Right now this alert would send: ${preview.alert.note}` : `Right now this alert would not send: ${preview.alert.note}`}
+              {preview.alert.met ? t('Right now this alert would send: {note}', { note: preview.alert.note }) : t('Right now this alert would not send: {note}', { note: preview.alert.note })}
             </Alert>
           )}
           {/* sandboxed: the HTML is built by the server with every value escaped, and runs no scripts */}
-          <Box as="iframe" title="Email preview" srcDoc={preview.html} sandbox="" w="100%" h="65vh" border="1px solid" borderColor="lineColor" borderRadius="md" bg="white" data-testid="email-preview" />
+          <Box as="iframe" title={t('Email preview')} srcDoc={preview.html} sandbox="" w="100%" h="65vh" border="1px solid" borderColor="lineColor" borderRadius="md" bg="white" data-testid="email-preview" />
         </ModalBody>
       </ModalContent>
     </Modal>

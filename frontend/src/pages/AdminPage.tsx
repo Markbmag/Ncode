@@ -9,6 +9,9 @@ import { Panel } from '../admin/Panel';
 import { DeliverySettings } from '../admin/DeliverySettings';
 import { SharingSettings } from '../admin/SharingSettings';
 import { UsagePanel } from '../admin/UsagePanel';
+import { PeopleSettings } from '../admin/PeopleSettings';
+import { AuditPanel } from '../admin/AuditPanel';
+import { SystemPanel } from '../admin/SystemPanel';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
@@ -18,6 +21,7 @@ import { LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icon
 import { engineMeta } from '../lib/engines';
 import { queryKeys } from '../lib/queryClient';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t, tn, tc } from '../i18n/index.ts';
 
 function TableCard({ table, connection }: { table: SchemaTable; connection: string }) {
   const [editing, setEditing] = useState<SchemaColumn | null>(null);
@@ -29,10 +33,10 @@ function TableCard({ table, connection }: { table: SchemaTable; connection: stri
         </Text>
         <HStack spacing={2}>
           <Text fontSize="xs" color="mutedText">
-            {table.columns.length} columns
+            {tn(table.columns.length, '{n} column', '{n} columns')}
           </Text>
           <Button as={RouterLink} to={`/xray?connection=${encodeURIComponent(connection)}&table=${encodeURIComponent(table.name)}`} size="xs" variant="ghost">
-            X-ray
+            {t('X-ray')}
           </Button>
         </HStack>
       </Flex>
@@ -63,7 +67,7 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
   const data = schemaQuery.data;
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    return (data?.tables ?? []).filter((t) => !needle || t.name.toLowerCase().includes(needle)).slice(0, 60);
+    return (data?.tables ?? []).filter((tb) => !needle || tb.name.toLowerCase().includes(needle)).slice(0, 60);
   }, [data, filter]);
 
   if (schemaQuery.isPending) return <Skeleton h="240px" borderRadius="xl" />;
@@ -71,7 +75,7 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
     return (
       <Alert status="error" borderRadius="xl">
         <AlertIcon />
-        {apiErrorMessage(schemaQuery.error, 'Could not read the database structure')}
+        {apiErrorMessage(schemaQuery.error, t('Could not read the database structure'))}
       </Alert>
     );
 
@@ -83,28 +87,28 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
           <InputLeftElement pointerEvents="none" color="faintText">
             <SearchIcon boxSize={3.5} />
           </InputLeftElement>
-          <Input placeholder="Filter tables" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <Input placeholder={t('Filter tables')} value={filter} onChange={(e) => setFilter(e.target.value)} />
         </InputGroup>
         <Text fontSize="sm" color="mutedText" flex={1}>
-          {total} tables · {data?.relationships.length ?? 0} relationships
-          {shown.length < total && !filter && ` · showing the first ${shown.length}`}
+          {tn(total, '{n} table', '{n} tables')} · {tn(data?.relationships.length ?? 0, '{n} relationship', '{n} relationships')}
+          {shown.length < total && !filter && ` · ${t('showing the first {n}', { n: shown.length })}`}
         </Text>
-        <Tooltip label="Read the structure from the database again" hasArrow>
-          <IconButton aria-label="Reload structure" size="sm" icon={<RefreshIcon boxSize={4} />} onClick={() => void reload()} />
+        <Tooltip label={t('Read the structure from the database again')} hasArrow>
+          <IconButton aria-label={t('Reload structure')} size="sm" icon={<RefreshIcon boxSize={4} />} onClick={() => void reload()} />
         </Tooltip>
       </Flex>
 
       {data && data.relationships.length > 0 && (
         <Box>
           <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText" mb={2}>
-            RELATIONSHIPS (FOREIGN KEYS)
+            {t('RELATIONSHIPS (FOREIGN KEYS)')}
           </Text>
           <Box maxH="220px" overflowY="auto" border="1px solid" borderColor="lineColor" borderRadius="xl">
             <Table size="sm">
               <Thead>
                 <Tr>
-                  <Th>From</Th>
-                  <Th>To</Th>
+                  <Th>{tc('relationship', 'From')}</Th>
+                  <Th>{tc('relationship', 'To')}</Th>
                 </Tr>
               </Thead>
               <Tbody fontFamily="mono" fontSize="xs">
@@ -114,7 +118,7 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
                       {r.from_table}.{r.from_columns.join(', ')}
                       {r.manual && (
                         <Badge ml={2} fontSize="0.6rem" colorScheme="teal">
-                          added by hand
+                          {t('added by hand')}
                         </Badge>
                       )}
                     </Td>
@@ -136,11 +140,11 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
       )}
 
       <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText">
-        TABLES · click a column to name, describe, format, hide it or read it as dates
+        {t('TABLES · click a column to name, describe, format, hide it or read it as dates')}
       </Text>
       <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={3}>
-        {shown.map((t) => (
-          <TableCard key={t.name} table={t} connection={connectionKey} />
+        {shown.map((tb) => (
+          <TableCard key={tb.name} table={tb} connection={connectionKey} />
         ))}
       </SimpleGrid>
     </VStack>
@@ -163,36 +167,39 @@ export default function AdminPage() {
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
-        title="Admin"
-        subtitle="Databases and their data model, delivery of subscriptions, sharing outside Ncode and usage. Users and permissions get a screen in M9."
+        title={t('Admin')}
+        subtitle={t('Databases and their data model, people and groups, delivery, sharing, usage, the audit log and backups.')}
         actions={
           <Button as={RouterLink} to="/admin/charts" size="sm" variant="subtle">
-            Chart gallery
+            {t('Chart gallery')}
           </Button>
         }
       />
 
       <Tabs index={tabIndex} onChange={setTab} size="sm" variant="soft-rounded" colorScheme="purple" isLazy>
         <TabList flexWrap="wrap" gap={1}>
-          <Tab data-testid="admin-tab-databases">Databases</Tab>
-          <Tab data-testid="admin-tab-delivery">Delivery</Tab>
-          <Tab data-testid="admin-tab-sharing">Sharing</Tab>
-          <Tab data-testid="admin-tab-usage">Usage</Tab>
+          <Tab data-testid="admin-tab-databases">{t('Databases')}</Tab>
+          <Tab data-testid="admin-tab-people">{t('People')}</Tab>
+          <Tab data-testid="admin-tab-delivery">{t('Delivery')}</Tab>
+          <Tab data-testid="admin-tab-sharing">{t('Sharing')}</Tab>
+          <Tab data-testid="admin-tab-usage">{t('Usage')}</Tab>
+          <Tab data-testid="admin-tab-audit">{t('Audit')}</Tab>
+          <Tab data-testid="admin-tab-system">{t('System')}</Tab>
         </TabList>
         <TabPanels>
           <TabPanel px={0} pt={5}>
             <VStack align="stretch" spacing={6}>
                 <Panel
-                  title="Databases"
+                  title={t('Databases')}
                   actions={
                     <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={ws.openAddConnection}>
-                      Add a database
+                      {t('Add a database')}
                     </Button>
                   }
                 >
                   {ws.connections.length === 0 ? (
                     <Text fontSize="sm" color="mutedText">
-                      No databases yet.
+                      {t('No databases yet.')}
                     </Text>
                   ) : (
                     <VStack align="stretch" spacing={2}>
@@ -212,13 +219,13 @@ export default function AdminPage() {
                           </Box>
                           {c.editable ? (
                             <IconButton
-                              aria-label={`Edit ${c.label}`}
+                              aria-label={t('Edit {name}', { name: c.label })}
                               size="sm"
                               icon={<PencilIcon boxSize={3.5} />}
                               onClick={() => ws.openEditConnection(c.key)}
                             />
                           ) : (
-                            <Tooltip label="Defined in the .env file — edit it there" hasArrow>
+                            <Tooltip label={t('Defined in the .env file — edit it there')} hasArrow>
                               <Box color="faintText" px={2}>
                                 <LockIcon boxSize={3.5} />
                               </Box>
@@ -232,7 +239,7 @@ export default function AdminPage() {
 
                 {ws.connections.length > 0 && (
                   <Panel
-                    title="Data model"
+                    title={t('Data model')}
                     actions={
                       <Select size="sm" maxW="260px" value={selected} onChange={(e) => setModelKey(e.target.value)}>
                         {ws.connections.map((c) => (
@@ -249,6 +256,9 @@ export default function AdminPage() {
             </VStack>
           </TabPanel>
           <TabPanel px={0} pt={5}>
+            <PeopleSettings />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
             <DeliverySettings />
           </TabPanel>
           <TabPanel px={0} pt={5}>
@@ -257,10 +267,16 @@ export default function AdminPage() {
           <TabPanel px={0} pt={5}>
             <UsagePanel />
           </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <AuditPanel />
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <SystemPanel />
+          </TabPanel>
         </TabPanels>
       </Tabs>
     </VStack>
   );
 }
 
-const TABS = ['databases', 'delivery', 'sharing', 'usage'];
+const TABS = ['databases', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system'];

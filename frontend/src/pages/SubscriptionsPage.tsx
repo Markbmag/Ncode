@@ -4,6 +4,7 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
+import { t, tn } from '../i18n/index.ts';
 import { subscriptions, useSubscriptions } from '../automation/api';
 import { StatusBadge } from '../automation/SubscriptionsDrawer';
 import { describeAlert, describeSchedule, recipientCount, timeAgo } from '../automation/logic';
@@ -23,12 +24,12 @@ export default function SubscriptionsPage() {
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
-        title="Subscriptions and alerts"
-        subtitle="Dashboards and questions sent by email or to a chat on a schedule, and alerts that only send when something happens. Set them up from a dashboard or question (the bell button)."
+        title={t('Subscriptions and alerts')}
+        subtitle={t('Dashboards and questions sent by email or to a chat on a schedule, and alerts that only send when something happens. Set them up from a dashboard or question (the bell button).')}
         actions={
           ws.isAdmin ? (
             <HStack>
-              <Text fontSize="sm">Everyone's</Text>
+              <Text fontSize="sm">{t("Everyone's")}</Text>
               <Switch isChecked={everyone} onChange={(e) => setEveryone(e.target.checked)} data-testid="all-subscriptions" />
             </HStack>
           ) : undefined
@@ -39,15 +40,15 @@ export default function SubscriptionsPage() {
         <Flex direction="column" align="center" gap={3} py={14} border="1px dashed" borderColor="lineColor" borderRadius="2xl" color="mutedText" textAlign="center">
           <BellIcon boxSize={8} />
           <Text fontSize="sm" maxW="460px">
-            Nothing is sent yet. Open a dashboard or a saved question and use the bell button to send it every morning, every Monday or when a number crosses a line.
+            {t('Nothing is sent yet. Open a dashboard or a saved question and use the bell button to send it every morning, every Monday or when a number crosses a line.')}
           </Text>
           <Button as={RouterLink} to="/dashboards" size="sm" variant="brand">
-            Dashboards
+            {t('Dashboards')}
           </Button>
         </Flex>
       )}
-      {mine.length > 0 && <Group title={everyone ? 'All subscriptions' : 'Yours'} subs={mine} />}
-      {receiving.length > 0 && <Group title="Sent to you by others" subs={receiving} />}
+      {mine.length > 0 && <Group title={everyone ? t('All subscriptions') : t('Yours')} subs={mine} />}
+      {receiving.length > 0 && <Group title={t('Sent to you by others')} subs={receiving} />}
     </VStack>
   );
 }
@@ -74,7 +75,7 @@ function Item({ sub }: { sub: Subscription }) {
       await fn();
       if (done) toast({ status: 'success', title: done, duration: 2000 });
     } catch (e) {
-      toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   const path = `/${sub.target_type === 'dashboard' ? 'dashboards' : 'questions'}/${sub.target_id}?subscriptions=1`;
@@ -96,24 +97,24 @@ function Item({ sub }: { sub: Subscription }) {
         <Box minW={0}>
           <HStack spacing={2}>
             <Link as={RouterLink} to={path} fontWeight={600} fontSize="sm" noOfLines={1}>
-              {sub.name || sub.target_name || `${sub.target_type} ${sub.target_id}`}
+              {sub.name || sub.target_name || (sub.target_type === 'dashboard' ? t('Dashboard {id}', { id: sub.target_id }) : t('Question {id}', { id: sub.target_id }))}
             </Link>
             <StatusBadge status={sub.running ? 'running' : sub.last_status} />
-            {!sub.enabled && <Badge fontSize="2xs">paused</Badge>}
+            {!sub.enabled && <Badge fontSize="2xs">{t('paused')}</Badge>}
           </HStack>
           <HStack spacing={1} fontSize="xs" color="mutedText" wrap="wrap">
             {sub.target_type === 'dashboard' ? <LayoutIcon boxSize={3} /> : <ChartIcon boxSize={3} />}
-            <Text>{sub.target_name ?? 'not shared with you'}</Text>
+            <Text>{sub.target_name ?? t('not shared with you')}</Text>
             <Text>·</Text>
-            <Text>{sub.alert ? `${describeAlert(sub.alert)}, checked ${describeSchedule(sub.schedule).toLowerCase()}` : describeSchedule(sub.schedule)}</Text>
+            <Text>{sub.alert ? t('{alert}, checked {schedule}', { alert: describeAlert(sub.alert), schedule: describeSchedule(sub.schedule).toLowerCase() }) : describeSchedule(sub.schedule)}</Text>
             <Text>·</Text>
             <Text>
-              {recipientCount(sub.recipients)} recipient{recipientCount(sub.recipients) === 1 ? '' : 's'}
+              {tn(recipientCount(sub.recipients), '{n} recipient', '{n} recipients')}
             </Text>
             {sub.owner && (
               <>
                 <Text>·</Text>
-                <Text>by {sub.owner}</Text>
+                <Text>{t('by {owner}', { owner: sub.owner })}</Text>
               </>
             )}
           </HStack>
@@ -125,26 +126,26 @@ function Item({ sub }: { sub: Subscription }) {
         </Box>
       </HStack>
       <Text fontSize="xs" color="faintText" whiteSpace="nowrap">
-        last {timeAgo(sub.last_run_at)}
-        {sub.enabled && sub.next_run_at ? ` · next ${timeAgo(sub.next_run_at)}` : ''}
+        {t('last {when}', { when: timeAgo(sub.last_run_at) })}
+        {sub.enabled && sub.next_run_at ? t(' · next {when}', { when: timeAgo(sub.next_run_at) }) : ''}
       </Text>
       {sub.can_manage ? (
         <HStack spacing={1}>
-          <Tooltip label={sub.enabled ? 'Pause' : 'Switch on'} hasArrow>
+          <Tooltip label={sub.enabled ? t('Pause') : t('Switch on')} hasArrow>
             <Box>
-              <Switch size="sm" isChecked={sub.enabled} onChange={(e) => void act('Could not change it', () => subscriptions.setEnabled(sub.id, e.target.checked))} aria-label="On or paused" />
+              <Switch size="sm" isChecked={sub.enabled} onChange={(e) => void act(t('Could not change it'), () => subscriptions.setEnabled(sub.id, e.target.checked))} aria-label={t('On or paused')} />
             </Box>
           </Tooltip>
-          <Tooltip label="Send now" hasArrow>
-            <IconButton aria-label="Send now" size="sm" variant="ghost" icon={<SendIcon boxSize={4} />} onClick={() => void act('Could not send', () => subscriptions.sendNow(sub.id), 'Sending now')} />
+          <Tooltip label={t('Send now')} hasArrow>
+            <IconButton aria-label={t('Send now')} size="sm" variant="ghost" icon={<SendIcon boxSize={4} />} onClick={() => void act(t('Could not send'), () => subscriptions.sendNow(sub.id), t('Sending now'))} />
           </Tooltip>
-          <Tooltip label="Delete" hasArrow>
-            <IconButton aria-label="Delete" size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />} onClick={() => void act('Could not delete', () => subscriptions.remove(sub.id))} />
+          <Tooltip label={t('Delete')} hasArrow>
+            <IconButton aria-label={t('Delete')} size="sm" variant="ghost" colorScheme="red" icon={<TrashIcon boxSize={4} />} onClick={() => void act(t('Could not delete'), () => subscriptions.remove(sub.id))} />
           </Tooltip>
         </HStack>
       ) : (
-        <Button size="xs" variant="ghost" onClick={() => void act('Could not unsubscribe', () => subscriptions.unsubscribe(sub.id), 'You will not get this any more')}>
-          Unsubscribe me
+        <Button size="xs" variant="ghost" onClick={() => void act(t('Could not unsubscribe'), () => subscriptions.unsubscribe(sub.id), t('You will not get this any more'))}>
+          {t('Unsubscribe me')}
         </Button>
       )}
     </Flex>

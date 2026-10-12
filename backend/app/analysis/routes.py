@@ -110,8 +110,8 @@ def register_analysis_routes(
             **base, "fields": [{"ref": c["ref"], "alias": c["name"]} for c in cols], "limit": sample,
         })
         count_spec = QuerySpec.model_validate({**base, "aggregations": [{"fn": "count", "alias": "n"}]})
-        engine, compiled, _sql = queries.compile_for(sample_spec, default_limit=sample, max_limit=sample)
-        _e, counted, _csql = queries.compile_for(count_spec)
+        engine, compiled, _sql = queries.compile_for(sample_spec, user=user, default_limit=sample, max_limit=sample)
+        _e, counted, _csql = queries.compile_for(count_spec, user=user)
         types = [c.type for c in compiled.columns]
         fields = semantic.fields(base["connection"]) if semantic is not None else {}
         meta = {c["name"]: fields.get(c["table"], {}).get(c["column"], {}) for c in cols}

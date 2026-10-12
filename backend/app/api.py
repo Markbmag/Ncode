@@ -37,6 +37,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from typing import Any
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -60,9 +61,14 @@ from .automation.settings import SettingsStore
 from .automation.store import SubscriptionStore
 from .sharing.routes import register_sharing_routes
 from .usage import register_usage_routes
+from .admin_routes import register_admin_routes
+from .backup import AutoBackup
+from .metrics import Metrics
+from .ops_routes import register_ops_routes
 from .semantic.routes import register_semantic_routes, schema_extras
 from .semantic.store import SemanticStore
 from .query.runner import QueryRunner
+from .rowsec import RowRules, RowSecurityError
 from .schema_graph import describe_schema
 from .models import ConnectionDetails, ConnectionInfo, ConnectionPayload, EngineOption, MatchMode, SearchRequest
 from .search import SearchOptions, classify_type, start_search_thread
@@ -95,6 +101,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
     semantic = SemanticStore(app_db.engine)
+    rowsec = RowRules(app_db.engine)
     settings_store = SettingsStore(app_db.engine, app_db.cipher)
     subscriptions = SubscriptionStore(app_db.engine)
     automation = AutomationEngine(
@@ -102,6 +109,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         content=lambda: app.state.content, statement_timeout_sec=settings.statement_timeout_sec,
     )
     scheduler = Scheduler(automation, subscriptions, interval_sec=settings.scheduler_interval_sec, workers=settings.scheduler_workers)
+    scheduler.chores.append(AutoBackup(app_db.path, settings.backup_hour, settings.backup_keep).tick)
+    metrics = Metrics()
     bearer = HTTPBearer(auto_error=False)
 
     @asynccontextmanager
@@ -130,6 +139,19 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         expose_headers=["Retry-After"],  # lets the login screen show the lockout countdown
     )
 
+    @app.middleware("http")
+    async def count_requests(request: Request, call_next):
+        started = time.perf_counter()
+        response = await call_next(request)
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or "unmatched"  # the template (/api/questions/{qid}), never ids
+        if path.startswith("/api") or path == "/metrics":
+            labels = {"method": request.method, "route": path, "status": f"{response.status_code // 100}xx"}
+            metrics.counter("ncode_http_requests_total", "HTTP requests", **labels)
+            metrics.observe("ncode_http_request_seconds", "HTTP request duration", time.perf_counter() - started,
+                            method=request.method, route=path)
+        return response
+
     # ------------------------------------------------------------------
     # auth helpers
     # ------------------------------------------------------------------
@@ -139,6 +161,9 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         if not token:
             return None
         return app_db.user_for_token(hash_token(token))
+
+    def current_user_optional(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> User | None:
+        return user_from_token(creds.credentials if creds else None)
 
     def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> User:
         user = user_from_token(creds.credentials if creds else None)
@@ -153,6 +178,12 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
 
     def can_access_task(user: User, task: SearchTask) -> bool:
         return user.is_admin or task.owner == user.username
+
+    def rows_for(user: User, key: str, table: str, columns: list) -> Any:
+        try:
+            return rowsec.where(user, key, table, columns)
+        except RowSecurityError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     def get_task_or_404(task_id: str, user: User) -> SearchTask:
         task = store.get(task_id)
@@ -183,6 +214,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             raise HTTPException(status_code=401, detail="Invalid username or password")
 
         throttle.success(throttle_key)
+        app_db.update_user(user.username, last_login_at=time.time())
         token = new_token()
         expires_at = app_db.create_session(user.id, hash_token(token), settings.session_ttl_hours * 3600)
         app_db.audit(user.username, "login", status="ok")
@@ -508,6 +540,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         require_connection(key, user)
         name, columns = resolve_table(key, table)
         search = filter_options(q, mode, case_sensitive, include_numeric)
+        row_filter = rows_for(user, key, name, columns)
         try:
             data = browse_table(
                 registry.get_engine(key),
@@ -519,6 +552,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 sort=sort,
                 descending=desc,
                 search=search,
+                row_filter=row_filter,
             )
         except Exception as exc:
             detail = describe_error(exc, registry.get_config(key).engine)
@@ -557,9 +591,11 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         require_connection(key, user)
         name, columns = resolve_table(key, table)
         search = filter_options(q, mode, case_sensitive, include_numeric)
+        row_filter = rows_for(user, key, name, columns)
         engine, cfg = registry.get_engine(key), registry.get_config(key)
         try:  # fail now with a clear error instead of sending a half-empty file
-            browse_table(engine, cfg, name, columns, limit=1, offset=0, sort=sort, descending=desc, search=search)
+            browse_table(engine, cfg, name, columns, limit=1, offset=0, sort=sort, descending=desc, search=search,
+                         row_filter=row_filter)
         except Exception as exc:
             detail = describe_error(exc, cfg.engine)
             raise HTTPException(status_code=502, detail=f"The export failed: {detail}") from exc
@@ -569,6 +605,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         stream = csv_stream(
             engine, cfg, name, columns,
             delimiter=delimiter, max_rows=settings.max_export_rows, sort=sort, descending=desc, search=search,
+            row_filter=row_filter,
         )
         filename = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "export"
         return StreamingResponse(
@@ -603,6 +640,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             exclude_tables=payload.exclude_tables,
             schema=payload.schema_name,
             refresh_schema=payload.refresh_schema,
+            # tables with row-level rules for this user are not searched (row by row, every column)
+            denied_tables=frozenset(rowsec.for_user(user, payload.connection)),
         )
         task = store.create(payload.connection, payload.phrase, settings.max_total_results, owner=user.username)
 
@@ -701,6 +740,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         current_user=current_user,
         require_connection=require_connection,
         semantic=semantic,
+        rowsec=rowsec,
     )
     register_semantic_routes(
         app, semantic=semantic, registry=registry, queries=queries, current_user=current_user,
@@ -724,4 +764,15 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         current_user=current_user, require_admin=require_admin,
     )
     register_usage_routes(app, app_db=app_db, settings=settings, require_admin=require_admin)
+    metrics.gauge("ncode_queries_running", "Questions and SQL queries running now", runner.running_total)
+    metrics.gauge("ncode_scheduler_up", "1 when the subscription scheduler runs", lambda: 1.0 if scheduler.alive() else 0.0)
+    app.state.metrics = metrics
+    register_ops_routes(
+        app, app_db=app_db, metrics=metrics, metrics_token=settings.metrics_token, scheduler=scheduler,
+        current_user_optional=current_user_optional, require_admin=require_admin,
+    )
+    register_admin_routes(
+        app, app_db=app_db, registry=registry, rowsec=rowsec, session_ttl_hours=settings.session_ttl_hours,
+        current_user=current_user, require_admin=require_admin,
+    )
     return app

@@ -4,8 +4,9 @@ import {
 } from '@chakra-ui/react';
 import { SettingsIcon } from '../icons';
 import type { ParamShape, ParamType, ParamValue, ParamValues, ParameterDef } from './params';
+import { t } from '../i18n/index.ts';
 
-const inputType = (t: ParamType) => (t === 'number' ? 'number' : t === 'date' ? 'date' : 'text');
+const inputType = (type: ParamType) => (type === 'number' ? 'number' : type === 'date' ? 'date' : 'text');
 
 interface Props {
   defs: ParameterDef[];
@@ -28,10 +29,10 @@ export function ParametersBar({ defs, shapes = {}, values, onValues, onDefs, typ
       {defs.map((def) => {
         const shape = shapes[def.name] ?? 'single';
         const value = values[def.name];
-        const placeholder = def.default !== null && def.default !== undefined && def.default !== '' ? String(def.default) : def.required ? 'required' : 'any';
+        const placeholder = def.default !== null && def.default !== undefined && def.default !== '' ? String(def.default) : def.required ? t('required') : t('any');
         return (
           <HStack key={def.name} spacing={1.5}>
-            <Tooltip label={`{{${def.name}}}${def.required ? ' · required' : ''}`} hasArrow openDelay={400}>
+            <Tooltip label={`{{${def.name}}}${def.required ? ` · ${t('required')}` : ''}`} hasArrow openDelay={400}>
               <Text fontSize="xs" fontWeight={600} color="mutedText" whiteSpace="nowrap">
                 {def.label || def.name}
                 {def.required && ' *'}
@@ -49,7 +50,7 @@ export function ParametersBar({ defs, shapes = {}, values, onValues, onDefs, typ
                       type={inputType(def.type)}
                       value={pair[i] ?? ''}
                       onChange={(e) => setValue(def.name, i === 0 ? [e.target.value, pair[1] ?? ''] : [pair[0] ?? '', e.target.value])}
-                      aria-label={`${def.label || def.name} ${i === 0 ? 'from' : 'to'}`}
+                      aria-label={i === 0 ? t('{name} from', { name: def.label || def.name }) : t('{name} to', { name: def.label || def.name })}
                     />
                   );
                 })}
@@ -62,14 +63,14 @@ export function ParametersBar({ defs, shapes = {}, values, onValues, onDefs, typ
                 value={Array.isArray(value) ? value.join(', ') : (value ?? '')}
                 placeholder={shape === 'list' ? `${placeholder} (a, b, c)` : placeholder}
                 onChange={(e) => setValue(def.name, e.target.value)}
-                aria-label={`Value of ${def.label || def.name}`}
+                aria-label={t('Value of {name}', { name: def.label || def.name })}
                 data-testid={`param-${def.name}`}
               />
             )}
             {onDefs && (
               <Popover placement="bottom-start" isLazy>
                 <PopoverTrigger>
-                  <IconButton aria-label={`Settings of ${def.name}`} size="xs" variant="ghost" icon={<SettingsIcon boxSize={3} />} />
+                  <IconButton aria-label={t('Settings of {name}', { name: def.name })} size="xs" variant="ghost" icon={<SettingsIcon boxSize={3} />} />
                 </PopoverTrigger>
                 <PopoverContent w="260px">
                   <PopoverArrow />
@@ -77,39 +78,39 @@ export function ParametersBar({ defs, shapes = {}, values, onValues, onDefs, typ
                     <VStack align="stretch" spacing={2}>
                       <FormControl>
                         <FormLabel fontSize="xs" mb={1}>
-                          Label
+                          {t('Label')}
                         </FormLabel>
                         <Input size="xs" value={def.label ?? ''} onChange={(e) => setDef(def.name, { label: e.target.value })} />
                       </FormControl>
                       {typeEditable && (
                         <FormControl>
                           <FormLabel fontSize="xs" mb={1}>
-                            Type
+                            {t('Type')}
                           </FormLabel>
-                          <Select size="xs" value={def.type} onChange={(e) => setDef(def.name, { type: e.target.value as ParamType })} aria-label="Type">
-                            <option value="text">Text</option>
-                            <option value="number">Number</option>
-                            <option value="date">Date</option>
+                          <Select size="xs" value={def.type} onChange={(e) => setDef(def.name, { type: e.target.value as ParamType })} aria-label={t('Type')}>
+                            <option value="text">{t('Text')}</option>
+                            <option value="number">{t('Number')}</option>
+                            <option value="date">{t('Date')}</option>
                           </Select>
                         </FormControl>
                       )}
                       <FormControl>
                         <FormLabel fontSize="xs" mb={1}>
-                          Default value
+                          {t('Default value')}
                         </FormLabel>
                         <Input
                           size="xs"
                           type={shape === 'single' ? inputType(def.type) : 'text'}
                           value={def.default === null || def.default === undefined ? '' : String(def.default)}
                           onChange={(e) => setDef(def.name, { default: e.target.value === '' ? null : e.target.value })}
-                          placeholder={shape === 'pair' ? 'from, to' : shape === 'list' ? 'a, b, c' : ''}
+                          placeholder={shape === 'pair' ? t('from, to') : shape === 'list' ? 'a, b, c' : ''}
                         />
                       </FormControl>
                       <Checkbox size="sm" isChecked={!!def.required} onChange={(e) => setDef(def.name, { required: e.target.checked })}>
-                        <Text fontSize="xs">Required</Text>
+                        <Text fontSize="xs">{t('Required')}</Text>
                       </Checkbox>
                       <Box fontSize="2xs" color="faintText">
-                        {typeEditable ? 'Every {{parameter}} in SQL needs a value or a default.' : 'Without a value (and no default) this filter is left out.'}
+                        {typeEditable ? t('Every {{parameter}} in SQL needs a value or a default.') : t('Without a value (and no default) this filter is left out.')}
                       </Box>
                     </VStack>
                   </PopoverBody>

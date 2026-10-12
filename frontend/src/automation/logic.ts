@@ -1,8 +1,11 @@
 /** Pure helpers for subscriptions and alerts: describing schedules, defaults, validation. */
+import { lang, t } from '../i18n/index.ts';
 import type { AlertCondition, Recipients, Schedule, SubscriptionBody, TargetType } from './types';
 
-export const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-export const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+export const DAY_NAMES = [t('Monday'), t('Tuesday'), t('Wednesday'), t('Thursday'), t('Friday'), t('Saturday'), t('Sunday')];
+export const DAY_SHORT = [t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat'), t('Sun')];
+/** "Mondays" as used in "Mondays at 07:30" (Russian: "по понедельникам"). */
+const DAY_PLURAL = [t('Mondays'), t('Tuesdays'), t('Wednesdays'), t('Thursdays'), t('Fridays'), t('Saturdays'), t('Sundays')];
 const WEEKDAYS = [0, 1, 2, 3, 4];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -19,16 +22,21 @@ export const clock = (hour: number, minute: number) => `${pad2(hour)}:${pad2(min
 
 const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((d, i) => d === b[i]);
 
-function dayList(days: number[]): string {
+type DayList = { kind: 'all' } | { kind: 'weekdays' } | { kind: 'weekends' } | { kind: 'some'; text: string };
+
+function dayList(days: number[]): DayList {
   const sorted = [...days].sort((a, b) => a - b);
-  if (sameDays(sorted, ALL_DAYS)) return 'every day';
-  if (sameDays(sorted, WEEKDAYS)) return 'weekdays';
-  if (sameDays(sorted, [5, 6])) return 'weekends';
-  if (sorted.length === 1) return `${DAY_NAMES[sorted[0]]}s`;
-  return sorted.map((d) => DAY_SHORT[d]).join(', ');
+  if (sameDays(sorted, ALL_DAYS)) return { kind: 'all' };
+  if (sameDays(sorted, WEEKDAYS)) return { kind: 'weekdays' };
+  if (sameDays(sorted, [5, 6])) return { kind: 'weekends' };
+  if (sorted.length === 1) return { kind: 'some', text: DAY_PLURAL[sorted[0]] };
+  return { kind: 'some', text: sorted.map((d) => DAY_SHORT[d]).join(', ') };
 }
 
+const capitalize = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
 const ordinal = (n: number) => {
+  if (lang() === 'ru') return `${n}-го`;
   const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
   return `${n}${s}`;
 };
@@ -36,16 +44,25 @@ const ordinal = (n: number) => {
 /** "Weekdays at 08:00", "Every hour at :15 on weekends", "On the last day of the month at 06:00 (Europe/Berlin)". */
 export function describeSchedule(s: Schedule, localZone = browserTimeZone()): string {
   const zone = s.timezone && s.timezone !== localZone ? ` (${s.timezone})` : '';
-  const at = clock(s.hour, s.minute);
+  const time = clock(s.hour, s.minute);
   let text: string;
   if (s.every === 'hour') {
     const days = dayList(s.days);
-    text = `Every hour at :${pad2(s.minute)}${days === 'every day' ? '' : ` on ${days}`}`;
+    const minute = pad2(s.minute);
+    if (days.kind === 'all') text = t('Every hour at :{minute}', { minute });
+    else if (days.kind === 'weekdays') text = t('Every hour at :{minute} on weekdays', { minute });
+    else if (days.kind === 'weekends') text = t('Every hour at :{minute} on weekends', { minute });
+    else text = t('Every hour at :{minute} on {days}', { minute, days: days.text });
   } else if (s.every === 'month') {
-    text = `${s.monthday === -1 ? 'On the last day' : `On the ${ordinal(s.monthday)}`} of every month at ${at}`;
+    text = s.monthday === -1
+      ? t('On the last day of every month at {time}', { time })
+      : t('On the {day} of every month at {time}', { day: ordinal(s.monthday), time });
   } else {
     const days = dayList(s.days);
-    text = days === 'every day' ? `Every day at ${at}` : `${days.charAt(0).toUpperCase()}${days.slice(1)} at ${at}`;
+    if (days.kind === 'all') text = t('Every day at {time}', { time });
+    else if (days.kind === 'weekdays') text = t('Weekdays at {time}', { time });
+    else if (days.kind === 'weekends') text = t('Weekends at {time}', { time });
+    else text = capitalize(t('{days} at {time}', { days: days.text, time }));
   }
   return text + zone;
 }
@@ -79,10 +96,14 @@ export function newSubscription(target_type: TargetType, target_id: number, me: 
 }
 
 export function describeAlert(a: AlertCondition): string {
-  const once = a.once ? ', then stop' : '';
-  if (a.type === 'rows') return `When there are results${once}`;
-  const col = a.column ? `${a.column} ` : '';
-  return `When ${col}${a.type === 'above' ? 'goes above' : 'drops below'} ${a.value ?? '?'}${once}`;
+  const once = a.once ? t(', then stop') : '';
+  if (a.type === 'rows') return t('When there are results') + once;
+  const value = a.value ?? '?';
+  const column = a.column;
+  let text: string;
+  if (a.type === 'above') text = column ? t('When {column} goes above {value}', { column, value }) : t('When goes above {value}', { value });
+  else text = column ? t('When {column} drops below {value}', { column, value }) : t('When drops below {value}', { value });
+  return text + once;
 }
 
 export function recipientCount(r: Recipients): number {
@@ -105,28 +126,36 @@ export function domainAllowed(email: string, domains: string[]): boolean {
 
 /** Why the form cannot be saved yet, or null. */
 export function problem(body: SubscriptionBody): string | null {
-  if (recipientCount(body.recipients) === 0) return 'Add at least one recipient';
+  if (recipientCount(body.recipients) === 0) return t('Add at least one recipient');
   if ((body.schedule.every === 'day' || body.schedule.every === 'week' || body.schedule.every === 'hour') && !body.schedule.days.length)
-    return 'Choose at least one day';
+    return t('Choose at least one day');
   if (body.alert && body.alert.type !== 'rows' && (body.alert.value === null || Number.isNaN(body.alert.value)))
-    return 'Give the value to compare with';
+    return t('Give the value to compare with');
   return null;
 }
 
 export function timeAgo(ts: number | null, now = Date.now() / 1000): string {
-  if (!ts) return 'never';
+  if (!ts) return t('never');
   const d = now - ts;
   const future = d < 0;
   const a = Math.abs(d);
-  const unit = a < 60 ? 'less than a minute' : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} days`;
-  if (a < 60) return future ? 'in a moment' : 'just now';
-  return future ? `in ${unit}` : `${unit} ago`;
+  if (a < 60) return future ? t('in a moment') : t('just now');
+  if (a < 3600) {
+    const n = Math.round(a / 60);
+    return future ? t('in {n} min', { n }) : t('{n} min ago', { n });
+  }
+  if (a < 86400) {
+    const n = Math.round(a / 3600);
+    return future ? t('in {n} h', { n }) : t('{n} h ago', { n });
+  }
+  const n = Math.round(a / 86400);
+  return future ? t('in {n} days', { n }) : t('{n} days ago', { n });
 }
 
 export const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  running: { label: 'sending…', color: 'blue' },
-  sent: { label: 'sent', color: 'green' },
-  skipped: { label: 'not sent', color: 'gray' },
-  partial: { label: 'partly sent', color: 'orange' },
-  error: { label: 'failed', color: 'red' },
+  running: { label: t('sending…'), color: 'blue' },
+  sent: { label: t('sent'), color: 'green' },
+  skipped: { label: t('not sent'), color: 'gray' },
+  partial: { label: t('partly sent'), color: 'orange' },
+  error: { label: t('failed'), color: 'red' },
 };

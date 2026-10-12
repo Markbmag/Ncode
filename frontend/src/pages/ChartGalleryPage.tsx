@@ -4,6 +4,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Visualization } from '../components/viz/Visualization';
 import { FIXTURES } from '../viz/fixtures';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t } from '../i18n/index.ts';
 
 /** Every chart type drawn from sample data: a quick visual check of charts in the current theme. */
 export default function ChartGalleryPage() {
@@ -11,7 +12,7 @@ export default function ChartGalleryPage() {
   if (!ws.isAdmin) return <Navigate to="/" replace />;
   return (
     <VStack align="stretch" spacing={6}>
-      <PageHeader title="Chart gallery" subtitle="Every chart type with sample data. Switch the theme to check light and dark." />
+      <PageHeader title={t('Chart gallery')} subtitle={t('Every chart type with sample data. Switch the theme to check light and dark.')} />
       <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
         {FIXTURES.map((f) => (
           <Box key={f.name} bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden" data-testid="gallery-card">

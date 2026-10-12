@@ -10,6 +10,7 @@ import { EChart } from './EChart';
 import type { EChartHandle } from './EChart';
 import { KpiTile } from './KpiTile';
 import { PivotTable } from './PivotTable';
+import { t } from '../../i18n/index.ts';
 
 interface VisualizationProps {
   result: Pick<ResultEnvelope, 'columns' | 'rows'>;
@@ -31,7 +32,7 @@ export function Visualization({ result, viz, smartDates, chartRef }: Visualizati
   if (!option) {
     return (
       <Flex h="100%" align="center" justify="center">
-        <Text color="mutedText">This chart type cannot show this result.</Text>
+        <Text color="mutedText">{t('This chart type cannot show this result.')}</Text>
       </Flex>
     );
   }
@@ -42,7 +43,7 @@ export function Visualization({ result, viz, smartDates, chartRef }: Visualizati
           {warning}
         </Text>
       )}
-      <EChart option={option} chartRef={chartRef} ariaLabel={`${viz.type} chart`} />
+      <EChart option={option} chartRef={chartRef} ariaLabel={t('{type} chart', { type: viz.type })} />
     </Flex>
   );
 }

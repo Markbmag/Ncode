@@ -4,6 +4,7 @@ import {
   TabPanel, TabPanels, Tabs, Text, useDisclosure,
 } from '@chakra-ui/react';
 import { CodeEditor } from '../components/sql/CodeEditor';
+import { locale, t, tn } from '../i18n/index.ts';
 import { ChartIcon, CodeIcon, SearchIcon, TableIcon, UploadIcon } from '../icons';
 import { useQuestions } from '../library/api';
 import { DialogShell } from '../library/dialogs';
@@ -64,8 +65,8 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
     <DialogShell
       isOpen
       onClose={onClose}
-      title={isNew ? 'Add a source' : `Change “${initial.label || initial.alias}”`}
-      submitLabel={isNew ? 'Add' : 'Save'}
+      title={isNew ? t('Add a source') : t('Change “{name}”', { name: initial.label || initial.alias })}
+      submitLabel={isNew ? t('Add') : t('Save')}
       size="2xl"
       canSubmit={!!built && aliasOk}
       onSubmit={async () => {
@@ -75,16 +76,16 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
       <Tabs size="sm" variant="soft-rounded" colorScheme="brand" index={TYPES.indexOf(type)} onChange={(i) => setType(TYPES[i])} isLazy>
         <TabList flexWrap="wrap" gap={1}>
           <Tab gap={1.5} data-testid="source-tab-question">
-            <ChartIcon boxSize={3.5} /> Saved question
+            <ChartIcon boxSize={3.5} /> {t('Saved question')}
           </Tab>
           <Tab gap={1.5} data-testid="source-tab-table">
-            <TableIcon boxSize={3.5} /> Table
+            <TableIcon boxSize={3.5} /> {t('Table')}
           </Tab>
           <Tab gap={1.5} data-testid="source-tab-sql">
             <CodeIcon boxSize={3.5} /> SQL
           </Tab>
           <Tab gap={1.5} data-testid="source-tab-dataset">
-            <UploadIcon boxSize={3.5} /> Uploaded file
+            <UploadIcon boxSize={3.5} /> {t('Uploaded file')}
           </Tab>
         </TabList>
         <TabPanels>
@@ -103,8 +104,7 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
               <TableSelect connection={connection} value={table} onChange={setTable} />
             </Flex>
             <Text fontSize="xs" color="faintText" mt={2}>
-              Every column of the table, up to the row limit for sources ({(ws.limits.federation_source_rows ?? 100_000).toLocaleString()} rows). To read less, save
-              a question with filters and use it instead.
+              {t('Every column of the table, up to the row limit for sources ({limit} rows). To read less, save a question with filters and use it instead.', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString(locale()) })}
             </Text>
           </TabPanel>
           <TabPanel px={0}>
@@ -121,13 +121,13 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
       </Tabs>
       <Flex gap={3} direction={{ base: 'column', md: 'row' }}>
         <FormControl>
-          <FormLabel fontSize="sm">Label</FormLabel>
-          <Input size="sm" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={fallbackLabel || 'e.g. MES builds'} maxLength={120} data-testid="source-label" />
+          <FormLabel fontSize="sm">{t('Label')}</FormLabel>
+          <Input size="sm" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={fallbackLabel || t('e.g. MES builds')} maxLength={120} data-testid="source-label" />
         </FormControl>
         <FormControl isInvalid={!aliasOk}>
-          <FormLabel fontSize="sm">Name in SQL</FormLabel>
+          <FormLabel fontSize="sm">{t('Name in SQL')}</FormLabel>
           <Input size="sm" fontFamily="mono" value={alias} onChange={(e) => setAlias(e.target.value.toLowerCase())} placeholder={finalAlias} isDisabled={!isNew} maxLength={32} />
-          <FormHelperText fontSize="xs">{isNew ? 'Lower case letters, digits and _' : 'Fixed once added (joins and SQL use it)'}</FormHelperText>
+          <FormHelperText fontSize="xs">{isNew ? t('Lower case letters, digits and _') : t('Fixed once added (joins and SQL use it)')}</FormHelperText>
         </FormControl>
       </Flex>
       <UploadDialog isOpen={upload.isOpen} onClose={upload.onClose} onUploaded={(d) => {
@@ -142,7 +142,7 @@ function ConnectionSelect({ value, onChange }: { value: string; onChange: (key: 
   const ws = useWorkspace();
   return (
     <FormControl mb={2}>
-      <FormLabel fontSize="sm">Database</FormLabel>
+      <FormLabel fontSize="sm">{t('Database')}</FormLabel>
       <Select size="sm" value={value} onChange={(e) => onChange(e.target.value)} data-testid="source-connection">
         {ws.connections.map((c) => (
           <option key={c.key} value={c.key}>
@@ -154,19 +154,19 @@ function ConnectionSelect({ value, onChange }: { value: string; onChange: (key: 
   );
 }
 
-function TableSelect({ connection, value, onChange }: { connection: string; value: string; onChange: (t: string) => void }) {
+function TableSelect({ connection, value, onChange }: { connection: string; value: string; onChange: (table: string) => void }) {
   const schema = useSchema(connection);
-  const names = useMemo(() => (schema.data?.tables ?? []).map((t) => t.name).sort((a, b) => a.localeCompare(b)), [schema.data]);
+  const names = useMemo(() => (schema.data?.tables ?? []).map((tb) => tb.name).sort((a, b) => a.localeCompare(b)), [schema.data]);
   return (
     <FormControl>
-      <FormLabel fontSize="sm">Table</FormLabel>
+      <FormLabel fontSize="sm">{t('Table')}</FormLabel>
       {schema.isPending ? (
         <Skeleton h="32px" />
       ) : (
-        <Select size="sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Pick a table…" data-testid="source-table">
-          {names.map((t) => (
-            <option key={t} value={t}>
-              {t}
+        <Select size="sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder={t('Pick a table…')} data-testid="source-table">
+          {names.map((name) => (
+            <option key={name} value={name}>
+              {name}
             </option>
           ))}
         </Select>
@@ -180,7 +180,7 @@ function SqlBox({ connection, value, onChange }: { connection: string; value: st
   const schema = useSchema(connection);
   const autocomplete = useMemo(() => {
     const out: Record<string, string[]> = {};
-    for (const t of schema.data?.tables ?? []) out[t.name] = t.columns.map((c) => c.name);
+    for (const tb of schema.data?.tables ?? []) out[tb.name] = tb.columns.map((c) => c.name);
     return out;
   }, [schema.data]);
   const engine = ws.connections.find((c) => c.key === connection)?.engine;
@@ -201,13 +201,13 @@ function QuestionPicker({ value, onPick }: { value?: number; onPick: (id: number
         <InputLeftElement pointerEvents="none">
           <SearchIcon boxSize={3.5} color="faintText" />
         </InputLeftElement>
-        <Input placeholder="Find a saved question…" value={text} onChange={(e) => setText(e.target.value)} data-testid="source-question-search" />
+        <Input placeholder={t('Find a saved question…')} value={text} onChange={(e) => setText(e.target.value)} data-testid="source-question-search" />
       </InputGroup>
       <Box maxH="240px" overflowY="auto" border="1px solid" borderColor="lineColor" borderRadius="md">
         {found.isPending && <Skeleton h="60px" />}
         {found.data && usable.length === 0 && (
           <Text fontSize="sm" color="faintText" p={3}>
-            No saved questions found. Multi-source questions cannot be used as sources.
+            {t('No saved questions found. Multi-source questions cannot be used as sources.')}
           </Text>
         )}
         {usable.map((q) => (
@@ -216,7 +216,7 @@ function QuestionPicker({ value, onPick }: { value?: number; onPick: (id: number
               {q.name}
             </Text>
             <Text fontSize="xs" color="mutedText" noOfLines={1}>
-              {q.kind === 'sql' ? 'SQL' : 'Question'} · {q.connection} · {q.collection?.name}
+              {q.kind === 'sql' ? 'SQL' : t('Question')} · {q.connection} · {q.collection?.name}
             </Text>
           </PickRow>
         ))}
@@ -233,7 +233,7 @@ function DatasetPicker({ value, onPick, onUpload }: { value?: number; onPick: (i
         {list.isPending && <Skeleton h="60px" />}
         {list.data?.length === 0 && (
           <Text fontSize="sm" color="faintText" p={3}>
-            No uploaded files yet.
+            {t('No uploaded files yet.')}
           </Text>
         )}
         {list.data?.map((d) => (
@@ -242,13 +242,13 @@ function DatasetPicker({ value, onPick, onUpload }: { value?: number; onPick: (i
               {d.name}
             </Text>
             <Text fontSize="xs" color="mutedText" noOfLines={1}>
-              {d.row_count.toLocaleString()} rows · {d.columns.length} columns · {formatBytes(d.size_bytes)} · {d.collection?.name}
+              {tn(d.row_count, '{n} row', '{n} rows')} · {tn(d.columns.length, '{n} column', '{n} columns')} · {formatBytes(d.size_bytes)} · {d.collection?.name}
             </Text>
           </PickRow>
         ))}
       </Box>
       <Button size="sm" variant="subtle" leftIcon={<UploadIcon boxSize={4} />} onClick={onUpload} data-testid="source-upload">
-        Upload a file…
+        {t('Upload a file…')}
       </Button>
     </>
   );

@@ -21,6 +21,7 @@ import { Visualization } from '../viz/Visualization';
 import { VizSettings } from '../viz/VizSettings';
 import { ResultsTable } from './ResultsTable';
 import { ResultProfileDrawer } from '../../analysis/ResultProfileDrawer';
+import { locale, t, tn } from '../../i18n/index.ts';
 
 interface ResultViewProps {
   state: RunState;
@@ -68,7 +69,7 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
       const res = await http.get<Blob>(`/api/query/tasks/${state.taskId}/export.xlsx`, { responseType: 'blob' });
       saveBlob(`${name}.xlsx`, res.data);
     } catch (error) {
-      toast({ title: 'Excel export failed', description: await apiErrorMessageAsync(error, 'Run the query again and retry'), status: 'error' });
+      toast({ title: t('Excel export failed'), description: await apiErrorMessageAsync(error, t('Run the query again and retry')), status: 'error' });
     }
   };
 
@@ -95,16 +96,16 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
         {viz && onVizChange && (
           <ButtonGroup size="xs" isAttached>
             <Button variant={viz.mode === 'table' ? 'brand' : 'subtle'} leftIcon={<TableIcon boxSize={3.5} />} onClick={() => onVizChange({ ...viz, mode: 'table' })} data-testid="view-table">
-              Table
+              {t('Table')}
             </Button>
             <Button variant={viz.mode === 'chart' ? 'brand' : 'subtle'} leftIcon={<ChartIcon boxSize={3.5} />} onClick={() => onVizChange({ ...viz, mode: 'chart' })} data-testid="view-chart">
-              Chart
+              {t('Chart')}
             </Button>
           </ButtonGroup>
         )}
         {showChart && spec && (
           <HStack spacing={1.5}>
-            <Select size="xs" w="130px" value={spec.type} onChange={(e) => setSpec({ ...spec, type: e.target.value as ChartType })} aria-label="Chart type" data-testid="chart-type">
+            <Select size="xs" w="130px" value={spec.type} onChange={(e) => setSpec({ ...spec, type: e.target.value as ChartType })} aria-label={t('Chart type')} data-testid="chart-type">
               {CHART_TYPES.map((c) => (
                 <option key={c.type} value={c.type}>
                   {c.label}
@@ -112,15 +113,15 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
               ))}
             </Select>
             <Button size="xs" variant="subtle" leftIcon={<SettingsIcon boxSize={3.5} />} onClick={settings.onOpen} data-testid="chart-settings">
-              Settings
+              {t('Settings')}
             </Button>
             {effective?.auto ? (
-              <Tooltip label={effective.stale ? 'The question changed, so the chart was chosen again automatically' : 'Chosen from the shape of the result; change anything to keep your own'} hasArrow>
-                <Badge bg="chipBg" color="mutedText">auto</Badge>
+              <Tooltip label={effective.stale ? t('The question changed, so the chart was chosen again automatically') : t('Chosen from the shape of the result; change anything to keep your own')} hasArrow>
+                <Badge bg="chipBg" color="mutedText">{t('auto')}</Badge>
               </Tooltip>
             ) : (
               <Button size="xs" variant="ghost" onClick={() => onVizChange?.({ mode: 'chart', spec: null })}>
-                Reset
+                {t('Reset')}
               </Button>
             )}
           </HStack>
@@ -129,52 +130,52 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
           <HStack spacing={2}>
             <Spinner size="sm" color="brand.300" />
             <Text fontSize="sm" color="mutedText">
-              Running…
+              {t('Running…')}
             </Text>
             <Button size="xs" variant="subtle" colorScheme="red" onClick={onCancel} data-testid="cancel-query">
-              Stop
+              {t('Stop')}
             </Button>
           </HStack>
         ) : result ? (
           <HStack spacing={2} fontSize="sm" color="mutedText" data-testid="result-stats">
             <Text>
               <Text as="span" fontWeight={700} color="bodyText">
-                {result.stats.row_count.toLocaleString()}
+                {result.stats.row_count.toLocaleString(locale())}
               </Text>{' '}
-              row{result.stats.row_count === 1 ? '' : 's'}
+              {tn(result.stats.row_count, 'row', 'rows')}
             </Text>
-            <Text>· {result.stats.duration_ms.toLocaleString()} ms</Text>
+            <Text>· {result.stats.duration_ms.toLocaleString(locale())} ms</Text>
             {result.stats.cached && (
-              <Tooltip label="Same question within the last minute: the saved result was reused" hasArrow>
+              <Tooltip label={t('Same question within the last minute: the saved result was reused')} hasArrow>
                 <Badge bg="chipBg" color="mutedText">
-                  cached
+                  {t('cached')}
                 </Badge>
               </Tooltip>
             )}
             {result.stats.truncated && (
-              <Tooltip label="There are more rows. Raise the row limit or add filters." hasArrow>
-                <Badge colorScheme="orange">first {result.stats.row_count.toLocaleString()} rows</Badge>
+              <Tooltip label={t('There are more rows. Raise the row limit or add filters.')} hasArrow>
+                <Badge colorScheme="orange">{tn(result.stats.row_count, 'first {n} row', 'first {n} rows')}</Badge>
               </Tooltip>
             )}
-            {state.status === 'cancelled' && <Badge colorScheme="gray">stopped — showing the previous result</Badge>}
+            {state.status === 'cancelled' && <Badge colorScheme="gray">{t('stopped — showing the previous result')}</Badge>}
           </HStack>
         ) : (
           <Text fontSize="sm" color="faintText">
-            {state.status === 'cancelled' ? 'Stopped.' : 'No result yet'}
+            {state.status === 'cancelled' ? t('Stopped.') : t('No result yet')}
           </Text>
         )}
         <Box flex={1} />
         <HStack spacing={2}>
-          <Tooltip label="Statistics per column: empty values, distinct values, ranges, distributions" hasArrow>
+          <Tooltip label={t('Statistics per column: empty values, distinct values, ranges, distributions')} hasArrow>
             <Button size="xs" variant="subtle" onClick={profile.onOpen} isDisabled={!result || result.rows.length === 0 || !state.taskId || running} data-testid="profile-result">
-              Profile
+              {t('Profile')}
             </Button>
           </Tooltip>
-          <Tooltip label="Show dates stored as text (31.01.2026) or unix time as dates" hasArrow>
+          <Tooltip label={t('Show dates stored as text (31.01.2026) or unix time as dates')} hasArrow>
             <HStack spacing={1.5}>
               <Switch size="sm" isChecked={smartDates} onChange={(e) => onSmartDates(e.target.checked)} id="smart-dates" />
               <Text as="label" htmlFor="smart-dates" fontSize="xs" color="mutedText">
-                Smart dates
+                {t('Smart dates')}
               </Text>
             </HStack>
           </Tooltip>
@@ -187,19 +188,19 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
               rightIcon={<ChevronDownIcon boxSize={3.5} />}
               isDisabled={!result || result.rows.length === 0}
             >
-              Download
+              {t('Download')}
             </MenuButton>
             <MenuList fontSize="sm">
-              <MenuItem onClick={() => exportCsv(';')}>CSV for Excel (semicolon)</MenuItem>
-              <MenuItem onClick={() => exportCsv(',')}>CSV standard (comma)</MenuItem>
+              <MenuItem onClick={() => exportCsv(';')}>{t('CSV for Excel (semicolon)')}</MenuItem>
+              <MenuItem onClick={() => exportCsv(',')}>{t('CSV standard (comma)')}</MenuItem>
               <MenuItem onClick={() => void exportXlsx()} isDisabled={!state.taskId} data-testid="export-xlsx">
-                Excel workbook (.xlsx)
+                {t('Excel workbook (.xlsx)')}
               </MenuItem>
               {showChart && spec && ECHARTS_TYPES.includes(spec.type) && (
                 <>
                   <MenuDivider />
-                  <MenuItem onClick={() => exportImage('png')} data-testid="export-png">Chart as PNG</MenuItem>
-                  <MenuItem onClick={() => exportImage('svg')} data-testid="export-svg">Chart as SVG</MenuItem>
+                  <MenuItem onClick={() => exportImage('png')} data-testid="export-png">{t('Chart as PNG')}</MenuItem>
+                  <MenuItem onClick={() => exportImage('svg')} data-testid="export-svg">{t('Chart as SVG')}</MenuItem>
                 </>
               )}
             </MenuList>
@@ -224,7 +225,7 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
             )
           ) : (
             <Flex h="100%" align="center" justify="center" color="mutedText" fontSize="sm" p={6}>
-              No rows match.
+              {t('No rows match.')}
             </Flex>
           )
         ) : (
@@ -236,7 +237,7 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
           <DrawerOverlay bg="blackAlpha.300" />
           <DrawerContent>
             <DrawerCloseButton />
-            <DrawerHeader fontSize="md">Chart settings</DrawerHeader>
+            <DrawerHeader fontSize="md">{t('Chart settings')}</DrawerHeader>
             <DrawerBody pb={8}>
               <VizSettings spec={spec} columns={result.columns} onChange={setSpec} seriesNames={seriesNames} />
             </DrawerBody>

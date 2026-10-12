@@ -1,4 +1,5 @@
 import { Box, Button, Flex, HStack, IconButton, Select, Text, Tooltip, VStack } from '@chakra-ui/react';
+import { t } from '../i18n/index.ts';
 import { PlusIcon, SparklesIcon, XIcon } from '../icons';
 import { joinedBefore, suggestKey, syncJoins } from './logic';
 import { JOIN_TYPES, MATCHES } from './types';
@@ -17,7 +18,7 @@ export function JoinStep({ spec, columns, labels, onChange }: Props) {
   if (joins.length === 0)
     return (
       <Text fontSize="sm" color="mutedText">
-        Add a second source to join it to the first.
+        {t('Add a second source to join it to the first.')}
       </Text>
     );
   const set = (i: number, j: Join) => onChange(joins.map((x, k) => (k === i ? j : x)));
@@ -37,38 +38,38 @@ export function JoinStep({ spec, columns, labels, onChange }: Props) {
               <Text fontSize="sm" fontWeight={700}>
                 {labels[j.source] || j.source}
               </Text>
-              <Select size="xs" maxW="230px" value={j.type} onChange={(e) => set(i, { ...j, type: e.target.value as JoinType })} aria-label={`How to join ${j.source}`}>
-                {JOIN_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
+              <Select size="xs" maxW="230px" value={j.type} onChange={(e) => set(i, { ...j, type: e.target.value as JoinType })} aria-label={t('How to join {source}', { source: j.source })}>
+                {JOIN_TYPES.map((jt) => (
+                  <option key={jt.value} value={jt.value}>
+                    {t(jt.label)}
                   </option>
                 ))}
               </Select>
               {empty && suggestion && (
                 <Button size="xs" variant="ghost" leftIcon={<SparklesIcon boxSize={3} />} onClick={() => set(i, { ...j, on: [suggestion] })} data-testid="suggest-key">
-                  Use {suggestion.left.split('.')[1]} = {suggestion.right.split('.')[1]}
+                  {t('Use {left} = {right}', { left: suggestion.left.split('.')[1], right: suggestion.right.split('.')[1] })}
                 </Button>
               )}
             </Flex>
             <VStack align="stretch" spacing={1.5}>
               {j.on.map((pair, k) => (
                 <Flex key={k} gap={1.5} align="center" wrap={{ base: 'wrap', md: 'nowrap' }}>
-                  <KeySelect options={leftOptions} value={pair.left} onChange={(left) => setKey(k, { ...pair, left })} label="Key on the left" testId="key-left" />
+                  <KeySelect options={leftOptions} value={pair.left} onChange={(left) => setKey(k, { ...pair, left })} label={t('Key on the left')} testId="key-left" />
                   <Text fontSize="sm" color="faintText">
                     =
                   </Text>
-                  <KeySelect options={rightOptions} value={pair.right} onChange={(right) => setKey(k, { ...pair, right })} label={`Key of ${j.source}`} testId="key-right" />
-                  <Tooltip label="How the key values are compared. Automatic: numbers as numbers, text trimmed." hasArrow openDelay={300}>
-                    <Select size="xs" w="auto" minW="120px" maxW="190px" value={pair.match ?? 'auto'} onChange={(e) => setKey(k, { ...pair, match: e.target.value as KeyMatch })} aria-label="Compare keys">
+                  <KeySelect options={rightOptions} value={pair.right} onChange={(right) => setKey(k, { ...pair, right })} label={t('Key of {source}', { source: j.source })} testId="key-right" />
+                  <Tooltip label={t('How the key values are compared. Automatic: numbers as numbers, text trimmed.')} hasArrow openDelay={300}>
+                    <Select size="xs" w="auto" minW="120px" maxW="190px" value={pair.match ?? 'auto'} onChange={(e) => setKey(k, { ...pair, match: e.target.value as KeyMatch })} aria-label={t('Compare keys')}>
                       {MATCHES.map((m) => (
                         <option key={m.value} value={m.value}>
-                          {m.label}
+                          {t(m.label)}
                         </option>
                       ))}
                     </Select>
                   </Tooltip>
                   {j.on.length > 1 && (
-                    <IconButton aria-label="Remove key" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setKey(k, null)} />
+                    <IconButton aria-label={t('Remove key')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setKey(k, null)} />
                   )}
                 </Flex>
               ))}
@@ -76,7 +77,7 @@ export function JoinStep({ spec, columns, labels, onChange }: Props) {
             {j.on.length < 4 && (
               <HStack mt={2}>
                 <Button size="xs" variant="ghost" leftIcon={<PlusIcon boxSize={3} />} onClick={() => set(i, { ...j, on: [...j.on, { left: '', right: '', match: 'auto' }] })}>
-                  Another key column
+                  {t('Another key column')}
                 </Button>
               </HStack>
             )}
@@ -101,7 +102,7 @@ function KeySelect({ options, value, onChange, label, testId }: {
   }
   const missing = value && !options.some((o) => o.ref === value);
   return (
-    <Select size="xs" flex={1} minW="140px" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Pick a column…" aria-label={label} data-testid={testId}>
+    <Select size="xs" flex={1} minW="140px" value={value} onChange={(e) => onChange(e.target.value)} placeholder={t('Pick a column…')} aria-label={label} data-testid={testId}>
       {missing && <option value={value}>{value}</option>}
       {[...groups.entries()].map(([group, items]) => (
         <optgroup key={group} label={group}>

@@ -13,6 +13,7 @@ import { queryKeys } from '../lib/queryClient';
 import { loadJson, saveJson } from '../lib/storage';
 import { WorkspaceContext } from './context';
 import type { Prefs, Scope, WorkspaceValue } from './context';
+import { t } from '../i18n/index.ts';
 
 const DEFAULT_PREFS: Prefs = { matchMode: 'contains', caseSensitive: false, includeNumbers: false, rowLimit: 25 };
 const EMPTY_SCOPE: Scope = { tables: [], exclude: '' };
@@ -56,7 +57,7 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
 
   useEffect(() => {
     if (connectionsQuery.isError) {
-      toast({ title: 'Could not load your databases', description: apiErrorMessage(connectionsQuery.error, ''), status: 'error' });
+      toast({ title: t('Could not load your databases'), description: apiErrorMessage(connectionsQuery.error, ''), status: 'error' });
     }
   }, [connectionsQuery.isError, connectionsQuery.error, toast]);
 
@@ -90,7 +91,7 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
     staleTime: Infinity, // the server caches the schema; "reload" asks again explicitly
   });
   const tables = tablesQuery.data ?? null;
-  const tablesError = tablesQuery.isError ? apiErrorMessage(tablesQuery.error, 'Could not read the database structure') : null;
+  const tablesError = tablesQuery.isError ? apiErrorMessage(tablesQuery.error, t('Could not read the database structure')) : null;
 
   const forgetTables = useCallback(
     (key: string) => {
@@ -154,7 +155,7 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
     forgetTables(details.key);
     reset();
     setStoredKey(details.key);
-    await refreshConnections('Saved, but the list could not be refreshed');
+    await refreshConnections(t('Saved, but the list could not be refreshed'));
   };
 
   const handleDeleted = async (key: string) => {
@@ -165,7 +166,7 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
       return next;
     });
     reset();
-    await refreshConnections('Removed, but the list could not be refreshed');
+    await refreshConnections(t('Removed, but the list could not be refreshed'));
   };
 
   const scope = scopes[activeKey] ?? EMPTY_SCOPE;

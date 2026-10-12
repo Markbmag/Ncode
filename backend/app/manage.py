@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+from pathlib import Path
 import re
 import sys
 from datetime import datetime
@@ -82,6 +83,11 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("audit")
     p.add_argument("--limit", type=int, default=50)
     sub.add_parser("generate-key", help="print a new encryption key for NCODE_SECRET_KEY")
+    p = sub.add_parser("backup", help="write a backup zip (app database + uploaded files) to data/backups")
+    p.add_argument("--to", default=None, help="another folder for the zip")
+    p = sub.add_parser("restore", help="replace Ncode's data with a backup zip - STOP THE SERVER FIRST")
+    p.add_argument("file")
+    p.add_argument("--yes", action="store_true", help="do not ask")
     p = sub.add_parser("import-datadesk", help="import DataDesk reports and dashboards into the library")
     p.add_argument("file", help="DataDesk's app database (app-data.sqlite); it is only read")
     p.add_argument("--map", default="", help="DataDesk database -> Ncode connection, e.g. db1=mes,db2=crm")
@@ -101,7 +107,32 @@ def main(argv: list[str] | None = None) -> None:
         known = set(load_connections())
     except ConfigError as exc:
         _fail(str(exc))
+
+    if args.command == "restore":  # before AppDB(): opening it would create or migrate the current file
+        from .backup import BackupError, restore
+
+        target = resolve_app_db_path(settings.app_db_path)
+        if not args.yes:
+            print(f"This replaces {target} and the uploaded files with {args.file}.")
+            print("The current ones are kept as *.before-restore-<time>. The server must be stopped.")
+            if input("Type yes to continue: ").strip().lower() != "yes":
+                _fail("cancelled")
+        try:
+            manifest = restore(Path(args.file), target)
+        except BackupError as exc:
+            _fail(str(exc))
+        when = datetime.fromtimestamp(manifest.get("created_at", 0)).strftime("%Y-%m-%d %H:%M")
+        print(f"Restored the backup from {when} ({manifest.get('datasets', 0)} uploaded files). Start the server again;")
+        print("its database is brought up to date automatically. Keep using the same secret key as before.")
+        return
+
     db = AppDB(resolve_app_db_path(settings.app_db_path))
+    if args.command == "backup":
+        from .backup import make_backup
+
+        made = make_backup(db.path, out_dir=Path(args.to) if args.to else None)
+        print(f"Backup written: {made}  (the encryption key is not in it - keep secret.key / NCODE_SECRET_KEY apart)")
+        return
 
     if args.command == "create-user":
         name = _check_username(args.username)

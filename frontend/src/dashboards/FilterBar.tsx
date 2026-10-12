@@ -3,6 +3,7 @@ import { XIcon } from '../icons';
 import { shownValue } from './logic';
 import type { FilterValue, FilterValues } from './logic';
 import type { DashFilter } from './types';
+import { t } from '../i18n/index.ts';
 
 interface Props {
   filters: DashFilter[];
@@ -37,7 +38,7 @@ export function FilterBar({ filters, values, onChange }: Props) {
                       w="150px"
                       value={pair[i] ?? ''}
                       onChange={(e) => set(f.id, i === 0 ? [e.target.value, pair[1] ?? ''] : [pair[0] ?? '', e.target.value])}
-                      aria-label={`${f.label} ${i === 0 ? 'from' : 'to'}`}
+                      aria-label={i === 0 ? t('{label} from', { label: f.label }) : t('{label} to', { label: f.label })}
                       data-testid={`filter-${f.id}-${i === 0 ? 'from' : 'to'}`}
                     />
                   );
@@ -48,7 +49,7 @@ export function FilterBar({ filters, values, onChange }: Props) {
                 size="sm"
                 w={f.type === 'category' ? '220px' : '170px'}
                 type={f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'}
-                placeholder={f.type === 'category' ? 'a, b, c' : 'any'}
+                placeholder={f.type === 'category' ? 'a, b, c' : t('any')}
                 value={Array.isArray(shown) ? shown.join(', ') : shown}
                 onChange={(e) => set(f.id, e.target.value)}
                 aria-label={f.label}
@@ -59,9 +60,9 @@ export function FilterBar({ filters, values, onChange }: Props) {
         );
       })}
       {changed && (
-        <Tooltip label="Back to the default values" hasArrow>
+        <Tooltip label={t('Back to the default values')} hasArrow>
           <Button size="sm" variant="ghost" leftIcon={<XIcon boxSize={3} />} onClick={() => onChange({})}>
-            Reset
+            {t('Reset')}
           </Button>
         </Tooltip>
       )}

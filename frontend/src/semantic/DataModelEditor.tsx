@@ -8,6 +8,7 @@ import { apiErrorMessage } from '../api';
 import type { SchemaColumn, SchemaV2 } from '../api';
 import { FilterEditor } from '../components/query/FilterEditor';
 import { ColumnSelect } from '../components/query/ColumnSelect';
+import { t } from '../i18n/index.ts';
 import { PencilIcon, PlusIcon, TrashIcon } from '../icons';
 import { ConfirmDialog, DialogShell } from '../library/dialogs';
 import { AGGREGATES, humanize } from '../query/draft';
@@ -22,22 +23,22 @@ function FormatFields({ format, onChange }: { format: ColumnFormat; onChange: (f
   return (
     <SimpleGrid columns={3} spacing={2}>
       <FormControl>
-        <FormLabel fontSize="xs">Numbers as</FormLabel>
+        <FormLabel fontSize="xs">{t('Numbers as')}</FormLabel>
         <Select size="sm" value={format.style ?? 'auto'} onChange={(e) => onChange({ ...format, style: e.target.value as NumberStyle })}>
-          <option value="auto">Automatic</option>
-          <option value="number">Number</option>
-          <option value="currency">Money</option>
-          <option value="percent">Percent (0.12 = 12 %)</option>
-          <option value="plain">Plain (no separators)</option>
+          <option value="auto">{t('Automatic')}</option>
+          <option value="number">{t('Number')}</option>
+          <option value="currency">{t('Money')}</option>
+          <option value="percent">{t('Percent (0.12 = 12 %)')}</option>
+          <option value="plain">{t('Plain (no separators)')}</option>
         </Select>
       </FormControl>
       <FormControl isDisabled={format.style !== 'currency'}>
-        <FormLabel fontSize="xs">Currency</FormLabel>
+        <FormLabel fontSize="xs">{t('Currency')}</FormLabel>
         <Input size="sm" value={format.currency ?? ''} placeholder="EUR" maxLength={3} onChange={(e) => onChange({ ...format, currency: e.target.value.toUpperCase() || undefined })} />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="xs">Decimals</FormLabel>
-        <Input size="sm" type="number" min={0} max={10} value={format.decimals ?? ''} placeholder="auto" onChange={(e) => onChange({ ...format, decimals: e.target.value === '' ? null : Number(e.target.value) })} />
+        <FormLabel fontSize="xs">{t('Decimals')}</FormLabel>
+        <Input size="sm" type="number" min={0} max={10} value={format.decimals ?? ''} placeholder={t('auto')} onChange={(e) => onChange({ ...format, decimals: e.target.value === '' ? null : Number(e.target.value) })} />
       </FormControl>
     </SimpleGrid>
   );
@@ -71,41 +72,41 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
       isOpen
       onClose={onClose}
       title={`${table}.${column.name}`}
-      submitLabel="Save"
+      submitLabel={t('Save')}
       size="lg"
       onSubmit={() => semantic.setField(connection, table, column.name, { ...meta, format: cleanFormat(format) })}
     >
       <Text fontSize="xs" color="mutedText" mt={-2}>
-        {column.db_type} · shown as {column.type}
+        {t('{dbType} · shown as {type}', { dbType: column.db_type, type: column.type })}
       </Text>
       <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
         <FormControl>
-          <FormLabel fontSize="sm">Display name</FormLabel>
+          <FormLabel fontSize="sm">{t('Display name')}</FormLabel>
           <Input size="sm" value={meta.display_name ?? ''} placeholder={humanize(column.name)} onChange={(e) => set({ display_name: e.target.value })} maxLength={200} data-testid="field-display-name" />
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="sm">What it is</FormLabel>
+          <FormLabel fontSize="sm">{t('What it is')}</FormLabel>
           <Select size="sm" value={meta.semantic_type ?? ''} onChange={(e) => set({ semantic_type: e.target.value || null })} data-testid="field-semantic-type">
             <option value="">—</option>
-            {SEMANTIC_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+            {SEMANTIC_TYPES.map((st) => (
+              <option key={st.value} value={st.value}>
+                {t(st.label)}
               </option>
             ))}
           </Select>
         </FormControl>
       </SimpleGrid>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
-        <Textarea size="sm" rows={2} value={meta.description ?? ''} onChange={(e) => set({ description: e.target.value })} maxLength={5000} placeholder="Shown as a tooltip on the column" />
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
+        <Textarea size="sm" rows={2} value={meta.description ?? ''} onChange={(e) => set({ description: e.target.value })} maxLength={5000} placeholder={t('Shown as a tooltip on the column')} />
       </FormControl>
       <FormatFields format={format} onChange={setFormat} />
       <VStack align="stretch" spacing={2}>
         <Checkbox size="sm" isChecked={!!meta.hidden} onChange={(e) => set({ hidden: e.target.checked })} data-testid="field-hidden">
-          Hidden — not offered in the question builder and left out of “all columns” (still usable by name; not a permission)
+          {t('Hidden — not offered in the question builder and left out of “all columns” (still usable by name; not a permission)')}
         </Checkbox>
         <Checkbox size="sm" isChecked={!!meta.parse_as_date} isDisabled={!text && !meta.parse_as_date} onChange={(e) => set({ parse_as_date: e.target.checked })} data-testid="field-parse-date">
-          Read as dates — text like 2026-01-31, 31.01.2026 or unix time becomes a date-time (filters, “by month”); other values become empty
+          {t('Read as dates — text like 2026-01-31, 31.01.2026 or unix time becomes a date-time (filters, “by month”); other values become empty')}
         </Checkbox>
       </VStack>
     </DialogShell>
@@ -145,8 +146,8 @@ export function EditableColumns({ connection, table, columns, onEdit }: { connec
               </Text>
             )}
           </Box>
-          {col.parse_as_date && <Badge fontSize="0.6rem" colorScheme="teal">as date</Badge>}
-          {col.hidden && <Badge fontSize="0.6rem">hidden</Badge>}
+          {col.parse_as_date && <Badge fontSize="0.6rem" colorScheme="teal">{t('as date')}</Badge>}
+          {col.hidden && <Badge fontSize="0.6rem">{t('hidden')}</Badge>}
           {col.semantic_type && <Badge fontSize="0.6rem" colorScheme="purple" textTransform="none">{col.semantic_type}</Badge>}
           <Tooltip label={col.db_type} hasArrow>
             <Badge fontSize="0.6rem" bg="chipBg" color="mutedText" textTransform="none">
@@ -171,22 +172,22 @@ export function ManualRelationships({ connection, schema }: { connection: string
       await semantic.deleteRelationship(connection, id);
       await list.refetch();
     } catch (e) {
-      toast({ status: 'error', title: 'Could not remove it', description: apiErrorMessage(e, 'Please try again') });
+      toast({ status: 'error', title: t('Could not remove it'), description: apiErrorMessage(e, t('Please try again')) });
     }
   };
   return (
     <Box>
       <Flex align="center" justify="space-between" mb={2}>
         <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText">
-          RELATIONSHIPS ADDED BY HAND
+          {t('RELATIONSHIPS ADDED BY HAND')}
         </Text>
         <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => setAdding(true)} data-testid="add-relationship">
-          Relationship
+          {t('Relationship')}
         </Button>
       </Flex>
       {(list.data ?? []).length === 0 ? (
         <Text fontSize="sm" color="mutedText">
-          None. For tables without foreign keys, add how they relate (orders.customer_ref → customers.id): the question builder then joins them by itself.
+          {t('None. For tables without foreign keys, add how they relate (orders.customer_ref → customers.id): the question builder then joins them by itself.')}
         </Text>
       ) : (
         <VStack align="stretch" spacing={1}>
@@ -195,7 +196,7 @@ export function ManualRelationships({ connection, schema }: { connection: string
               <Text flex={1}>
                 {String(r.from_table)}.{(r.from_columns as string[]).join(', ')} → {String(r.to_table)}.{(r.to_columns as string[]).join(', ')}
               </Text>
-              <IconButton aria-label="Remove relationship" size="xs" variant="ghost" icon={<TrashIcon boxSize={3} />} onClick={() => void remove(r.id)} />
+              <IconButton aria-label={t('Remove relationship')} size="xs" variant="ghost" icon={<TrashIcon boxSize={3} />} onClick={() => void remove(r.id)} />
             </Flex>
           ))}
         </VStack>
@@ -206,22 +207,22 @@ export function ManualRelationships({ connection, schema }: { connection: string
 }
 
 function RelationshipDialog({ connection, schema, onClose }: { connection: string; schema: SchemaV2; onClose: () => void }) {
-  const tables = schema.tables.map((t) => t.name);
+  const tables = schema.tables.map((tb) => tb.name);
   const [from, setFrom] = useState({ table: '', column: '' });
   const [to, setTo] = useState({ table: '', column: '' });
-  const colsOf = (t: string) => schema.tables.find((x) => x.name === t)?.columns.map((c) => c.name) ?? [];
+  const colsOf = (name: string) => schema.tables.find((x) => x.name === name)?.columns.map((c) => c.name) ?? [];
   const side = (label: string, v: { table: string; column: string }, set: (v: { table: string; column: string }) => void, testId: string) => (
     <FormControl>
       <FormLabel fontSize="sm">{label}</FormLabel>
       <HStack>
-        <Select size="sm" value={v.table} placeholder="Table…" onChange={(e) => set({ table: e.target.value, column: '' })} data-testid={`${testId}-table`}>
-          {tables.map((t) => (
-            <option key={t} value={t}>
-              {t}
+        <Select size="sm" value={v.table} placeholder={t('Table…')} onChange={(e) => set({ table: e.target.value, column: '' })} data-testid={`${testId}-table`}>
+          {tables.map((name) => (
+            <option key={name} value={name}>
+              {name}
             </option>
           ))}
         </Select>
-        <Select size="sm" value={v.column} placeholder="Column…" onChange={(e) => set({ ...v, column: e.target.value })} isDisabled={!v.table} data-testid={`${testId}-column`}>
+        <Select size="sm" value={v.column} placeholder={t('Column…')} onChange={(e) => set({ ...v, column: e.target.value })} isDisabled={!v.table} data-testid={`${testId}-column`}>
           {colsOf(v.table).map((c) => (
             <option key={c} value={c}>
               {c}
@@ -235,15 +236,15 @@ function RelationshipDialog({ connection, schema, onClose }: { connection: strin
     <DialogShell
       isOpen
       onClose={onClose}
-      title="Add a relationship"
-      submitLabel="Add"
+      title={t('Add a relationship')}
+      submitLabel={t('Add')}
       canSubmit={!!(from.table && from.column && to.table && to.column)}
       onSubmit={() => semantic.addRelationship(connection, { from_table: from.table, from_columns: [from.column], to_table: to.table, to_columns: [to.column] })}
     >
-      {side('Column that refers (many rows)', from, setFrom, 'rel-from')}
-      {side('Column it refers to (usually the id)', to, setTo, 'rel-to')}
+      {side(t('Column that refers (many rows)'), from, setFrom, 'rel-from')}
+      {side(t('Column it refers to (usually the id)'), to, setTo, 'rel-to')}
       <Text fontSize="xs" color="mutedText">
-        Works like a foreign key for the question builder (joins and suggestions). The database is not changed.
+        {t('Works like a foreign key for the question builder (joins and suggestions). The database is not changed.')}
       </Text>
     </DialogShell>
   );
@@ -259,15 +260,15 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
     <Box>
       <Flex align="center" justify="space-between" mb={2}>
         <Text fontSize="xs" fontWeight={700} letterSpacing="0.08em" color="faintText">
-          METRICS
+          {t('METRICS')}
         </Text>
         <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => setEditing('new')} data-testid="new-metric">
-          Metric
+          {t('Metric')}
         </Button>
       </Flex>
       {(metrics.data ?? []).length === 0 ? (
         <Text fontSize="sm" color="mutedText">
-          None yet. A metric is a named calculation (e.g. “Revenue” = sum of total of paid orders) that everyone picks in Summarise, so it is computed the same way everywhere.
+          {t('None yet. A metric is a named calculation (e.g. “Revenue” = sum of total of paid orders) that everyone picks in Summarise, so it is computed the same way everywhere.')}
         </Text>
       ) : (
         <VStack align="stretch" spacing={1}>
@@ -279,12 +280,12 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
                 </Text>
                 <Text fontSize="xs" color="mutedText" noOfLines={1}>
                   {AGGREGATES.find((a) => a.fn === m.definition.fn)?.label ?? m.definition.fn} {m.definition.ref ?? ''} · {m.table}
-                  {m.definition.where ? ' · with a condition' : ''}
+                  {m.definition.where ? t(' · with a condition') : ''}
                   {m.description ? ` · ${m.description}` : ''}
                 </Text>
               </Box>
-              <IconButton aria-label={`Change ${m.name}`} size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={() => setEditing(m)} />
-              <IconButton aria-label={`Archive ${m.name}`} size="xs" variant="ghost" icon={<TrashIcon boxSize={3} />} onClick={() => setArchiving(m)} />
+              <IconButton aria-label={t('Change {name}', { name: m.name })} size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={() => setEditing(m)} />
+              <IconButton aria-label={t('Archive {name}', { name: m.name })} size="xs" variant="ghost" icon={<TrashIcon boxSize={3} />} onClick={() => setArchiving(m)} />
             </Flex>
           ))}
         </VStack>
@@ -293,9 +294,9 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
       <ConfirmDialog
         isOpen={archiving !== null}
         onClose={() => setArchiving(null)}
-        title="Archive this metric?"
-        confirmLabel="Archive"
-        body={`“${archiving?.name}” disappears from Summarise. Saved questions that use it keep working.`}
+        title={t('Archive this metric?')}
+        confirmLabel={t('Archive')}
+        body={t('“{name}” disappears from Summarise. Saved questions that use it keep working.', { name: archiving?.name })}
         onConfirm={async () => {
           if (archiving) await semantic.archiveMetric(archiving);
         }}
@@ -314,7 +315,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
   const [format, setFormat] = useState<ColumnFormat>(metric?.format ?? {});
   const options = useMemo(
     () =>
-      (schema.tables.find((t) => t.name === table)?.columns ?? [])
+      (schema.tables.find((tb) => tb.name === table)?.columns ?? [])
         .filter((c) => c.type !== 'binary')
         .map((c) => ({ ref: `${table}.${c.name}`, label: c.display_name || humanize(c.name), type: c.type })),
     [schema, table],
@@ -328,8 +329,8 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
     <DialogShell
       isOpen
       onClose={onClose}
-      title={metric ? `Change “${metric.name}”` : 'New metric'}
-      submitLabel="Save"
+      title={metric ? t('Change “{name}”', { name: metric.name }) : t('New metric')}
+      submitLabel={t('Save')}
       size="xl"
       canSubmit={!!name.trim() && !!table && (!needsColumn || !!ref)}
       onSubmit={() =>
@@ -348,15 +349,15 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
     >
       <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
         <FormControl isRequired>
-          <FormLabel fontSize="sm">Name</FormLabel>
-          <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="Revenue" data-testid="metric-name" />
+          <FormLabel fontSize="sm">{t('Name')}</FormLabel>
+          <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder={t('Revenue')} data-testid="metric-name" />
         </FormControl>
         <FormControl isRequired>
-          <FormLabel fontSize="sm">Table</FormLabel>
-          <Select size="sm" value={table} placeholder="Pick a table…" onChange={(e) => { setTable(e.target.value); setRef(undefined); setWhere({ op: 'and', rules: [] }); }} data-testid="metric-table">
-            {schema.tables.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name}
+          <FormLabel fontSize="sm">{t('Table')}</FormLabel>
+          <Select size="sm" value={table} placeholder={t('Pick a table…')} onChange={(e) => { setTable(e.target.value); setRef(undefined); setWhere({ op: 'and', rules: [] }); }} data-testid="metric-table">
+            {schema.tables.map((tb) => (
+              <option key={tb.name} value={tb.name}>
+                {tb.name}
               </option>
             ))}
           </Select>
@@ -364,7 +365,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
       </SimpleGrid>
       <HStack align="flex-end">
         <FormControl maxW="200px">
-          <FormLabel fontSize="sm">Calculation</FormLabel>
+          <FormLabel fontSize="sm">{t('Calculation')}</FormLabel>
           <Select size="sm" value={fn} onChange={(e) => setFn(e.target.value as MetricDefinition['fn'])} data-testid="metric-fn">
             {AGGREGATES.map((a) => (
               <option key={a.fn} value={a.fn}>
@@ -375,7 +376,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
         </FormControl>
         {needsColumn && (
           <FormControl>
-            <FormLabel fontSize="sm">Column</FormLabel>
+            <FormLabel fontSize="sm">{t('Column')}</FormLabel>
             <ColumnSelect options={options} value={ref} onChange={setRef} types={fn === 'sum' || fn === 'avg' ? ['number'] : undefined} data-testid="metric-column" />
           </FormControl>
         )}
@@ -383,15 +384,15 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
       {table && (
         <Box>
           <Text fontSize="sm" fontWeight={500} mb={1}>
-            Only rows where…
+            {t('Only rows where…')}
           </Text>
-          <FilterEditor group={where} onChange={setWhere} options={options} emptyText="Every row counts." testId="metric-where" />
+          <FilterEditor group={where} onChange={setWhere} options={options} emptyText={t('Every row counts.')} testId="metric-where" />
         </Box>
       )}
       <FormatFields format={format} onChange={setFormat} />
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
-        <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder="How it is defined, who owns it" />
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
+        <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder={t('How it is defined, who owns it')} />
       </FormControl>
     </DialogShell>
   );

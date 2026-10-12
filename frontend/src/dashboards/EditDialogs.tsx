@@ -13,6 +13,7 @@ import { filterId, fittingParams, suggestMapping } from './logic';
 import { Markdown } from './Markdown';
 import { FILTER_TYPES } from './types';
 import type { DashCard, DashFilter, FilterType, Mapping } from './types';
+import { t } from '../i18n/index.ts';
 
 // ---------------------------------------------------------------- add a question
 
@@ -25,18 +26,18 @@ function AddQuestionForm({ onClose, onAdd }: { onClose: () => void; onAdd: (q: Q
   const found = useQuestions({ q: text.trim() || undefined, limit: 50 });
   const [picked, setPicked] = useState<QuestionSummary | null>(null);
   return (
-    <DialogShell isOpen onClose={onClose} title="Add a saved question" submitLabel="Add" size="lg" canSubmit={picked !== null} onSubmit={async () => picked && onAdd(picked)}>
+    <DialogShell isOpen onClose={onClose} title={t('Add a saved question')} submitLabel={t('Add')} size="lg" canSubmit={picked !== null} onSubmit={async () => picked && onAdd(picked)}>
       <InputGroup size="sm">
         <InputLeftElement pointerEvents="none">
           <SearchIcon boxSize={3.5} color="faintText" />
         </InputLeftElement>
-        <Input placeholder="Find a question…" value={text} onChange={(e) => setText(e.target.value)} autoFocus data-testid="add-question-search" />
+        <Input placeholder={t('Find a question…')} value={text} onChange={(e) => setText(e.target.value)} autoFocus data-testid="add-question-search" />
       </InputGroup>
       <Box maxH="320px" overflowY="auto" border="1px solid" borderColor="lineColor" borderRadius="md">
         {found.isPending && <Skeleton h="80px" />}
         {found.data?.length === 0 && (
           <Text fontSize="sm" color="faintText" p={3}>
-            No saved questions found. Save a question first (New question → Save).
+            {t('No saved questions found. Save a question first (New question → Save).')}
           </Text>
         )}
         {found.data?.map((q) => {
@@ -95,30 +96,30 @@ function CardForm({ card, onClose, onSave }: { card: DashCard; onClose: () => vo
     <DialogShell
       isOpen
       onClose={onClose}
-      title={isQuestion ? 'Card title' : card.kind === 'heading' ? 'Heading' : 'Text card'}
-      submitLabel="Apply"
+      title={isQuestion ? t('Card title') : card.kind === 'heading' ? t('Heading') : t('Text card')}
+      submitLabel={t('Apply')}
       size={card.kind === 'text' ? 'xl' : 'md'}
       onSubmit={async () => onSave({ ...card, title: title.trim() || null, text: isQuestion ? card.text : text })}
     >
       {card.kind !== 'heading' && (
         <FormControl>
-          <FormLabel fontSize="sm">Title</FormLabel>
-          <Input size="sm" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder={isQuestion ? card.question?.name ?? '' : 'optional'} autoFocus={isQuestion} />
-          {isQuestion && <FormHelperText fontSize="xs">Empty = the question's name.</FormHelperText>}
+          <FormLabel fontSize="sm">{t('Title')}</FormLabel>
+          <Input size="sm" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder={isQuestion ? card.question?.name ?? '' : t('optional')} autoFocus={isQuestion} />
+          {isQuestion && <FormHelperText fontSize="xs">{t('Empty = the question’s name.')}</FormHelperText>}
         </FormControl>
       )}
       {card.kind === 'heading' && (
         <FormControl>
-          <FormLabel fontSize="sm">Heading</FormLabel>
+          <FormLabel fontSize="sm">{t('Heading')}</FormLabel>
           <Input size="sm" value={text} onChange={(e) => setText(e.target.value)} maxLength={200} autoFocus data-testid="heading-text" />
         </FormControl>
       )}
       {card.kind === 'text' && (
         <HStack align="stretch" spacing={4}>
           <FormControl flex={1}>
-            <FormLabel fontSize="sm">Text</FormLabel>
+            <FormLabel fontSize="sm">{t('Text')}</FormLabel>
             <Textarea size="sm" rows={10} value={text} onChange={(e) => setText(e.target.value)} maxLength={10000} fontFamily="mono" autoFocus data-testid="text-card-input" />
-            <FormHelperText fontSize="xs"># heading, **bold**, *italic*, `code`, - list, [link](https://…)</FormHelperText>
+            <FormHelperText fontSize="xs">{t('# heading, **bold**, *italic*, `code`, - list, [link](https://…)')}</FormHelperText>
           </FormControl>
           <Box flex={1} border="1px solid" borderColor="lineColor" borderRadius="md" p={3} overflowY="auto" maxH="260px">
             <Markdown source={text} />
@@ -151,7 +152,7 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
   const questionCards = cards.filter((c) => c.kind === 'question' && c.question && (c.question.state === 'ok' || c.question.state === 'archived'));
 
   const add = (type: FilterType) => {
-    const label = FILTER_TYPES.find((t) => t.type === type)?.label ?? 'Filter';
+    const label = FILTER_TYPES.find((ft) => ft.type === type)?.label ?? t('Filter');
     const f: DashFilter = { id: filterId(label, filters.map((x) => x.id)), label, type, default: null, required: false };
     setFilters([...filters, f]);
     setSelected(f.id);
@@ -198,7 +199,7 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
     }));
 
   return (
-    <DialogShell isOpen onClose={onClose} title="Dashboard filters" submitLabel="Apply" size="4xl" onSubmit={async () => onSave(filters, cards)}>
+    <DialogShell isOpen onClose={onClose} title={t('Dashboard filters')} submitLabel={t('Apply')} size="4xl" onSubmit={async () => onSave(filters, cards)}>
       <Flex gap={5} direction={{ base: 'column', md: 'row' }} minH="320px">
         <VStack align="stretch" w={{ base: '100%', md: '220px' }} spacing={1}>
           {filters.map((f) => (
@@ -224,13 +225,13 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
           ))}
           {filters.length === 0 && (
             <Text fontSize="sm" color="faintText" px={1}>
-              No filters yet.
+              {t('No filters yet.')}
             </Text>
           )}
-          <Select size="sm" mt={2} placeholder="+ Add a filter…" value="" onChange={(e) => e.target.value && add(e.target.value as FilterType)} aria-label="Add a filter" data-testid="add-filter">
-            {FILTER_TYPES.map((t) => (
-              <option key={t.type} value={t.type}>
-                {t.label}
+          <Select size="sm" mt={2} placeholder={t('+ Add a filter…')} value="" onChange={(e) => e.target.value && add(e.target.value as FilterType)} aria-label={t('Add a filter')} data-testid="add-filter">
+            {FILTER_TYPES.map((ft) => (
+              <option key={ft.type} value={ft.type}>
+                {ft.label}
               </option>
             ))}
           </Select>
@@ -239,42 +240,52 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
         <Box flex={1} minW={0}>
           {!current ? (
             <Text fontSize="sm" color="mutedText">
-              A filter is set once at the top of the dashboard and changes every card it is connected to — through a question's parameter
-              (<code>{'{{name}}'}</code> in SQL, an asked-for filter in the builder) or, for questions built without SQL, directly on a column.
+              {(() => {
+                const [before, after] = t(
+                  'A filter is set once at the top of the dashboard and changes every card it is connected to — through a question’s parameter ({param} in SQL, an asked-for filter in the builder) or, for questions built without SQL, directly on a column.',
+                ).split('{param}');
+                return (
+                  <>
+                    {before}
+                    <code>{'{{name}}'}</code>
+                    {after}
+                  </>
+                );
+              })()}
             </Text>
           ) : (
             <VStack align="stretch" spacing={4}>
               <HStack align="flex-end" spacing={3} wrap="wrap">
                 <FormControl w="200px">
-                  <FormLabel fontSize="xs">Label</FormLabel>
+                  <FormLabel fontSize="xs">{t('Label')}</FormLabel>
                   <Input size="sm" value={current.label} onChange={(e) => update({ label: e.target.value })} maxLength={120} data-testid="filter-label" />
                 </FormControl>
                 <FormControl w="160px">
-                  <FormLabel fontSize="xs">Type</FormLabel>
-                  <Select size="sm" value={current.type} onChange={(e) => update({ type: e.target.value as FilterType, default: null })} aria-label="Filter type">
-                    {FILTER_TYPES.map((t) => (
-                      <option key={t.type} value={t.type}>
-                        {t.label}
+                  <FormLabel fontSize="xs">{t('Type')}</FormLabel>
+                  <Select size="sm" value={current.type} onChange={(e) => update({ type: e.target.value as FilterType, default: null })} aria-label={t('Filter type')}>
+                    {FILTER_TYPES.map((ft) => (
+                      <option key={ft.type} value={ft.type}>
+                        {ft.label}
                       </option>
                     ))}
                   </Select>
                 </FormControl>
                 <FormControl w="230px">
-                  <FormLabel fontSize="xs">Default</FormLabel>
+                  <FormLabel fontSize="xs">{t('Default')}</FormLabel>
                   <DefaultInput filter={current} onChange={(d) => update({ default: d })} />
                 </FormControl>
                 <Checkbox size="sm" isChecked={!!current.required} onChange={(e) => update({ required: e.target.checked })} pb={2}>
-                  <Text fontSize="xs">Required</Text>
+                  <Text fontSize="xs">{t('Required')}</Text>
                 </Checkbox>
-                <IconButton aria-label="Remove filter" size="sm" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => remove(current.id)} />
+                <IconButton aria-label={t('Remove filter')} size="sm" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => remove(current.id)} />
               </HStack>
               <Box>
                 <Text fontSize="xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.06em" mb={2}>
-                  Applies to
+                  {t('Applies to')}
                 </Text>
                 {questionCards.length === 0 && (
                   <Text fontSize="sm" color="faintText">
-                    Add question cards first.
+                    {t('Add question cards first.')}
                   </Text>
                 )}
                 <VStack align="stretch" spacing={2}>
@@ -297,8 +308,8 @@ function DefaultInput({ filter, onChange }: { filter: DashFilter; onChange: (val
     const pair = Array.isArray(d) ? (d as string[]) : ['', ''];
     return (
       <HStack spacing={1}>
-        <Input size="sm" type="date" value={pair[0] ?? ''} onChange={(e) => onChange([e.target.value, pair[1] ?? ''])} aria-label="Default from" />
-        <Input size="sm" type="date" value={pair[1] ?? ''} onChange={(e) => onChange([pair[0] ?? '', e.target.value])} aria-label="Default to" />
+        <Input size="sm" type="date" value={pair[0] ?? ''} onChange={(e) => onChange([e.target.value, pair[1] ?? ''])} aria-label={t('Default from')} />
+        <Input size="sm" type="date" value={pair[1] ?? ''} onChange={(e) => onChange([pair[0] ?? '', e.target.value])} aria-label={t('Default to')} />
       </HStack>
     );
   }
@@ -308,7 +319,7 @@ function DefaultInput({ filter, onChange }: { filter: DashFilter; onChange: (val
       size="sm"
       type={filter.type === 'date' ? 'date' : filter.type === 'number' ? 'number' : 'text'}
       value={text}
-      placeholder={filter.type === 'category' ? 'a, b, c' : 'none'}
+      placeholder={filter.type === 'category' ? 'a, b, c' : t('none')}
       onChange={(e) =>
         onChange(
           filter.type === 'category'
@@ -319,7 +330,7 @@ function DefaultInput({ filter, onChange }: { filter: DashFilter; onChange: (val
             : e.target.value,
         )
       }
-      aria-label="Default value"
+      aria-label={t('Default value')}
     />
   );
 }
@@ -334,8 +345,8 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
     const out: { ref: string; label: string }[] = [];
     const several = (q.tables ?? []).length > 1;
     for (const table of q.tables ?? []) {
-      const t = schema.data.tables.find((x) => x.name === table);
-      for (const col of t?.columns ?? []) {
+      const tbl = schema.data.tables.find((x) => x.name === table);
+      for (const col of tbl?.columns ?? []) {
         if (col.type === 'binary') continue;
         out.push({ ref: `${table}.${col.name}`, label: several ? `${humanize(table)} → ${humanize(col.name)}` : humanize(col.name) });
       }
@@ -357,11 +368,11 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
           const v = e.target.value;
           onChange(v.startsWith('param:') ? { param: v.slice(6) } : v.startsWith('field:') ? { field: v.slice(6) } : null);
         }}
-        aria-label={`Connect ${filter.label} to ${card.title || q.name}`}
+        aria-label={t('Connect {filter} to {card}', { filter: filter.label, card: card.title || q.name })}
       >
-        <option value="">Not connected</option>
+        <option value="">{t('Not connected')}</option>
         {params.length > 0 && (
-          <optgroup label="Parameter">
+          <optgroup label={t('Parameter')}>
             {params.map((p) => (
               <option key={p.name} value={`param:${p.name}`}>
                 {p.label || p.name}
@@ -370,7 +381,7 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
           </optgroup>
         )}
         {columns.length > 0 && (
-          <optgroup label="Column">
+          <optgroup label={t('Column')}>
             {columns.map((c) => (
               <option key={c.ref} value={`field:${c.ref}`}>
                 {c.label}
@@ -382,7 +393,7 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
       </Select>
       {q.kind === 'sql' && params.length === 0 && (
         <Text fontSize="2xs" color="faintText" maxW="140px">
-          add a {'{{parameter}}'} of a fitting type to the SQL
+          {t('add a {param} of a fitting type to the SQL', { param: '{{parameter}}' })}
         </Text>
       )}
     </Flex>

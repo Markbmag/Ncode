@@ -49,6 +49,7 @@ permissions_table = Table(
     Column("user_id", Integer),
     Column("role", String(16)),
     Column("level", String(8), nullable=False),
+    Column("group_id", Integer),  # M9
 )
 
 favorites_table = Table(

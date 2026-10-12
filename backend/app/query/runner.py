@@ -150,6 +150,10 @@ class QueryRunner:
         with self._lock:
             return self._tasks.get(task_id)
 
+    def running_total(self) -> int:
+        with self._lock:
+            return sum(1 for t in self._tasks.values() if not t.is_final)
+
     def running_count(self, owner: str) -> int:
         with self._lock:
             return sum(1 for t in self._tasks.values() if t.owner == owner and not t.is_final)

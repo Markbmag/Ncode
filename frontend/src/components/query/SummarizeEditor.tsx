@@ -5,6 +5,7 @@ import { AGGREGATES, BUCKETS, aggregationName } from '../../query/draft';
 import type { Aggregation, Breakout, Bucket } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { t } from '../../i18n/index.ts';
 
 const TYPES_FOR: Record<Aggregation['fn'], ColumnType[] | undefined> = {
   count: undefined,
@@ -24,6 +25,15 @@ export interface MetricOption {
   description?: string | null;
 }
 const BINS = [1, 5, 10, 50, 100, 1000];
+const BY_BUCKET: Record<Bucket, string> = {
+  minute: t('by minute'),
+  hour: t('by hour'),
+  day: t('by day'),
+  week: t('by week'),
+  month: t('by month'),
+  quarter: t('by quarter'),
+  year: t('by year'),
+};
 
 interface SummarizeEditorProps {
   aggregations: Aggregation[];
@@ -49,7 +59,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
     <SimpleGrid columns={{ base: 1, '2xl': 2 }} spacing={4}>
       <VStack align="stretch" spacing={2} data-testid="metrics">
         <Text fontSize="xs" color="mutedText" fontWeight={700}>
-          Metrics
+          {t('Metrics')}
         </Text>
         {aggregations.map((a, i) => {
           if (a.fn === 'metric') {
@@ -57,17 +67,17 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
             return (
               <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="metric-row">
                 <Badge colorScheme="green" variant="subtle" textTransform="none" fontSize="xs" px={2} py={1} title={m?.description ?? undefined}>
-                  ★ {m?.name ?? `Metric ${a.metric} (not available)`}
+                  ★ {m?.name ?? t('Metric {id} (not available)', { id: a.metric })}
                 </Badge>
-                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label="Result column name" />
-                <IconButton aria-label="Remove metric" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
+                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label={t('Result column name')} />
+                <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
               </Flex>
             );
           }
           const info = AGGREGATES.find((x) => x.fn === a.fn)!;
           return (
             <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="metric-row">
-              <Select size="sm" maxW="170px" value={a.fn} onChange={(e) => setAgg(i, { fn: e.target.value as Aggregation['fn'], ref: e.target.value === 'count' ? undefined : a.ref, alias: a.alias })} aria-label="Metric">
+              <Select size="sm" maxW="170px" value={a.fn} onChange={(e) => setAgg(i, { fn: e.target.value as Aggregation['fn'], ref: e.target.value === 'count' ? undefined : a.ref, alias: a.alias })} aria-label={t('Metric')}>
                 {AGGREGATES.map((x) => (
                   <option key={x.fn} value={x.fn}>
                     {x.label}
@@ -75,16 +85,16 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
                 ))}
               </Select>
               {info.needsColumn && (
-                <ColumnSelect options={options} types={TYPES_FOR[a.fn]} value={a.ref} onChange={(ref) => setAgg(i, { ...a, ref })} maxW="200px" aria-label="Metric column" />
+                <ColumnSelect options={options} types={TYPES_FOR[a.fn]} value={a.ref} onChange={(ref) => setAgg(i, { ...a, ref })} maxW="200px" aria-label={t('Metric column')} />
               )}
-              <Input size="sm" maxW="130px" placeholder={aggregationName({ ...a, alias: undefined })} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label="Result column name" />
-              <IconButton aria-label="Remove metric" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
+              <Input size="sm" maxW="130px" placeholder={aggregationName({ ...a, alias: undefined })} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label={t('Result column name')} />
+              <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
             </Flex>
           );
         })}
         <Flex gap={2} wrap="wrap">
           <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => onChange([...aggregations, { fn: aggregations.length ? 'sum' : 'count' }], breakouts)} data-testid="add-metric">
-            Metric
+            {t('Metric')}
           </Button>
           {metrics.length > 0 && (
             <Select
@@ -95,10 +105,10 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
                 const m = metrics.find((x) => String(x.id) === e.target.value);
                 if (m) onChange([...aggregations, { fn: 'metric', metric: m.id, alias: m.slug }], breakouts);
               }}
-              aria-label="Add a saved metric"
+              aria-label={t('Add a saved metric')}
               data-testid="add-saved-metric"
             >
-              <option value="">★ Saved metric…</option>
+              <option value="">{t('★ Saved metric…')}</option>
               {metrics.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -111,45 +121,45 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
 
       <VStack align="stretch" spacing={2} data-testid="group-by">
         <Text fontSize="xs" color="mutedText" fontWeight={700}>
-          Grouped by
+          {t('Grouped by')}
         </Text>
         {breakouts.map((b, i) => {
           const type = typeOf(b.ref);
           return (
             <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="group-row">
-              <ColumnSelect options={options} value={b.ref || undefined} onChange={(ref) => pickBreakout(i, ref)} maxW="220px" aria-label="Group by column" />
+              <ColumnSelect options={options} value={b.ref || undefined} onChange={(ref) => pickBreakout(i, ref)} maxW="220px" aria-label={t('Group by column')} />
               {(type === 'date' || type === 'datetime') && (
-                <Select size="sm" maxW="120px" value={b.bucket ?? ''} onChange={(e) => setBrk(i, { ...b, bucket: (e.target.value || undefined) as Bucket | undefined })} aria-label="Date grouping">
-                  <option value="">Exact value</option>
+                <Select size="sm" maxW="120px" value={b.bucket ?? ''} onChange={(e) => setBrk(i, { ...b, bucket: (e.target.value || undefined) as Bucket | undefined })} aria-label={t('Date grouping')}>
+                  <option value="">{t('Exact value')}</option>
                   {BUCKETS.map((x) => (
                     <option key={x.value} value={x.value}>
-                      by {x.label.toLowerCase()}
+                      {BY_BUCKET[x.value] ?? x.label}
                     </option>
                   ))}
                 </Select>
               )}
               {type === 'number' && (
-                <Select size="sm" maxW="130px" value={b.bin_width ?? ''} onChange={(e) => setBrk(i, { ...b, bin_width: e.target.value ? Number(e.target.value) : undefined })} aria-label="Number ranges">
-                  <option value="">Exact value</option>
+                <Select size="sm" maxW="130px" value={b.bin_width ?? ''} onChange={(e) => setBrk(i, { ...b, bin_width: e.target.value ? Number(e.target.value) : undefined })} aria-label={t('Number ranges')}>
+                  <option value="">{t('Exact value')}</option>
                   {BINS.map((w) => (
                     <option key={w} value={w}>
-                      ranges of {w}
+                      {t('ranges of {n}', { n: w })}
                     </option>
                   ))}
                 </Select>
               )}
-              <IconButton aria-label="Remove grouping" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setBrk(i, null)} />
+              <IconButton aria-label={t('Remove grouping')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setBrk(i, null)} />
             </Flex>
           );
         })}
         <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} alignSelf="flex-start" onClick={() => onChange(aggregations, [...breakouts, { ref: '' }])} data-testid="add-group">
-          Group by
+          {t('Group by')}
         </Button>
       </VStack>
       {aggregations.length === 0 && breakouts.length === 0 && (
         <Box gridColumn="1 / -1">
           <Text fontSize="sm" color="faintText">
-            Not summarised: the question shows rows. Add a metric (sum, count …) and a grouping to get totals per group.
+            {t('Not summarised: the question shows rows. Add a metric (sum, count …) and a grouping to get totals per group.')}
           </Text>
         </Box>
       )}

@@ -28,7 +28,7 @@ from sqlalchemy import and_, delete, func, insert, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-from ..appdb import User, users_table
+from ..appdb import User, groups_table, users_table
 from .tables import (
     collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, permissions_table,
     questions_table, share_links_table, subscription_runs_table, subscriptions_table,
@@ -76,6 +76,7 @@ class Grant:
     user_id: int | None
     role: str | None
     level: Level
+    group_id: int | None = None  # M9
 
 
 @dataclass
@@ -143,7 +144,11 @@ class Snapshot:
             if node.owner_id is not None and node.owner_id == user.id:
                 return "edit"
             for g in self.grants.get(node.id, ()):
-                if (g.user_id is not None and g.user_id == user.id) or (g.role is not None and g.role in ("all", user.role)):
+                if (
+                    (g.user_id is not None and g.user_id == user.id)
+                    or (g.role is not None and g.role in ("all", user.role))
+                    or (g.group_id is not None and g.group_id in user.group_ids)
+                ):
                     if _RANK[g.level] > _RANK[best]:
                         best = g.level
         return best
@@ -213,7 +218,7 @@ class ContentStore:
         with self.engine.connect() as conn:
             cols = [_collection(r) for r in conn.execute(select(collections_table)).all()]
             grants = [
-                Grant(r.collection_id, r.user_id, r.role, r.level)
+                Grant(r.collection_id, r.user_id, r.role, r.level, r.group_id)
                 for r in conn.execute(select(permissions_table)).all()
             ]
         return Snapshot(cols, grants)
@@ -392,11 +397,13 @@ class ContentStore:
         snap = self.snapshot()
         self._require_manage(snap, user, cid)
         names = self._usernames()
+        groups = self._groupnames()
         out = []
         for node in snap.chain(cid):
             for g in snap.grants.get(node.id, ()):
                 out.append({
                     "user": names.get(g.user_id) if g.user_id is not None else None,
+                    "group": groups.get(g.group_id) if g.group_id is not None else None,
                     "role": g.role,
                     "level": g.level,
                     "inherited_from": None if node.id == cid else {"id": node.id, "name": node.name},
@@ -410,30 +417,40 @@ class ContentStore:
         if snap.personal_root(cid) is not None:
             raise ContentError("Personal collections cannot be shared; move the questions to a shared collection")
         ids = {name: uid for uid, name in self._usernames().items()}
-        rows: dict[tuple[int | None, str | None], str] = {}
+        group_ids = {name.lower(): gid for gid, name in self._groupnames().items()}
+        rows: dict[tuple[int | None, str | None, int | None], str] = {}
         for g in grants:
             level = g.get("level")
             if level not in ("view", "edit"):
                 raise ContentError("level must be 'view' or 'edit'")
-            if (g.get("user") is None) == (g.get("role") is None):
-                raise ContentError("each grant names either a user or a role")
+            if sum(g.get(k) is not None for k in ("user", "role", "group")) != 1:
+                raise ContentError("each grant names one user, group or role")
             if g.get("user") is not None:
                 uid = ids.get(str(g["user"]).lower())
                 if uid is None:
                     raise ContentError(f"Unknown user {g['user']!r}")
-                key = (uid, None)
+                key: tuple[int | None, str | None, int | None] = (uid, None, None)
+            elif g.get("group") is not None:
+                gid = group_ids.get(str(g["group"]).lower())
+                if gid is None:
+                    raise ContentError(f"Unknown group {g['group']!r}")
+                key = (None, None, gid)
             else:
                 if g["role"] not in ROLES:
                     raise ContentError(f"role must be one of {', '.join(ROLES)}")
-                key = (None, g["role"])
+                key = (None, g["role"], None)
             if _RANK[level] > _RANK[rows.get(key)]:
                 rows[key] = level
         with self.engine.begin() as conn:
             conn.execute(delete(permissions_table).where(permissions_table.c.collection_id == cid))
-            for (uid, role), level in rows.items():
-                conn.execute(insert(permissions_table).values(collection_id=cid, user_id=uid, role=role, level=level))
+            for (uid, role, gid), level in rows.items():
+                conn.execute(insert(permissions_table).values(collection_id=cid, user_id=uid, role=role, group_id=gid, level=level))
             conn.execute(update(collections_table).where(collections_table.c.id == cid).values(updated_at=time.time()))
         return self.grants(user, cid)
+
+    def _groupnames(self) -> dict[int, str]:
+        with self.engine.connect() as conn:
+            return {r.id: r.name for r in conn.execute(select(groups_table.c.id, groups_table.c.name))}
 
     def _usernames(self) -> dict[int, str]:
         with self.engine.connect() as conn:

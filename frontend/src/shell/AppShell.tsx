@@ -2,8 +2,10 @@ import { Suspense } from 'react';
 import { Box, Flex, HStack, IconButton, Skeleton, VStack } from '@chakra-ui/react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { ColorModeButton, Logo, NavLinks, Sidebar } from '../components/Sidebar';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { LogOutIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t } from '../i18n/index.ts';
 
 function PageFallback() {
   return (
@@ -43,8 +45,9 @@ export default function AppShell() {
           <Flex align="center" justify="space-between" px={4} py={3}>
             <Logo />
             <HStack>
+              <LanguageSwitch />
               <ColorModeButton />
-              <IconButton aria-label="Sign out" size="sm" icon={<LogOutIcon boxSize={4} />} onClick={ws.onLogout} />
+              <IconButton aria-label={t('Sign out')} size="sm" icon={<LogOutIcon boxSize={4} />} onClick={ws.onLogout} />
             </HStack>
           </Flex>
           <Box px={2} pb={2}>

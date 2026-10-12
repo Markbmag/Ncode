@@ -12,6 +12,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import {
   EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, placeholder,
 } from '@codemirror/view';
+import { t } from '../../i18n/index.ts';
 
 export interface CodeEditorHandle {
   insert: (text: string) => void;
@@ -87,7 +88,7 @@ export function CodeEditor({ value, onChange, onRun, engine, schema, editorRef }
           highlightSelectionMatches(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
-          placeholder('SELECT … — Ctrl/Cmd + Enter runs it (or just the selected part)'),
+          placeholder(t('SELECT … — Ctrl/Cmd + Enter runs it (or just the selected part)')),
           baseTheme,
           language.current.of([]),
           theme.current.of([]),
@@ -95,7 +96,7 @@ export function CodeEditor({ value, onChange, onRun, engine, schema, editorRef }
           EditorView.updateListener.of((update) => {
             if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
           }),
-          EditorView.contentAttributes.of({ 'aria-label': 'SQL editor', 'data-testid': 'sql-editor' }),
+          EditorView.contentAttributes.of({ 'aria-label': t('SQL editor'), 'data-testid': 'sql-editor' }),
         ],
       }),
     });

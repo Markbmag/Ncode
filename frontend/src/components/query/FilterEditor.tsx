@@ -7,9 +7,17 @@ import type { Condition, DateUnit, FilterGroup, FilterNode, FilterOp, RelativeDa
 import { isGroup } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { t } from '../../i18n/index.ts';
 
 const UNITS: DateUnit[] = ['day', 'week', 'month', 'quarter', 'year'];
 const MAX_DEPTH = 3;
+const UNIT_LABELS: Record<DateUnit, { one: string; many: string; incl: string }> = {
+  day: { one: t('day'), many: t('days'), incl: t('incl. today') },
+  week: { one: t('week'), many: t('weeks'), incl: t('incl. this week') },
+  month: { one: t('month'), many: t('months'), incl: t('incl. this month') },
+  quarter: { one: t('quarter'), many: t('quarters'), incl: t('incl. this quarter') },
+  year: { one: t('year'), many: t('years'), incl: t('incl. this year') },
+};
 
 interface FilterEditorProps {
   group: FilterGroup;
@@ -27,7 +35,7 @@ export interface FilterParams {
   label: (name: string) => string;
 }
 
-export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 'No filters: every row is used.', testId, params }: FilterEditorProps) {
+export function FilterEditor({ group, onChange, options, depth = 0, emptyText = t('No filters: every row is used.'), testId, params }: FilterEditorProps) {
   const typeOf = (ref?: string): ColumnType => options.find((o) => o.ref === ref)?.type ?? 'unknown';
 
   const setRule = (index: number, rule: FilterNode | null) => {
@@ -45,18 +53,18 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
       {group.rules.length > 1 && (
         <HStack spacing={2}>
           <Text fontSize="xs" color="mutedText">
-            Rows must match
+            {t('Rows must match')}
           </Text>
           <ButtonGroup size="xs" isAttached>
             <Button variant={group.op === 'and' ? 'brand' : 'subtle'} onClick={() => onChange({ ...group, op: 'and' })}>
-              all
+              {t('all')}
             </Button>
             <Button variant={group.op === 'or' ? 'brand' : 'subtle'} onClick={() => onChange({ ...group, op: 'or' })}>
-              any
+              {t('any')}
             </Button>
           </ButtonGroup>
           <Text fontSize="xs" color="mutedText">
-            of these
+            {t('of these')}
           </Text>
         </HStack>
       )}
@@ -71,7 +79,7 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
             <Box flex={1} border="1px dashed" borderColor="lineColor" borderRadius="lg" p={2}>
               <FilterEditor group={rule} onChange={(g) => setRule(i, g)} options={options} depth={depth + 1} params={params} />
             </Box>
-            <IconButton aria-label="Remove group" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setRule(i, null)} />
+            <IconButton aria-label={t('Remove group')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setRule(i, null)} />
           </Flex>
         ) : (
           <ConditionRow
@@ -88,11 +96,11 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
       )}
       <HStack spacing={2}>
         <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={addCondition}>
-          Filter
+          {t('Filter')}
         </Button>
         {depth < MAX_DEPTH - 1 && (
           <Button size="xs" variant="ghost" leftIcon={<PlusIcon boxSize={3} />} onClick={addGroup}>
-            Group ({group.op === 'and' ? 'any of' : 'all of'})
+            {group.op === 'and' ? t('Group (any of)') : t('Group (all of)')}
           </Button>
         )}
       </HStack>
@@ -144,12 +152,12 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner, pa
     <Flex gap={2} align="center" wrap="wrap" data-testid="filter-row">
       {joiner && (
         <Text fontSize="2xs" fontWeight={700} color="faintText" w="24px" textTransform="uppercase">
-          {joiner}
+          {joiner === 'and' ? t('and') : t('or')}
         </Text>
       )}
-      <ColumnSelect options={options} value={condition.ref} onChange={pickColumn} maxW="220px" aria-label="Filter column" />
+      <ColumnSelect options={options} value={condition.ref} onChange={pickColumn} maxW="220px" aria-label={t('Filter column')} />
       {condition.ref && (
-        <Select size="sm" maxW="170px" value={condition.op} onChange={(e) => pickOp(e.target.value as FilterOp)} aria-label="Operator">
+        <Select size="sm" maxW="170px" value={condition.op} onChange={(e) => pickOp(e.target.value as FilterOp)} aria-label={t('Operator')}>
           {ops.map((o) => (
             <option key={o.op} value={o.op}>
               {o.label}
@@ -159,16 +167,16 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner, pa
       )}
       {condition.ref && condition.param && params ? (
         <Badge colorScheme="purple" textTransform="none" fontWeight={500} data-testid="asked-filter">
-          asks “{params.label(condition.param)}”
+          {t('asks “{name}”', { name: params.label(condition.param) })}
         </Badge>
       ) : (
         condition.ref && <ValueInput kind={info.value} type={type} value={condition.value} onChange={(value) => onChange({ ...condition, value })} />
       )}
       <HStack spacing={0} ml="auto">
         {canAsk && (
-          <Tooltip label={condition.param ? 'Use a fixed value again' : 'Ask for this value when the question runs (a parameter)'} hasArrow>
+          <Tooltip label={condition.param ? t('Use a fixed value again') : t('Ask for this value when the question runs (a parameter)')} hasArrow>
             <IconButton
-              aria-label={condition.param ? 'Use a fixed value' : 'Ask for the value'}
+              aria-label={condition.param ? t('Use a fixed value') : t('Ask for the value')}
               size="xs"
               variant={condition.param ? 'subtle' : 'ghost'}
               color={condition.param ? 'purple.300' : undefined}
@@ -178,7 +186,7 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner, pa
             />
           </Tooltip>
         )}
-        <IconButton aria-label="Remove filter" size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} />
+        <IconButton aria-label={t('Remove filter')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={onRemove} />
       </HStack>
     </Flex>
   );
@@ -199,20 +207,20 @@ interface ValueInputProps {
 }
 
 function ValueInput({ kind, type, value, onChange }: ValueInputProps) {
-  const t = inputType(type);
+  const htmlType = inputType(type);
   if (kind === 'none') return null;
   if (kind === 'single') {
-    return <Input size="sm" type={t} maxW="200px" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} placeholder="value" aria-label="Value" />;
+    return <Input size="sm" type={htmlType} maxW="200px" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} placeholder={t('value')} aria-label={t('Value')} />;
   }
   if (kind === 'pair') {
     const pair = Array.isArray(value) ? value : ['', ''];
     return (
       <HStack spacing={1}>
-        <Input size="sm" type={t} maxW="170px" value={String(pair[0] ?? '')} onChange={(e) => onChange([e.target.value, pair[1]])} aria-label="From" />
+        <Input size="sm" type={htmlType} maxW="170px" value={String(pair[0] ?? '')} onChange={(e) => onChange([e.target.value, pair[1]])} aria-label={t('From')} />
         <Text fontSize="xs" color="mutedText">
-          and
+          {t('and')}
         </Text>
-        <Input size="sm" type={t} maxW="170px" value={String(pair[1] ?? '')} onChange={(e) => onChange([pair[0], e.target.value])} aria-label="To" />
+        <Input size="sm" type={htmlType} maxW="170px" value={String(pair[1] ?? '')} onChange={(e) => onChange([pair[0], e.target.value])} aria-label={t('To')} />
       </HStack>
     );
   }
@@ -224,7 +232,7 @@ function ValueInput({ kind, type, value, onChange }: ValueInputProps) {
         maxW="260px"
         defaultValue={items.join(', ')}
         placeholder="a, b, c"
-        aria-label="Values, separated by commas"
+        aria-label={t('Values, separated by commas')}
         onChange={(e) =>
           onChange(
             e.target.value
@@ -239,10 +247,10 @@ function ValueInput({ kind, type, value, onChange }: ValueInputProps) {
   }
   const rel = (value && typeof value === 'object' ? value : { unit: 'day' }) as RelativeDate;
   const unitSelect = (
-    <Select size="sm" maxW="120px" value={rel.unit} onChange={(e) => onChange({ ...rel, unit: e.target.value as DateUnit })} aria-label="Unit">
+    <Select size="sm" maxW="120px" value={rel.unit} onChange={(e) => onChange({ ...rel, unit: e.target.value as DateUnit })} aria-label={t('Unit')}>
       {UNITS.map((u) => (
         <option key={u} value={u}>
-          {kind === 'relative' ? `${u}s` : u}
+          {kind === 'relative' ? UNIT_LABELS[u].many : UNIT_LABELS[u].one}
         </option>
       ))}
     </Select>
@@ -257,11 +265,11 @@ function ValueInput({ kind, type, value, onChange }: ValueInputProps) {
         maxW="80px"
         value={rel.amount ?? 1}
         onChange={(e) => onChange({ ...rel, amount: Math.max(1, Number(e.target.value) || 1) })}
-        aria-label="Amount"
+        aria-label={t('Amount')}
       />
       {unitSelect}
       <Checkbox size="sm" isChecked={!!rel.include_current} onChange={(e) => onChange({ ...rel, include_current: e.target.checked })}>
-        <Text fontSize="xs">incl. this {rel.unit}</Text>
+        <Text fontSize="xs">{UNIT_LABELS[rel.unit]?.incl ?? t('incl. this {unit}', { unit: rel.unit })}</Text>
       </Checkbox>
     </HStack>
   );

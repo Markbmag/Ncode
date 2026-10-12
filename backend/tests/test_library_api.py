@@ -245,7 +245,7 @@ def test_role_grant_and_inheritance(env):
     share(env, "alice", team["id"], [{"role": "all", "level": "view"}])
     assert call(env, "carol", "GET", f"/api/questions/{q['id']}")["access"] == "view"
     grants = call(env, "alice", "GET", f"/api/collections/{sub['id']}/permissions")["grants"]
-    assert grants == [{"user": None, "role": "all", "level": "view", "inherited_from": {"id": team["id"], "name": "Company"}}]
+    assert grants == [{"user": None, "group": None, "role": "all", "level": "view", "inherited_from": {"id": team["id"], "name": "Company"}}]
     # a stronger grant lower down wins there
     share(env, "alice", sub["id"], [{"user": "carol", "level": "edit"}])
     assert call(env, "carol", "GET", f"/api/questions/{q['id']}")["access"] == "edit"

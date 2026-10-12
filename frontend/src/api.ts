@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { t } from './i18n/index.ts';
 
 const TOKEN_KEY = 'ncode_token';
 export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
@@ -9,8 +10,14 @@ export const setToken = (token: string | null): void => {
   else localStorage.removeItem(TOKEN_KEY);
 };
 
+// Development: the API runs on its own port. Docker / behind a proxy: build with VITE_API_URL="" and the
+// API is the same address as the page (https://ncode.company.local/api/...).
 export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
-export const WS_URL: string = API_URL.replace(/^http/, 'ws');
+export const WS_URL: string = API_URL
+  ? API_URL.replace(/^http/, 'ws')
+  : typeof window !== 'undefined'
+    ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+    : '';
 
 export const http = axios.create({ baseURL: API_URL });
 
@@ -42,7 +49,7 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
       const first: unknown = detail[0];
       if (typeof first === 'object' && first !== null && 'msg' in first) return String((first as { msg: unknown }).msg);
     }
-    if (!error.response) return 'Сервер недоступен. Проверьте, что backend запущен.';
+    if (!error.response) return t('The server is not reachable. Make sure the backend is running.');
   }
   return fallback;
 }

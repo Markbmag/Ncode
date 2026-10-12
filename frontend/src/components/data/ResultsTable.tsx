@@ -7,6 +7,7 @@ import { formatValue } from '../../lib/format';
 import { formatNumber } from '../../viz/format';
 import type { ColumnFormat } from '../../viz/types';
 import { cellToString } from '../../lib/csv';
+import { t } from '../../i18n/index.ts';
 
 const ROW_HEIGHT = 32;
 const NUMBER_COL_WIDTH = 56;
@@ -55,8 +56,8 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
       const text = cellToString(rows[row]?.[col]).replace(/^'/, '');
       void navigator.clipboard
         ?.writeText(text)
-        .then(() => toast({ title: 'Copied', description: text.slice(0, 80) || '(empty)', status: 'success', duration: 1200 }))
-        .catch(() => toast({ title: 'The browser did not allow copying', status: 'warning', duration: 2000 }));
+        .then(() => toast({ title: t('Copied'), description: text.slice(0, 80) || t('(empty)'), status: 'success', duration: 1200 }))
+        .catch(() => toast({ title: t('The browser did not allow copying'), status: 'warning', duration: 2000 }));
     },
     [rows, toast],
   );
@@ -125,7 +126,7 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
               justify={col.type === 'number' ? 'flex-end' : 'flex-start'}
             >
               <Tooltip
-                label={`${col.display_name ? `${col.name} · ` : ''}${col.type}${col.role === 'measure' ? ' · measure' : ''}${col.description ? ` — ${col.description}` : ''}`}
+                label={`${col.display_name ? `${col.name} · ` : ''}${col.type}${col.role === 'measure' ? ` · ${t('measure')}` : ''}${col.description ? ` — ${col.description}` : ''}`}
                 hasArrow
                 openDelay={400}
               >
@@ -145,7 +146,7 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
                 cursor="col-resize"
                 _hover={{ bg: 'brand.400' }}
                 onPointerDown={startResize(i)}
-                aria-label={`Resize ${col.name}`}
+                aria-label={t('Resize {name}', { name: col.name })}
               />
             </Flex>
           ))}

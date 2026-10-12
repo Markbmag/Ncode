@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Box, Button, Flex, IconButton, Input, InputGroup, InputLeftElement, Skeleton, Text, Tooltip, VStack } from '@chakra-ui/react';
 import type { SchemaTable } from '../../api';
 import { ChevronDownIcon, KeyIcon, LinkIcon, RefreshIcon, SearchIcon, TableIcon } from '../../icons';
+import { t } from '../../i18n/index.ts';
 
 const TYPE_MARK: Record<string, string> = {
   string: 'Aa', number: '#', boolean: '✓', date: 'D', datetime: 'DT', time: 'T', json: '{}', binary: '01', unknown: '?',
@@ -37,10 +38,10 @@ export function SchemaTree({ tables, loading, error, onInsert, onInsertSelect, o
           <InputLeftElement pointerEvents="none" color="faintText">
             <SearchIcon boxSize={3.5} />
           </InputLeftElement>
-          <Input placeholder="Tables and columns" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter tables" />
+          <Input placeholder={t('Tables and columns')} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label={t('Filter tables')} />
         </InputGroup>
-        <Tooltip label="Read the structure again" hasArrow>
-          <IconButton aria-label="Reload structure" size="sm" icon={<RefreshIcon boxSize={3.5} />} onClick={onReload} />
+        <Tooltip label={t('Read the structure again')} hasArrow>
+          <IconButton aria-label={t('Reload structure')} size="sm" icon={<RefreshIcon boxSize={3.5} />} onClick={onReload} />
         </Tooltip>
       </Flex>
       <Box flex={1} overflowY="auto" px={1} py={1} fontSize="sm">
@@ -56,10 +57,10 @@ export function SchemaTree({ tables, loading, error, onInsert, onInsertSelect, o
             {error}
           </Text>
         )}
-        {shown.slice(0, MAX_TABLES).map((t) => {
-          const expanded = open[t.name] ?? (filter.trim() !== '' && shown.length <= 5);
+        {shown.slice(0, MAX_TABLES).map((tbl) => {
+          const expanded = open[tbl.name] ?? (filter.trim() !== '' && shown.length <= 5);
           return (
-            <Box key={t.name}>
+            <Box key={tbl.name}>
               <Flex
                 align="center"
                 gap={1.5}
@@ -71,18 +72,18 @@ export function SchemaTree({ tables, loading, error, onInsert, onInsertSelect, o
                 role="group"
               >
                 <IconButton
-                  aria-label={expanded ? `Collapse ${t.name}` : `Expand ${t.name}`}
+                  aria-label={expanded ? t('Collapse {name}', { name: tbl.name }) : t('Expand {name}', { name: tbl.name })}
                   size="xs"
                   variant="ghost"
                   minW="18px"
                   h="18px"
                   icon={<ChevronDownIcon boxSize={3} transform={expanded ? undefined : 'rotate(-90deg)'} />}
-                  onClick={() => setOpen((o) => ({ ...o, [t.name]: !expanded }))}
+                  onClick={() => setOpen((o) => ({ ...o, [tbl.name]: !expanded }))}
                 />
                 <TableIcon boxSize={3.5} color="brand.300" />
-                <Tooltip label="Insert the table name" hasArrow openDelay={600}>
-                  <Text flex={1} noOfLines={1} fontWeight={600} onClick={() => onInsert(quote(t.name))} data-testid={`tree-table-${t.name}`}>
-                    {t.name}
+                <Tooltip label={t('Insert the table name')} hasArrow openDelay={600}>
+                  <Text flex={1} noOfLines={1} fontWeight={600} onClick={() => onInsert(quote(tbl.name))} data-testid={`tree-table-${tbl.name}`}>
+                    {tbl.name}
                   </Text>
                 </Tooltip>
                 <Button
@@ -94,18 +95,18 @@ export function SchemaTree({ tables, loading, error, onInsert, onInsertSelect, o
                   opacity={0}
                   _groupHover={{ opacity: 1 }}
                   _focus={{ opacity: 1 }}
-                  onClick={() => onInsertSelect(t.name)}
-                  aria-label={`Insert SELECT from ${t.name}`}
-                  data-testid={`tree-select-${t.name}`}
+                  onClick={() => onInsertSelect(tbl.name)}
+                  aria-label={t('Insert SELECT from {name}', { name: tbl.name })}
+                  data-testid={`tree-select-${tbl.name}`}
                 >
                   SELECT
                 </Button>
                 <Text fontSize="2xs" color="faintText" minW="16px" textAlign="right">
-                  {t.columns.length}
+                  {tbl.columns.length}
                 </Text>
               </Flex>
               {expanded &&
-                t.columns.map((c) => (
+                tbl.columns.map((c) => (
                   <Flex
                     key={c.name}
                     align="center"
@@ -134,12 +135,12 @@ export function SchemaTree({ tables, loading, error, onInsert, onInsertSelect, o
         })}
         {shown.length > MAX_TABLES && (
           <Text fontSize="xs" color="faintText" p={2}>
-            {shown.length - MAX_TABLES} more — type to narrow the list.
+            {t('{n} more — type to narrow the list.', { n: shown.length - MAX_TABLES })}
           </Text>
         )}
         {!loading && !error && shown.length === 0 && (
           <Text fontSize="xs" color="faintText" p={2}>
-            Nothing matches.
+            {t('Nothing matches.')}
           </Text>
         )}
       </Box>

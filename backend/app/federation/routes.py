@@ -171,7 +171,7 @@ def register_federation_routes(
         require_connection(spec.connection, user)
         data = spec.model_dump(mode="json", by_alias=True, exclude_unset=True)
         data["limit"] = min(spec.limit or limit, limit)
-        engine, compiled, _sql = queries.compile_for(QuerySpec.model_validate(data), default_limit=limit, max_limit=cap)
+        engine, compiled, _sql = queries.compile_for(QuerySpec.model_validate(data), user=user, default_limit=limit, max_limit=cap)
         statement = compiled.limited(1)
         return PreparedSource(
             alias, label, kind, spec.connection, limit=compiled.limit, cache_part=part,

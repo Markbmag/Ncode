@@ -9,6 +9,7 @@ import { queryClient } from '../lib/queryClient';
 import type { TaskSnapshot } from '../query/useQueryRun';
 import { RunQueue } from './logic';
 import type { Dashboard, DashboardSummary, DashCard, Definition } from './types';
+import { t } from '../i18n/index.ts';
 
 /**
  * Where cards run. Inside Ncode: the signed-in API (null). On a public link or an embed (M8):
@@ -130,7 +131,7 @@ export function useCardRun(
         }));
       } catch (error) {
         if (!alive) return;
-        setState({ ...IDLE, status: 'error', error: apiErrorMessage(error, 'This card could not be loaded'), finishedAt: Date.now() });
+        setState({ ...IDLE, status: 'error', error: apiErrorMessage(error, t('This card could not be loaded')), finishedAt: Date.now() });
       } finally {
         release();
       }

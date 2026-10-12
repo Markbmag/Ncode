@@ -14,6 +14,7 @@ import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
 import { ShareDialog } from '../sharing/ShareDialog';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t } from '../i18n/index.ts';
 
 interface Props {
   engine?: string;
@@ -45,14 +46,14 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   const [saving, setSaving] = useState(false);
   const canEdit = saved?.access === 'edit';
 
-  const fail = (e: unknown, what: string) => toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+  const fail = (e: unknown, what: string) => toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
 
   const createFrom = async (target: { name: string; description: string | null; collection_id: number }) => {
     const body = payload();
-    if (!body) throw new Error('The question is not complete');
+    if (!body) throw new Error(t('The question is not complete'));
     const q = await library.createQuestion({ ...body, ...target });
     onSaved?.();
-    toast({ status: 'success', title: `Saved to ${q.collection?.name ?? 'the library'}`, duration: 2500 });
+    toast({ status: 'success', title: q.collection?.name ? t('Saved to {name}', { name: q.collection.name }) : t('Saved to the library'), duration: 2500 });
     navigate(`/questions/${q.id}`, { replace: !saved });
   };
 
@@ -63,9 +64,9 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     try {
       await library.updateQuestion(saved.id, body);
       onSaved?.();
-      toast({ status: 'success', title: 'Saved', duration: 1500 });
+      toast({ status: 'success', title: t('Saved'), duration: 1500 });
     } catch (e) {
-      fail(e, 'Could not save');
+      fail(e, t('Could not save'));
     } finally {
       setSaving(false);
     }
@@ -75,10 +76,10 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     if (!saved) return;
     try {
       await library.updateQuestion(saved.id, { archived: true });
-      toast({ status: 'info', title: `“${saved.name}” archived`, description: 'Restore it from Library → Archive.', duration: 4000 });
+      toast({ status: 'info', title: t('“{name}” archived', { name: saved.name }), description: t('Restore it from Library → Archive.'), duration: 4000 });
       navigate(`/library/c/${saved.collection_id}`);
     } catch (e) {
-      fail(e, 'Could not archive');
+      fail(e, t('Could not archive'));
     }
   };
 
@@ -88,7 +89,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       const q = await library.duplicate(saved.id);
       navigate(`/questions/${q.id}`);
     } catch (e) {
-      fail(e, 'Could not duplicate');
+      fail(e, t('Could not duplicate'));
     }
   };
 
@@ -98,12 +99,12 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       await library.updateQuestion(saved.id, { model: !saved.model });
       toast({
         status: 'success',
-        title: saved.model ? 'No longer a model' : 'Now a model',
-        description: saved.model ? undefined : 'New questions and Combine can start from it like from a table.',
+        title: saved.model ? t('No longer a model') : t('Now a model'),
+        description: saved.model ? undefined : t('New questions and Combine can start from it like from a table.'),
         duration: 3000,
       });
     } catch (e) {
-      fail(e, 'Could not change it');
+      fail(e, t('Could not change it'));
     }
   };
 
@@ -112,7 +113,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     try {
       await library.favorite(saved.id, !saved.favorite);
     } catch (e) {
-      fail(e, 'Could not change favourites');
+      fail(e, t('Could not change favourites'));
     }
   };
 
@@ -125,7 +126,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
         {saved && (
           <HStack spacing={1} fontSize="xs" color="mutedText" data-testid="question-path">
             <Link as={RouterLink} to="/library">
-              Library
+              {t('Library')}
             </Link>
             {saved.path.map((p) => (
               <HStack key={p.id} spacing={1}>
@@ -142,9 +143,9 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             {saved ? saved.name : title}
           </Text>
           {saved && (
-            <Tooltip label={saved.favorite ? 'Remove from favourites' : 'Add to favourites'} hasArrow>
+            <Tooltip label={saved.favorite ? t('Remove from favourites') : t('Add to favourites')} hasArrow>
               <IconButton
-                aria-label={saved.favorite ? 'Remove from favourites' : 'Add to favourites'}
+                aria-label={saved.favorite ? t('Remove from favourites') : t('Add to favourites')}
                 size="xs"
                 variant="ghost"
                 color={saved.favorite ? 'yellow.400' : 'faintText'}
@@ -154,9 +155,9 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               />
             </Tooltip>
           )}
-          {saved && !canEdit && <Badge>view only</Badge>}
-          {saved?.model && <Badge colorScheme="teal">model</Badge>}
-          {saved && dirty && <Badge colorScheme="orange">edited</Badge>}
+          {saved && !canEdit && <Badge>{t('view only')}</Badge>}
+          {saved?.model && <Badge colorScheme="teal">{t('model')}</Badge>}
+          {saved && dirty && <Badge colorScheme="orange">{t('edited')}</Badge>}
         </HStack>
         {subtitle && (
           <Text fontSize="xs" color="mutedText" noOfLines={1}>
@@ -168,8 +169,8 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       <HStack spacing={2} wrap="wrap">
         {children}
         {saved && (
-          <Tooltip label="Subscriptions and alerts" hasArrow>
-            <IconButton aria-label="Subscriptions and alerts" size="sm" variant="ghost" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('list')} data-testid="question-subscriptions" />
+          <Tooltip label={t('Subscriptions and alerts')} hasArrow>
+            <IconButton aria-label={t('Subscriptions and alerts')} size="sm" variant="ghost" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('list')} data-testid="question-subscriptions" />
           </Tooltip>
         )}
         {(!saved || canEdit) && (
@@ -182,69 +183,69 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             onClick={() => (saved ? void saveChanges() : saveNew.onOpen())}
             data-testid="save-question"
           >
-            Save
+            {t('Save')}
           </Button>
         )}
         {saved && !canEdit && (
           <Button size="sm" variant="brand" leftIcon={<SaveIcon boxSize={4} />} isDisabled={!ready} onClick={saveNew.onOpen}>
-            Save as new…
+            {t('Save as new…')}
           </Button>
         )}
         {saved && (
           <Menu isLazy placement="bottom-end">
-            <MenuButton as={IconButton} aria-label="More actions" size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="question-menu" />
+            <MenuButton as={IconButton} aria-label={t('More actions')} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="question-menu" />
             <MenuList fontSize="sm">
               {canEdit && (
                 <MenuItem icon={<SaveIcon boxSize={4} />} onClick={saveNew.onOpen} isDisabled={!ready}>
-                  Save as new question…
+                  {t('Save as new question…')}
                 </MenuItem>
               )}
               {canEdit && dirty && onRevert && (
                 <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={onRevert}>
-                  Discard changes
+                  {t('Discard changes')}
                 </MenuItem>
               )}
               {canEdit && (
                 <MenuItem icon={<PencilIcon boxSize={4} />} onClick={details.onOpen}>
-                  Rename / describe…
+                  {t('Rename / describe…')}
                 </MenuItem>
               )}
               <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void duplicate()}>
-                Duplicate
+                {t('Duplicate')}
               </MenuItem>
               <MenuItem icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('alert')} data-testid="question-alert">
-                Set up an alert…
+                {t('Set up an alert…')}
               </MenuItem>
               {ws.isAdmin && (
                 <MenuItem icon={<GlobeIcon boxSize={4} />} onClick={share.onOpen} data-testid="question-share">
-                  Public link / embed…
+                  {t('Public link / embed…')}
                 </MenuItem>
               )}
               {saved.kind === 'builder' && (
                 <MenuItem icon={<SparklesIcon boxSize={4} />} onClick={() => navigate(`/xray?question=${saved.id}`)} data-testid="question-xray">
-                  X-ray
+                  {t('X-ray')}
                 </MenuItem>
               )}
               {saved.kind !== 'federated' && (
                 <MenuItem icon={<MergeIcon boxSize={4} />} onClick={() => navigate(`/combine?question=${saved.id}`)}>
-                  Combine with other sources
+                  {t('Combine with other sources')}
                 </MenuItem>
               )}
               {canEdit && saved.kind !== 'federated' && (
                 <MenuItem icon={<TableIcon boxSize={4} />} onClick={() => void toggleModel()} data-testid="toggle-model">
-                  {saved.model ? 'Stop using as a model' : 'Use as a model'}
+                  {saved.model ? t('Stop using as a model') : t('Use as a model')}
                 </MenuItem>
               )}
               {canEdit && (
                 <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
-                  Move…
+                  {t('Move…')}
                 </MenuItem>
               )}
               {canEdit && (
                 <>
                   <MenuDivider />
                   <MenuItem icon={<ArchiveIcon boxSize={4} />} onClick={() => void archive()} data-testid="archive-question">
-                    Archive
+                    {t('Archive')}
                   </MenuItem>
                 </>
               )}
@@ -256,8 +257,8 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       <SaveQuestionDialog
         isOpen={saveNew.isOpen}
         onClose={saveNew.onClose}
-        title={saved ? 'Save as a new question' : 'Save question'}
-        defaultName={saved ? `${saved.name} (copy)` : defaultName}
+        title={saved ? t('Save as a new question') : t('Save question')}
+        defaultName={saved ? t('{name} (copy)', { name: saved.name }) : defaultName}
         defaultCollection={saved ? (saved.access === 'edit' ? saved.collection_id : null) : Number(search.get('collection')) || null}
         onSave={createFrom}
       />
@@ -266,7 +267,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
           <MoveDialog
             isOpen={move.isOpen}
             onClose={move.onClose}
-            title={`Move “${saved.name}”`}
+            title={t('Move “{name}”', { name: saved.name })}
             current={saved.collection_id}
             onMove={(target) => library.updateQuestion(saved.id, { collection_id: target as number })}
           />
@@ -297,17 +298,17 @@ function DetailsDialog({ isOpen, onClose, question }: { isOpen: boolean; onClose
     <DialogShell
       isOpen={isOpen}
       onClose={onClose}
-      title="Rename / describe"
-      submitLabel="Save"
+      title={t('Rename / describe')}
+      submitLabel={t('Save')}
       canSubmit={name.trim() !== ''}
       onSubmit={() => library.updateQuestion(question.id, { name: name.trim(), description: description.trim() || null })}
     >
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Name</FormLabel>
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} autoFocus />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} />
       </FormControl>
     </DialogShell>

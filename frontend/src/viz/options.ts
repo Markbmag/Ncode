@@ -13,6 +13,7 @@ import { MAX_SCATTER_SERIES, OTHER, assignColors } from './palette.ts';
 import type { ChartTheme } from './palette.ts';
 import { nextDates, trendValues } from './stats.ts';
 import type { ColumnFormat, VizSpec } from './types.ts';
+import { t as tr } from '../i18n/index.ts';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -150,7 +151,7 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
       silent: true,
       symbol: 'none',
       lineStyle: { color: theme.textSecondary, width: 1, type: 'dashed' },
-      label: { color: theme.textSecondary, formatter: viz.goal.label || `Goal ${formatAxisNumber(viz.goal.value, measureFmt)}`, position: 'insideEndTop' },
+      label: { color: theme.textSecondary, formatter: viz.goal.label || tr('Goal {value}', { value: formatAxisNumber(viz.goal.value, measureFmt) }), position: 'insideEndTop' },
       data: [horizontal ? { xAxis: viz.goal.value } : { yAxis: viz.goal.value }],
     };
   }
@@ -169,7 +170,7 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
         for (const s of series as AnyRecord[]) s.data = [...(s.data as unknown[]), ...future.map(() => null)];
       }
       (series as AnyRecord[]).push({
-        name: future.length ? 'Trend and forecast' : 'Trend',
+        name: future.length ? tr('Trend and forecast') : tr('Trend'),
         type: 'line',
         data: trend,
         symbol: 'none',
@@ -309,11 +310,11 @@ function histogramChart(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOptio
     grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
     tooltip: { ...(base(theme).tooltip as AnyRecord), trigger: 'item' },
     xAxis: { type: 'category', data: bins.map((b) => `${formatAxisNumber(b.from, fmt)} – ${formatAxisNumber(b.to, fmt)}`), name: viz.axis?.xTitle ?? column, nameLocation: 'middle', nameGap: 28, ...axisStyle(theme), splitLine: { show: false } },
-    yAxis: { type: 'value', name: viz.axis?.yTitle ?? 'rows', nameLocation: 'middle', nameGap: 40, ...axisStyle(theme), axisLine: { show: false } },
+    yAxis: { type: 'value', name: viz.axis?.yTitle ?? tr('rows'), nameLocation: 'middle', nameGap: 40, ...axisStyle(theme), axisLine: { show: false } },
     series: [
       {
         type: 'bar',
-        name: 'rows',
+        name: tr('rows'),
         data: bins.map((b) => b.count),
         barCategoryGap: '2px', // bins touch, separated by the 2 px surface gap
         itemStyle: { color: theme.series[0], borderRadius: [RADIUS, RADIUS, 0, 0] },
@@ -332,8 +333,8 @@ function heatmap(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   const ys: string[] = [];
   const cells = new Map<string, number>();
   for (const r of t.rows) {
-    const x = String(r[xi] ?? '(empty)');
-    const y = String(r[yi] ?? '(empty)');
+    const x = String(r[xi] ?? tr('(empty)'));
+    const y = String(r[yi] ?? tr('(empty)'));
     if (!xs.includes(x)) xs.push(x);
     if (!ys.includes(y)) ys.push(y);
     const v = toNumber(r[vi]);
@@ -381,7 +382,7 @@ function funnel(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   const xi = colIndex(t, viz.x);
   const vi = colIndex(t, viz.value ?? viz.series?.[0]?.y);
   const stages = t.rows
-    .map((r) => ({ name: categoryLabel(t, viz, String(r[xi] ?? '(empty)')), value: toNumber(r[vi]) ?? 0 }))
+    .map((r) => ({ name: categoryLabel(t, viz, String(r[xi] ?? tr('(empty)'))), value: toNumber(r[vi]) ?? 0 }))
     .sort((a, b) => b.value - a.value)
     .slice(0, theme.ordinal.length);
   const first = stages[0]?.value || 1;
@@ -444,7 +445,7 @@ function gauge(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
         anchor: { show: false },
         title: { show: true, offsetCenter: [0, '32%'], color: theme.textSecondary, fontSize: 12 },
         detail: { valueAnimation: true, offsetCenter: [0, '0%'], color: theme.text, fontSize: 30, fontWeight: 600, formatter: (v: number) => formatNumber(v, fmt) },
-        data: [{ value, name: `of ${formatNumber(max, fmt)}` }],
+        data: [{ value, name: tr('of {max}', { max: formatNumber(max, fmt) }) }],
       },
     ],
   };
@@ -467,7 +468,7 @@ export function scaleWarning(t: Table, viz: VizSpec): string | null {
   const lo = Math.min(...peaks.filter((p) => p > 0));
   const hi = Math.max(...peaks);
   if (!Number.isFinite(lo) || hi / lo <= 20) return null;
-  return 'These series differ a lot in size and share one axis, so the small one looks flat. Two separate charts show both better.';
+  return tr('These series differ a lot in size and share one axis, so the small one looks flat. Two separate charts show both better.');
 }
 
 /** Formats from the data model (sent with the result columns) under the chart's own formats. */

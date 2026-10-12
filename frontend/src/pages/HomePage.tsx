@@ -3,14 +3,19 @@ import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
 import { NAV_ITEMS } from '../shell/nav';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { t, tn } from '../i18n/index.ts';
 
 const BLURBS: Record<string, string> = {
-  '/search': 'Find a value in every table of a database at once.',
-  '/browse': 'Page through any table, sort, filter and export it to CSV.',
-  '/questions': 'Build questions without SQL: join, filter, group and chart.',
-  '/sql': 'Write read-only SQL with autocomplete and safe limits.',
-  '/dashboards': 'Put questions together on a dashboard with shared filters.',
-  '/admin': 'Connections, the data model and (later) users and permissions.',
+  '/search': t('Find a value in every table of a database at once.'),
+  '/browse': t('Page through any table, sort, filter and export it to CSV.'),
+  '/questions': t('Build questions without SQL: join, filter, group and chart.'),
+  '/sql': t('Write read-only SQL with autocomplete and safe limits.'),
+  '/library': t('Saved questions, dashboards and models in shared collections.'),
+  '/combine': t('Join results from several databases and uploaded files.'),
+  '/datasets': t('Upload CSV, Excel or Parquet files and query them like tables.'),
+  '/dashboards': t('Put questions together on a dashboard with shared filters.'),
+  '/subscriptions': t('Reports and alerts sent by email, Slack, Teams or Telegram on a schedule.'),
+  '/admin': t('Databases, the data model, people and groups, delivery, audit log and backups.'),
 };
 
 export default function HomePage() {
@@ -19,8 +24,8 @@ export default function HomePage() {
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
-        title={`Hello, ${user.username}`}
-        subtitle={loaded ? `${connections.length} database${connections.length === 1 ? '' : 's'} available to you` : ' '}
+        title={t('Hello, {name}', { name: user.username })}
+        subtitle={loaded ? tn(connections.length, '{n} database available to you', '{n} databases available to you') : ' '}
       />
       <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
         {items.map((item) => (

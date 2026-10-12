@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { apiErrorMessage, http } from '../api';
 import type { ResultEnvelope } from '../api';
+import { t } from '../i18n/index.ts';
 
 /** What POST /api/query, /api/query/sql and GET /api/query/tasks/{id} answer. */
 export interface TaskSnapshot {
@@ -82,7 +83,7 @@ export function useQueryRun() {
           phase: 'done',
           status: 'failed',
           result: status === 400 || status === 422 ? null : prev.result,
-          error: apiErrorMessage(error, 'The query could not be started'),
+          error: apiErrorMessage(error, t('The query could not be started')),
         }));
       }
     },

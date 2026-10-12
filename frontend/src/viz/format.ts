@@ -5,7 +5,9 @@
 import type { ColumnType } from '../api';
 import type { ColumnFormat, DateStyle } from './types.ts';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+import { t } from '../i18n/index.ts';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m) => t(m));
 
 export function formatNumber(value: number, fmt: ColumnFormat = {}, locale?: string): string {
   if (!Number.isFinite(value)) return String(value);
@@ -62,11 +64,11 @@ export function formatDate(value: string, style: DateStyle): string {
     case 'year':
       return y;
     case 'quarter':
-      return `Q${Math.floor((Number(mo) - 1) / 3) + 1} ${y}`;
+      return t('Q{q} {year}', { q: Math.floor((Number(mo) - 1) / 3) + 1, year: y });
     case 'month':
       return `${month} ${y}`;
     case 'week':
-      return `Week of ${Number(d)} ${month} ${y}`;
+      return t('Week of {date}', { date: `${Number(d)} ${month} ${y}` });
     case 'day':
       return `${Number(d)} ${month} ${y}`;
     case 'datetime':

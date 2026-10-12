@@ -1,6 +1,7 @@
 /** Dashboards (mirrors backend/app/content/dashboards.py and dashboard_routes.py). */
 import type { ParameterDef } from '../library/params.ts';
 import type { VizState } from '../viz/state.ts';
+import { t } from '../i18n/index.ts';
 
 export type FilterType = 'date_range' | 'date' | 'text' | 'category' | 'number';
 
@@ -86,17 +87,17 @@ export interface Dashboard extends DashboardSummary, Definition {
 }
 
 export const FILTER_TYPES: { type: FilterType; label: string }[] = [
-  { type: 'date_range', label: 'Date range' },
-  { type: 'date', label: 'Single date' },
-  { type: 'category', label: 'List of values' },
-  { type: 'text', label: 'Text (contains)' },
-  { type: 'number', label: 'Number' },
+  { type: 'date_range', label: t('Date range') },
+  { type: 'date', label: t('Single date') },
+  { type: 'category', label: t('List of values') },
+  { type: 'text', label: t('Text (contains)') },
+  { type: 'number', label: t('Number') },
 ];
 
 export const REFRESH_CHOICES: { value: NonNullable<DashboardSettings['refresh']>; label: string }[] = [
-  { value: 0, label: 'Off' },
-  { value: 30, label: '30 s' },
-  { value: 60, label: '1 min' },
-  { value: 300, label: '5 min' },
-  { value: 900, label: '15 min' },
+  { value: 0, label: t('Off') },
+  { value: 30, label: t('30 s') },
+  { value: 60, label: t('1 min') },
+  { value: 300, label: t('5 min') },
+  { value: 900, label: t('15 min') },
 ];
