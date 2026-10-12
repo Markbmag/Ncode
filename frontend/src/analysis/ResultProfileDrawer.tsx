@@ -1,6 +1,7 @@
 import { Alert, AlertIcon, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Skeleton } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { apiErrorMessage, http } from '../api';
+import { t } from '../i18n/index.ts';
 import { ProfileView } from './ProfileView';
 import type { Profile } from './types';
 
@@ -18,13 +19,13 @@ export function ResultProfileDrawer({ taskId, isOpen, onClose }: { taskId: strin
       <DrawerOverlay />
       <DrawerContent bg="appBg">
         <DrawerCloseButton />
-        <DrawerHeader fontSize="md">Profile of this result</DrawerHeader>
+        <DrawerHeader fontSize="md">{t('Profile of this result')}</DrawerHeader>
         <DrawerBody pb={6}>
           {profile.isPending && <Skeleton h="300px" borderRadius="xl" />}
           {profile.isError && (
             <Alert status="warning" borderRadius="xl" fontSize="sm">
               <AlertIcon />
-              {apiErrorMessage(profile.error, 'Run the question again, then profile it')}
+              {apiErrorMessage(profile.error, t('Run the question again, then profile it'))}
             </Alert>
           )}
           {profile.data && <ProfileView profile={profile.data} />}

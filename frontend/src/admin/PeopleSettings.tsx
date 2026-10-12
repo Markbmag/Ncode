@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   Badge, Box, Button, Checkbox, CheckboxGroup, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, Radio, RadioGroup,
   Select, Skeleton, Stack, Switch, Table, Tbody, Td, Text, Textarea, Th, Thead, Tooltip, Tr, VStack, Wrap, WrapItem, useToast,
@@ -13,8 +14,16 @@ import { useWorkspace } from '../workspace/useWorkspace';
 import { Panel } from './Panel';
 import { connectionsValue, people, useAdminUsers, useGroups, useRowRules } from './peopleApi';
 import type { AdminUser, Group } from './peopleApi';
+import { t, tn } from '../i18n/index.ts';
 
-const when = (ts: number | null) => (ts ? new Date(ts * 1000).toLocaleString() : 'never');
+const when = (ts: number | null) => (ts ? new Date(ts * 1000).toLocaleString() : t('never'));
+
+/** Fills {name} placeholders of a translated sentence with elements. */
+const rich = (text: string, parts: Record<string, ReactNode>) =>
+  text.split(/(\{\w+\})/).map((p, i) => {
+    const k = p.slice(1, -1);
+    return p.startsWith('{') && k in parts ? <Fragment key={i}>{parts[k]}</Fragment> : p;
+  });
 
 /** Admin → People: users, groups (databases and collections for many at once) and row-level security. */
 export function PeopleSettings() {
@@ -39,7 +48,7 @@ function ConnectionsPicker({ value, onChange, allLabel }: { value: '*' | string[
             {allLabel}
           </Radio>
           <Radio value="some" size="sm">
-            Only these
+            {t('Only these')}
           </Radio>
         </Stack>
       </RadioGroup>
@@ -73,16 +82,16 @@ function Users() {
       await fn();
       if (done) toast({ status: 'success', title: done, duration: 1500 });
     } catch (e) {
-      toast({ status: 'error', title: what, description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     }
   };
   return (
     <Panel
-      title="Users"
-      subtitle="Who may sign in, which databases they may use (their own setting plus their groups'), and their email for subscriptions."
+      title={t('Users')}
+      subtitle={t("Who may sign in, which databases they may use (their own setting plus their groups'), and their email for subscriptions.")}
       actions={
         <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={() => setEditing('new')} data-testid="add-user">
-          Add user
+          {t('Add user')}
         </Button>
       }
     >
@@ -91,11 +100,11 @@ function Users() {
         <Table size="sm" data-testid="users-table">
           <Thead>
             <Tr>
-              <Th textTransform="none">Name</Th>
-              <Th textTransform="none">Groups</Th>
-              <Th textTransform="none">Databases</Th>
-              <Th textTransform="none">Last sign-in</Th>
-              <Th textTransform="none">Active</Th>
+              <Th textTransform="none">{t('Name')}</Th>
+              <Th textTransform="none">{t('Groups')}</Th>
+              <Th textTransform="none">{t('Databases')}</Th>
+              <Th textTransform="none">{t('Last sign-in')}</Th>
+              <Th textTransform="none">{t('Active')}</Th>
               <Th />
             </Tr>
           </Thead>
@@ -107,45 +116,45 @@ function Users() {
                     <Text fontWeight={600} fontSize="sm">
                       {u.username}
                     </Text>
-                    {u.role === 'admin' && <Badge colorScheme="purple">admin</Badge>}
+                    {u.role === 'admin' && <Badge colorScheme="purple">{t('admin')}</Badge>}
                     {u.row_rules > 0 && (
-                      <Tooltip label={`${u.row_rules} row-level rule(s) from their groups`} hasArrow>
-                        <Badge colorScheme="orange">row rules</Badge>
+                      <Tooltip label={t('{n} row-level rule(s) from their groups', { n: u.row_rules })} hasArrow>
+                        <Badge colorScheme="orange">{t('row rules')}</Badge>
                       </Tooltip>
                     )}
                   </HStack>
                   <Text fontSize="xs" color="mutedText">
-                    {u.email ?? 'no email'}
+                    {u.email ?? t('no email')}
                   </Text>
                 </Td>
                 <Td fontSize="xs">{u.groups.join(', ') || '—'}</Td>
-                <Td fontSize="xs">{u.role === 'admin' ? 'all (admin)' : u.effective_connections.join(', ') || 'none'}</Td>
+                <Td fontSize="xs">{u.role === 'admin' ? t('all (admin)') : u.effective_connections.join(', ') || t('none')}</Td>
                 <Td fontSize="xs">{when(u.last_login_at)}</Td>
                 <Td>
                   <Switch
                     size="sm"
                     isChecked={u.is_active}
                     isDisabled={u.username === ws.user.username}
-                    onChange={(e) => void act('Could not change it', () => people.updateUser(u.username, { is_active: e.target.checked }))}
-                    aria-label={`${u.username} may sign in`}
+                    onChange={(e) => void act(t('Could not change it'), () => people.updateUser(u.username, { is_active: e.target.checked }))}
+                    aria-label={t('{name} may sign in', { name: u.username })}
                   />
                 </Td>
                 <Td>
                   <HStack spacing={0} justify="flex-end">
-                    <IconButton aria-label="Edit" size="xs" variant="ghost" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(u)} data-testid="edit-user" />
-                    <Tooltip label="Set a new password" hasArrow>
-                      <IconButton aria-label="Set a new password" size="xs" variant="ghost" icon={<KeyIcon boxSize={3.5} />} onClick={() => setResetting(u)} />
+                    <IconButton aria-label={t('Edit')} size="xs" variant="ghost" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(u)} data-testid="edit-user" />
+                    <Tooltip label={t('Set a new password')} hasArrow>
+                      <IconButton aria-label={t('Set a new password')} size="xs" variant="ghost" icon={<KeyIcon boxSize={3.5} />} onClick={() => setResetting(u)} />
                     </Tooltip>
                     {u.username !== ws.user.username && (
                       <IconButton
-                        aria-label="Delete"
+                        aria-label={t('Delete')}
                         size="xs"
                         variant="ghost"
                         colorScheme="red"
                         icon={<TrashIcon boxSize={3.5} />}
                         onClick={() => {
-                          if (window.confirm(`Delete ${u.username}? Their questions stay; their own collection becomes admin-only.`))
-                            void act('Could not delete', () => people.deleteUser(u.username));
+                          if (window.confirm(t('Delete {name}? Their questions stay; their own collection becomes admin-only.', { name: u.username })))
+                            void act(t('Could not delete'), () => people.deleteUser(u.username));
                         }}
                       />
                     )}
@@ -174,8 +183,8 @@ function UserDialog({ user, onClose }: { user: AdminUser | null; onClose: () => 
     <DialogShell
       isOpen
       onClose={onClose}
-      title={user ? `Edit ${user.username}` : 'Add a user'}
-      submitLabel={user ? 'Save' : 'Add user'}
+      title={user ? t('Edit {name}', { name: user.username }) : t('Add a user')}
+      submitLabel={user ? t('Save') : t('Add user')}
       size="lg"
       canSubmit={!!username.trim() && (!!user || password.length >= 8)}
       onSubmit={() =>
@@ -187,42 +196,42 @@ function UserDialog({ user, onClose }: { user: AdminUser | null; onClose: () => 
       {!user && (
         <HStack align="flex-start">
           <FormControl isRequired>
-            <FormLabel fontSize="sm">User name</FormLabel>
+            <FormLabel fontSize="sm">{t('User name')}</FormLabel>
             <Input size="sm" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} autoFocus data-testid="new-username" />
-            <FormHelperText fontSize="xs">3–64: letters, digits, . _ -</FormHelperText>
+            <FormHelperText fontSize="xs">{t('3–64: letters, digits, . _ -')}</FormHelperText>
           </FormControl>
           <FormControl isRequired>
-            <FormLabel fontSize="sm">Password</FormLabel>
+            <FormLabel fontSize="sm">{t('Password')}</FormLabel>
             <Input size="sm" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" data-testid="new-password" />
-            <FormHelperText fontSize="xs">At least 8 characters; they can change it themselves.</FormHelperText>
+            <FormHelperText fontSize="xs">{t('At least 8 characters; they can change it themselves.')}</FormHelperText>
           </FormControl>
         </HStack>
       )}
       <HStack align="flex-start">
         <FormControl>
-          <FormLabel fontSize="sm">Role</FormLabel>
+          <FormLabel fontSize="sm">{t('Role')}</FormLabel>
           <Select size="sm" value={role} onChange={(e) => setRole(e.target.value)} data-testid="user-role">
-            <option value="user">User</option>
-            <option value="admin">Admin (everything, all databases)</option>
+            <option value="user">{t('User')}</option>
+            <option value="admin">{t('Admin (everything, all databases)')}</option>
           </Select>
         </FormControl>
         <FormControl>
-          <FormLabel fontSize="sm">Email</FormLabel>
+          <FormLabel fontSize="sm">{t('Email')}</FormLabel>
           <Input size="sm" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </FormControl>
       </HStack>
       {role !== 'admin' && (
         <FormControl>
-          <FormLabel fontSize="sm">Databases</FormLabel>
-          <ConnectionsPicker value={connections} onChange={setConnections} allLabel="All databases" />
-          <FormHelperText fontSize="xs">Their groups can add more.</FormHelperText>
+          <FormLabel fontSize="sm">{t('Databases')}</FormLabel>
+          <ConnectionsPicker value={connections} onChange={setConnections} allLabel={t('All databases')} />
+          <FormHelperText fontSize="xs">{t('Their groups can add more.')}</FormHelperText>
         </FormControl>
       )}
       <FormControl>
-        <FormLabel fontSize="sm">Groups</FormLabel>
+        <FormLabel fontSize="sm">{t('Groups')}</FormLabel>
         {groups.data?.length === 0 && (
           <Text fontSize="xs" color="mutedText">
-            No groups yet.
+            {t('No groups yet.')}
           </Text>
         )}
         <CheckboxGroup value={memberOf} onChange={(v) => setMemberOf(v as string[])}>
@@ -244,12 +253,12 @@ function UserDialog({ user, onClose }: { user: AdminUser | null; onClose: () => 
 function PasswordDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const [password, setPassword] = useState('');
   return (
-    <DialogShell isOpen onClose={onClose} title={`New password for ${user.username}`} submitLabel="Set password" canSubmit={password.length >= 8}
+    <DialogShell isOpen onClose={onClose} title={t('New password for {name}', { name: user.username })} submitLabel={t('Set password')} canSubmit={password.length >= 8}
       onSubmit={() => people.updateUser(user.username, { password })}>
       <Text fontSize="sm" color="mutedText">
-        They are signed out everywhere and sign in with this password. Tell it to them in person or by phone.
+        {t('They are signed out everywhere and sign in with this password. Tell it to them in person or by phone.')}
       </Text>
-      <Input size="sm" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="new-password" placeholder="at least 8 characters" />
+      <Input size="sm" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="new-password" placeholder={t('at least 8 characters')} />
     </DialogShell>
   );
 }
@@ -262,18 +271,18 @@ function Groups() {
   const [editing, setEditing] = useState<Group | 'new' | null>(null);
   return (
     <Panel
-      title="Groups"
-      subtitle="Give databases and collections to many people at once (Library → a collection → Share → Group), and limit which rows they see."
+      title={t('Groups')}
+      subtitle={t('Give databases and collections to many people at once (Library → a collection → Share → Group), and limit which rows they see.')}
       actions={
         <Button size="sm" leftIcon={<PlusIcon boxSize={4} />} onClick={() => setEditing('new')} data-testid="add-group">
-          Add group
+          {t('Add group')}
         </Button>
       }
     >
       <VStack align="stretch" spacing={2}>
         {groups.data?.length === 0 && (
           <Text fontSize="sm" color="mutedText">
-            No groups yet, e.g. “Sales EU”, “Logistics”, “Management”.
+            {t('No groups yet, e.g. “Sales EU”, “Logistics”, “Management”.')}
           </Text>
         )}
         {groups.data?.map((g) => (
@@ -284,23 +293,23 @@ function Groups() {
                 <Text fontSize="sm" fontWeight={600}>
                   {g.name}
                 </Text>
-                {g.row_rules > 0 && <Badge colorScheme="orange">{g.row_rules} row rule{g.row_rules > 1 ? 's' : ''}</Badge>}
+                {g.row_rules > 0 && <Badge colorScheme="orange">{tn(g.row_rules, '{n} row rule', '{n} row rules')}</Badge>}
               </HStack>
               <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                {g.members.length} member{g.members.length === 1 ? '' : 's'}
-                {g.members.length ? `: ${g.members.join(', ')}` : ''} · databases: {g.connections === '*' ? 'all' : g.connections || 'none'}
+                {tn(g.members.length, '{n} member', '{n} members')}
+                {g.members.length ? `: ${g.members.join(', ')}` : ''} · {t('databases: {list}', { list: g.connections === '*' ? t('all') : g.connections || t('none') })}
               </Text>
             </Box>
-            <IconButton aria-label="Edit" size="sm" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(g)} />
+            <IconButton aria-label={t('Edit')} size="sm" icon={<PencilIcon boxSize={3.5} />} onClick={() => setEditing(g)} />
             <IconButton
-              aria-label="Delete"
+              aria-label={t('Delete')}
               size="sm"
               variant="ghost"
               colorScheme="red"
               icon={<TrashIcon boxSize={3.5} />}
               onClick={() => {
-                if (window.confirm(`Delete the group ${g.name}? Its members lose what the group gave them, and its row rules go.`))
-                  people.deleteGroup(g.id).catch((e: unknown) => toast({ status: 'error', title: 'Could not delete', description: apiErrorMessage(e, 'Please try again') }));
+                if (window.confirm(t('Delete the group {name}? Its members lose what the group gave them, and its row rules go.', { name: g.name })))
+                  people.deleteGroup(g.id).catch((e: unknown) => toast({ status: 'error', title: t('Could not delete'), description: apiErrorMessage(e, t('Please try again')) }));
               }}
             />
           </Flex>
@@ -321,26 +330,26 @@ function GroupDialog({ group, onClose }: { group: Group | null; onClose: () => v
     <DialogShell
       isOpen
       onClose={onClose}
-      title={group ? `Edit ${group.name}` : 'Add a group'}
-      submitLabel="Save"
+      title={group ? t('Edit {name}', { name: group.name }) : t('Add a group')}
+      submitLabel={t('Save')}
       size="lg"
       canSubmit={!!name.trim()}
       onSubmit={() => people.saveGroup(group?.id ?? null, { name: name.trim(), description: description.trim() || null, connections, members })}
     >
       <FormControl isRequired>
-        <FormLabel fontSize="sm">Name</FormLabel>
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
         <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoFocus data-testid="group-name" />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Description</FormLabel>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Databases the members may use</FormLabel>
-        <ConnectionsPicker value={connections} onChange={setConnections} allLabel="All databases" />
+        <FormLabel fontSize="sm">{t('Databases the members may use')}</FormLabel>
+        <ConnectionsPicker value={connections} onChange={setConnections} allLabel={t('All databases')} />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Members</FormLabel>
+        <FormLabel fontSize="sm">{t('Members')}</FormLabel>
         <CheckboxGroup value={members} onChange={(v) => setMembers(v as string[])}>
           <Wrap spacing={3} data-testid="group-members">
             {users.data?.map((u) => (
@@ -374,7 +383,7 @@ function RowSecurity() {
     enabled: connection !== '',
     queryFn: async () => (await http.get<SchemaV2>(`/api/connections/${connection}/schema`)).data,
   });
-  const columns = schema.data?.tables.find((t) => t.name === table)?.columns ?? [];
+  const columns = schema.data?.tables.find((tb) => tb.name === table)?.columns ?? [];
   const add = async () => {
     try {
       await people.addRule({
@@ -382,55 +391,61 @@ function RowSecurity() {
         values: values.split(/[,\n]/).map((v) => v.trim()).filter(Boolean),
       });
       setValues('');
-      toast({ status: 'success', title: 'Rule added', duration: 1500 });
+      toast({ status: 'success', title: t('Rule added'), duration: 1500 });
     } catch (e) {
-      toast({ status: 'error', title: 'Could not add the rule', description: apiErrorMessage(e, 'Please try again'), duration: 6000, isClosable: true });
+      toast({ status: 'error', title: t('Could not add the rule'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     }
   };
   return (
     <Panel
-      title="Row-level security"
+      title={t('Row-level security')}
       subtitle={
         <>
-          Members of a group only see the rows a rule allows, in questions, dashboards, subscriptions, Browse and exports. For them, SQL is
-          off on that database and Search skips the table. Several rules of one group must all match; with several groups, rows of any of
-          them are shown. <b>{'{username}'}</b> or <b>{'{email}'}</b> as a value means the person looking. Admins always see everything.
+          {rich(
+            t('Members of a group only see the rows a rule allows, in questions, dashboards, subscriptions, Browse and exports. For them, SQL is off on that database and Search skips the table. Several rules of one group must all match; with several groups, rows of any of them are shown. {username} or {email} as a value means the person looking. Admins always see everything.'),
+            { username: <b>{'{username}'}</b>, email: <b>{'{email}'}</b> },
+          )}
         </>
       }
     >
       <VStack align="stretch" spacing={2} mb={4}>
         {rules.data?.length === 0 && (
           <Text fontSize="sm" color="mutedText">
-            No rules: everyone sees every row of the databases they may use.
+            {t('No rules: everyone sees every row of the databases they may use.')}
           </Text>
         )}
         {rules.data?.map((r) => (
           <Flex key={r.id} align="center" gap={3} px={3} py={2} borderRadius="xl" bg="chipBg" data-testid="rule-row">
             <ShieldIcon boxSize={4} color="orange.400" />
             <Text fontSize="sm" flex={1}>
-              <b>{r.group}</b> sees only <code>{r.table}</code> rows where <code>{r.column}</code> is {r.values.map((v) => `“${v}”`).join(' or ')}{' '}
+              {rich(t('{group} sees only {table} rows where {column} is {values}'), {
+                group: <b>{r.group}</b>,
+                table: <code>{r.table}</code>,
+                column: <code>{r.column}</code>,
+                values: r.values.map((v) => `“${v}”`).join(` ${t('or')} `),
+              })}{' '}
               <Text as="span" color="mutedText" fontSize="xs">
                 ({ws.connections.find((c) => c.key === r.connection)?.label ?? r.connection})
               </Text>
             </Text>
             <IconButton
-              aria-label="Delete rule"
+              aria-label={t('Delete rule')}
               size="sm"
               variant="ghost"
               colorScheme="red"
               icon={<TrashIcon boxSize={3.5} />}
-              onClick={() => people.deleteRule(r.id).catch((e: unknown) => toast({ status: 'error', title: 'Could not delete', description: apiErrorMessage(e, 'Please try again') }))}
+              onClick={() => people.deleteRule(r.id).catch((e: unknown) => toast({ status: 'error', title: t('Could not delete'), description: apiErrorMessage(e, t('Please try again')) }))}
             />
           </Flex>
         ))}
       </VStack>
       <Box border="1px dashed" borderColor="lineColor" borderRadius="xl" p={3}>
         <Text fontSize="sm" fontWeight={600} mb={2}>
-          Add a rule
+          {t('Add a rule')}
         </Text>
         <Wrap spacing={2} align="flex-end">
           <WrapItem>
-            <Select size="sm" w="160px" placeholder="Group…" value={groupId} onChange={(e) => setGroupId(e.target.value)} data-testid="rule-group">
+            <Select size="sm" w="160px" placeholder={t('Group…')} value={groupId} onChange={(e) => setGroupId(e.target.value)} data-testid="rule-group">
               {groups.data?.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
@@ -439,7 +454,7 @@ function RowSecurity() {
             </Select>
           </WrapItem>
           <WrapItem>
-            <Select size="sm" w="160px" placeholder="Database…" value={connection} onChange={(e) => { setConnection(e.target.value); setTable(''); setColumn(''); }} data-testid="rule-connection">
+            <Select size="sm" w="160px" placeholder={t('Database…')} value={connection} onChange={(e) => { setConnection(e.target.value); setTable(''); setColumn(''); }} data-testid="rule-connection">
               {ws.connections.map((c) => (
                 <option key={c.key} value={c.key}>
                   {c.label}
@@ -448,16 +463,16 @@ function RowSecurity() {
             </Select>
           </WrapItem>
           <WrapItem>
-            <Select size="sm" w="180px" placeholder="Table…" value={table} onChange={(e) => { setTable(e.target.value); setColumn(''); }} isDisabled={!schema.data} data-testid="rule-table">
-              {schema.data?.tables.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name}
+            <Select size="sm" w="180px" placeholder={t('Table…')} value={table} onChange={(e) => { setTable(e.target.value); setColumn(''); }} isDisabled={!schema.data} data-testid="rule-table">
+              {schema.data?.tables.map((tb) => (
+                <option key={tb.name} value={tb.name}>
+                  {tb.name}
                 </option>
               ))}
             </Select>
           </WrapItem>
           <WrapItem>
-            <Select size="sm" w="160px" placeholder="Column…" value={column} onChange={(e) => setColumn(e.target.value)} isDisabled={!table} data-testid="rule-column">
+            <Select size="sm" w="160px" placeholder={t('Column…')} value={column} onChange={(e) => setColumn(e.target.value)} isDisabled={!table} data-testid="rule-column">
               {columns.map((c) => (
                 <option key={c.name} value={c.name}>
                   {c.name}
@@ -466,17 +481,17 @@ function RowSecurity() {
             </Select>
           </WrapItem>
           <WrapItem>
-            <Input size="sm" w="220px" placeholder="is one of: EU, CH  or  {username}" value={values} onChange={(e) => setValues(e.target.value)} data-testid="rule-values" />
+            <Input size="sm" w="220px" placeholder={t('is one of: EU, CH  or  {username}')} value={values} onChange={(e) => setValues(e.target.value)} data-testid="rule-values" />
           </WrapItem>
           <WrapItem>
             <Button size="sm" variant="brand" onClick={() => void add()} isDisabled={!groupId || !connection || !table || !column || !values.trim()} data-testid="add-rule">
-              Add
+              {t('Add')}
             </Button>
           </WrapItem>
         </Wrap>
         {groups.data?.length === 0 && (
           <Text fontSize="xs" color="mutedText" mt={2}>
-            Rules belong to a group: add a group first.
+            {t('Rules belong to a group: add a group first.')}
           </Text>
         )}
       </Box>

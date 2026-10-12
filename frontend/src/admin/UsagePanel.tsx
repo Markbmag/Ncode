@@ -25,8 +25,8 @@ export function UsagePanel() {
         ? {
             columns: [
               { name: 'day', type: 'date', role: 'dimension' },
-              { name: 'queries', type: 'number', role: 'measure' },
-              { name: 'errors', type: 'number', role: 'measure' },
+              { name: t('queries'), type: 'number', role: 'measure' },
+              { name: t('errors'), type: 'number', role: 'measure' },
             ],
             rows: u.per_day.map((d) => [d.day, d.queries, d.errors]),
             stats: { duration_ms: 0, row_count: u.per_day.length, truncated: false, cached: false },
@@ -35,7 +35,7 @@ export function UsagePanel() {
         : null,
     [u],
   );
-  const chart: VizSpec = { version: 1, type: 'bar', x: 'day', series: [{ y: 'queries' }, { y: 'errors' }] };
+  const chart: VizSpec = { version: 1, type: 'bar', x: 'day', series: [{ y: t('queries') }, { y: t('errors') }] };
   return (
     <VStack align="stretch" spacing={6}>
       <HStack>
@@ -93,7 +93,7 @@ export function UsagePanel() {
               />
             </Panel>
             <Panel title={t('People')}>
-              <Small head={[t('Name'), t('Queries'), t('Avg'), t('Last')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
+              <Small head={[t('Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
             </Panel>
             <Panel title={t('Where queries come from')}>
               <Small head={[t('Source'), t('Queries')]} rows={u.sources.map((s) => [s.source, s.queries])} />
