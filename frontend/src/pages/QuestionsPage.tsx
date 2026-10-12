@@ -34,7 +34,7 @@ import { ParametersBar } from '../library/ParametersBar';
 import { bindSpec, shapeOf, specParams, syncBuilderParams, valuesFromSearch, valuesToSearch } from '../library/params';
 import type { ParamShape, ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
 const draftKey = (connection: string) => `ncode_question_${connection}`;
@@ -308,7 +308,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
                   aria-label={t('Row limit')}
                 />
                 <Text fontSize="xs" color="faintText">
-                  {t('at most {n}', { n: (ws.limits.query_max_rows ?? 10000).toLocaleString() })}
+                  {t('at most {n}', { n: (ws.limits.query_max_rows ?? 10000).toLocaleString(locale()) })}
                 </Text>
               </HStack>
             </Step>

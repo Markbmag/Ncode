@@ -77,3 +77,10 @@ Backups (make, download, delete) and the server's health; see [install.md](insta
 Every user picks **English** or **Русский** with the EN / RU button next to their name (or on the
 sign-in page); it is remembered in that browser. Messages that come from the server (errors from
 a database, validation messages) stay in English.
+
+**Adding or correcting a translation.** The English text is the key: `t('Save')` in the frontend
+looks up `'Save'` in `frontend/src/i18n/ru/<area>.ts`. Plurals are `tn(n, '{n} row', '{n} rows')`
+with three Russian forms (`'{n} строка|{n} строки|{n} строк'`), and a word with two meanings
+gets a context, `tc('noun', 'Archive')` → `'noun::Archive'`. `npm test` fails when a text shown in
+the app has no Russian, when two areas translate the same text differently, or when the
+placeholders don't match.

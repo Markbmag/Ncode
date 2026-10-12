@@ -19,7 +19,7 @@ import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 import { DatasetRow } from './DatasetsPage';
 import { datasets } from '../federation/api';
 import { UploadDialog } from '../federation/UploadDialog';
-import { t, tc } from '../i18n/index.ts';
+import { locale, t, tc } from '../i18n/index.ts';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
@@ -29,7 +29,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString();
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 /** /library, /library/c/:id and /library/archive. */

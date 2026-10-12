@@ -16,7 +16,7 @@ import { Step } from '../components/query/Step';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import { CodeEditor } from '../components/sql/CodeEditor';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 import { ChartIcon, CodeIcon, MergeIcon, PencilIcon, PlusIcon, RefreshIcon, TableIcon, UploadIcon, XIcon } from '../icons';
 import { libraryKeys, useQuestion } from '../library/api';
 import type { SavedQuestion } from '../library/api';
@@ -396,7 +396,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
                   aria-label={t('Row limit')}
                 />
                 <Text fontSize="xs" color="faintText">
-                  {t('rows shown · each source reads up to {limit}', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString() })}
+                  {t('rows shown · each source reads up to {limit}', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString(locale()) })}
                 </Text>
               </HStack>
             </Step>

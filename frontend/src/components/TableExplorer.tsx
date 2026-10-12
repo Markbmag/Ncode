@@ -13,7 +13,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { TableProfile } from '../analysis/TableProfile';
 import { Highlight } from './Highlight';
 import { RowDrawer } from './RowDrawer';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 
 interface FilterState {
   q: string;
@@ -190,7 +190,7 @@ export function TableExplorer({
       saveBlob(`${safeFilename('ncode', connectionLabel, table, applied.q)}.csv`, res.data);
       toast({
         title: t('Export ready'),
-        description: t('Up to {n} rows are included.', { n: limits.max_export_rows.toLocaleString() }),
+        description: t('Up to {n} rows are included.', { n: limits.max_export_rows.toLocaleString(locale()) }),
         status: 'success',
         duration: 3500,
       });
@@ -347,7 +347,7 @@ export function TableExplorer({
                   </MenuButton>
                   <MenuList minW="270px">
                     <Text px={3} pb={1} fontSize="xs" color="faintText" fontWeight={600}>
-                      {filtering ? t('ALL MATCHES') : t('WHOLE TABLE')} · {t('UP TO {n} ROWS', { n: limits.max_export_rows.toLocaleString() })}
+                      {filtering ? t('ALL MATCHES') : t('WHOLE TABLE')} · {t('UP TO {n} ROWS', { n: limits.max_export_rows.toLocaleString(locale()) })}
                     </Text>
                     <MenuItem onClick={() => void exportCsv(';')}>{t('For Excel (semicolon)')}</MenuItem>
                     <MenuItem onClick={() => void exportCsv(',')}>{t('Standard (comma)')}</MenuItem>

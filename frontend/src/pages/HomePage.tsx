@@ -10,8 +10,12 @@ const BLURBS: Record<string, string> = {
   '/browse': t('Page through any table, sort, filter and export it to CSV.'),
   '/questions': t('Build questions without SQL: join, filter, group and chart.'),
   '/sql': t('Write read-only SQL with autocomplete and safe limits.'),
+  '/library': t('Saved questions, dashboards and models in shared collections.'),
+  '/combine': t('Join results from several databases and uploaded files.'),
+  '/datasets': t('Upload CSV, Excel or Parquet files and query them like tables.'),
   '/dashboards': t('Put questions together on a dashboard with shared filters.'),
-  '/admin': t('Connections, the data model and (later) users and permissions.'),
+  '/subscriptions': t('Reports and alerts sent by email, Slack, Teams or Telegram on a schedule.'),
+  '/admin': t('Databases, the data model, people and groups, delivery, audit log and backups.'),
 };
 
 export default function HomePage() {

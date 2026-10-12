@@ -216,16 +216,19 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
         </Box>
       )}
 
-      <Flex align="center" gap={3} p={4} mt={2} borderTop="1px solid" borderColor="lineColor">
-        <Avatar size="sm" name={user.username} bg="brand.500" color="white" />
-        <Box flex={1} minW={0}>
-          <Text fontSize="sm" fontWeight={600} noOfLines={1}>
-            {user.username}
-          </Text>
-          <Text fontSize="xs" color="mutedText">
-            {user.role === 'admin' ? t('Administrator') : t('User')}
-          </Text>
-        </Box>
+      <Flex align="center" columnGap={1} rowGap={2} wrap="wrap" p={4} mt={2} borderTop="1px solid" borderColor="lineColor">
+        <Flex align="center" gap={3} flex="1 0 100%" minW={0}>
+          <Avatar size="sm" name={user.username} bg="brand.500" color="white" />
+          <Box flex={1} minW={0}>
+            <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+              {user.username}
+            </Text>
+            <Text fontSize="xs" color="mutedText" noOfLines={1}>
+              {user.role === 'admin' ? t('Administrator') : t('User')}
+            </Text>
+          </Box>
+        </Flex>
+        <Box flex={1} />
         <Tooltip label={email ? t('Your account ({email})', { email }) : t('Your account: add your email address for subscriptions')} hasArrow>
           <IconButton aria-label={t('Your account')} size="sm" variant="ghost" color={email ? undefined : 'orange.400'} icon={<MailIcon boxSize={4} />} onClick={() => setEditingEmail(true)} data-testid="account-email-button" />
         </Tooltip>

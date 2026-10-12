@@ -10,7 +10,7 @@ import type { VizSpec } from '../viz/types';
 import { useQueryLog, useUsage } from './api';
 import type { LoggedQuery } from './api';
 import { Panel } from './Panel';
-import { t, tn, tc } from '../i18n/index.ts';
+import { locale, t, tc, tn } from '../i18n/index.ts';
 
 const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? t('{s} s', { s: v.toFixed(2) }) : t('{s} s', { s: Math.round(v) }));
 
@@ -52,11 +52,11 @@ export function UsagePanel() {
       {u && (
         <>
           <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={3} data-testid="usage-totals">
-            <Tile label={t('Queries')} value={u.totals.queries.toLocaleString()} />
-            <Tile label={t('People')} value={u.totals.people.toLocaleString()} />
-            <Tile label={t('Sign-ins')} value={u.totals.logins.toLocaleString()} />
-            <Tile label={t('Failed')} value={(u.totals.errors ?? 0).toLocaleString()} />
-            <Tile label={t('Slower than {s} s', { s: u.slow_query_sec })} value={(u.totals.slow ?? 0).toLocaleString()} />
+            <Tile label={t('Queries')} value={u.totals.queries.toLocaleString(locale())} />
+            <Tile label={t('People')} value={u.totals.people.toLocaleString(locale())} />
+            <Tile label={t('Sign-ins')} value={u.totals.logins.toLocaleString(locale())} />
+            <Tile label={t('Failed')} value={(u.totals.errors ?? 0).toLocaleString(locale())} />
+            <Tile label={t('Slower than {s} s', { s: u.slow_query_sec })} value={(u.totals.slow ?? 0).toLocaleString(locale())} />
             <Tile label={t('Average time')} value={sec(u.totals.avg_sec)} />
           </SimpleGrid>
           {perDay && perDay.rows.length > 0 && (
@@ -93,7 +93,7 @@ export function UsagePanel() {
               />
             </Panel>
             <Panel title={t('People')}>
-              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString()])} />
+              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString(locale())])} />
             </Panel>
             <Panel title={t('Where queries come from')}>
               <Small head={[t('Source'), t('Queries')]} rows={u.sources.map((s) => [s.source, s.queries])} />
@@ -194,7 +194,7 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
           {rows.map((r) => (
             <Tr key={r.id} verticalAlign="top">
               <Td fontSize="xs" whiteSpace="nowrap">
-                {new Date(r.ts * 1000).toLocaleString()}
+                {new Date(r.ts * 1000).toLocaleString(locale())}
               </Td>
               <Td fontSize="xs">
                 {r.username}

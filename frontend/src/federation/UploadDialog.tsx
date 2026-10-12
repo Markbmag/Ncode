@@ -4,7 +4,7 @@ import {
 } from '@chakra-ui/react';
 import { CollectionPicker, DialogShell } from '../library/dialogs';
 import { useCollections } from '../library/api';
-import { t, tc } from '../i18n/index.ts';
+import { locale, t, tc } from '../i18n/index.ts';
 import { UploadIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { datasets, formatBytes } from './api';
@@ -92,7 +92,7 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
           {file ? `${file.name} · ${formatBytes(file.size)}` : t('Drop a file here or click to choose')}
         </Text>
         <Text fontSize="xs" color="faintText">
-          {t('CSV, TSV, Excel (.xlsx) or Parquet · up to {mb} MB and {rows} rows', { mb: maxMb, rows: (ws.limits.dataset_max_rows ?? 1_000_000).toLocaleString() })}
+          {t('CSV, TSV, Excel (.xlsx) or Parquet · up to {mb} MB and {rows} rows', { mb: maxMb, rows: (ws.limits.dataset_max_rows ?? 1_000_000).toLocaleString(locale()) })}
         </Text>
         <input
           ref={input}

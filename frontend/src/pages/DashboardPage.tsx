@@ -27,7 +27,7 @@ import {
 import type { FilterValues } from '../dashboards/logic';
 import { REFRESH_CHOICES } from '../dashboards/types';
 import type { Dashboard, DashCard, Definition } from '../dashboards/types';
-import { t } from '../i18n/index.ts';
+import { locale, t } from '../i18n/index.ts';
 
 const ROW_HEIGHT = 40;
 const MARGIN = 12;
@@ -258,7 +258,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
           </HStack>
         ) : (
           <HStack spacing={2} wrap="wrap" className="no-print">
-            <Tooltip label={t('Last refreshed {time}', { time: new Date(lastRefresh).toLocaleTimeString() })} hasArrow>
+            <Tooltip label={t('Last refreshed {time}', { time: new Date(lastRefresh).toLocaleTimeString(locale()) })} hasArrow>
               <IconButton aria-label={t('Refresh all cards')} size="sm" variant="subtle" icon={<RefreshIcon boxSize={4} />} onClick={refreshAll} data-testid="refresh-dashboard" />
             </Tooltip>
             <Select size="sm" w="170px" value={refreshEvery} onChange={(e) => setRefreshEvery(Number(e.target.value))} aria-label={t('Auto-refresh')} data-testid="auto-refresh">

@@ -6,7 +6,7 @@ import {
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 import { ArchiveIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, SearchIcon, UploadIcon } from '../icons';
 import { DialogShell, MoveDialog } from '../library/dialogs';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -19,7 +19,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.max(1, Math.floor(s / 60)) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString();
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 /** /datasets: uploaded files (CSV, Excel, Parquet) - the sources multi-source questions can use besides databases. */

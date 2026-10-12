@@ -9,7 +9,7 @@ import { CopyIcon, GlobeIcon, KeyIcon, LayoutIcon, ChartIcon, TrashIcon } from '
 import { absolute, sharing, useAllLinks } from '../sharing/api';
 import { admin, useAdminSettings } from './api';
 import { Panel } from './Panel';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 
 /** Admin → Sharing: switch public links and embedding on or off, the embedding key, everything shared. */
 export function SharingSettings() {
@@ -118,8 +118,8 @@ export function SharingSettings() {
                 </HStack>
                 <Text fontSize="xs" color="mutedText">
                   {t('by {name}', { name: l.created_by })} · {tn(l.views, '{n} view', '{n} views')}
-                  {l.expires_at ? ` · ${t('expires {date}', { date: new Date(l.expires_at * 1000).toLocaleDateString() })}` : ''}
-                  {l.last_used_at ? ` · ${t('last used {date}', { date: new Date(l.last_used_at * 1000).toLocaleString() })}` : ''}
+                  {l.expires_at ? ` · ${t('expires {date}', { date: new Date(l.expires_at * 1000).toLocaleDateString(locale()) })}` : ''}
+                  {l.last_used_at ? ` · ${t('last used {date}', { date: new Date(l.last_used_at * 1000).toLocaleString(locale()) })}` : ''}
                 </Text>
               </Box>
               {l.kind === 'public' && l.path && (

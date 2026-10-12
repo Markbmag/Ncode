@@ -21,7 +21,7 @@ import { Visualization } from '../viz/Visualization';
 import { VizSettings } from '../viz/VizSettings';
 import { ResultsTable } from './ResultsTable';
 import { ResultProfileDrawer } from '../../analysis/ResultProfileDrawer';
-import { t, tn } from '../../i18n/index.ts';
+import { locale, t, tn } from '../../i18n/index.ts';
 
 interface ResultViewProps {
   state: RunState;
@@ -140,11 +140,11 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
           <HStack spacing={2} fontSize="sm" color="mutedText" data-testid="result-stats">
             <Text>
               <Text as="span" fontWeight={700} color="bodyText">
-                {result.stats.row_count.toLocaleString()}
+                {result.stats.row_count.toLocaleString(locale())}
               </Text>{' '}
               {tn(result.stats.row_count, 'row', 'rows')}
             </Text>
-            <Text>· {result.stats.duration_ms.toLocaleString()} ms</Text>
+            <Text>· {result.stats.duration_ms.toLocaleString(locale())} ms</Text>
             {result.stats.cached && (
               <Tooltip label={t('Same question within the last minute: the saved result was reused')} hasArrow>
                 <Badge bg="chipBg" color="mutedText">

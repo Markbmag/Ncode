@@ -7,7 +7,7 @@
  * over one table, "result": the builder's own helpers and editors work on it.
  */
 import type { ColumnType, JoinStats } from '../api.ts';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 import type { ParameterDef } from '../library/params.ts';
 import { syncBuilderParams, syncSqlParams } from '../library/params.ts';
 import { findParams } from '../query/dialect.ts';
@@ -212,7 +212,7 @@ export function matchSummary(j: JoinStats, left: string, right: string): MatchSu
   const leftPct = pct(j.left_unmatched_keys, j.left_keys);
   const rightPct = pct(j.right_unmatched_keys, j.right_keys);
   const noMatch = (p: number, a: string, b: string, part: number, whole: number) =>
-    t('{pct} % of {a} keys have no match in {b} ({part} of {whole})', { pct: p, a, b, part: part.toLocaleString(), whole: whole.toLocaleString() });
+    t('{pct} % of {a} keys have no match in {b} ({part} of {whole})', { pct: p, a, b, part: part.toLocaleString(locale()), whole: whole.toLocaleString(locale()) });
   const lines = [
     noMatch(leftPct, left, right, j.left_unmatched_keys, j.left_keys),
     noMatch(rightPct, right, left, j.right_unmatched_keys, j.right_keys),

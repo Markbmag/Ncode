@@ -30,7 +30,7 @@ import type { ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import type { Transform } from '../query/types';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 
 interface Incoming {
   connection?: string;
@@ -229,7 +229,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
                     {h.sql}
                   </Text>
                   <Text fontSize="2xs" color="faintText">
-                    {new Date(h.at).toLocaleString()}
+                    {new Date(h.at).toLocaleString(locale())}
                   </Text>
                 </VStack>
               </MenuItem>

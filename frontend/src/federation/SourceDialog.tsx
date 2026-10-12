@@ -4,7 +4,7 @@ import {
   TabPanel, TabPanels, Tabs, Text, useDisclosure,
 } from '@chakra-ui/react';
 import { CodeEditor } from '../components/sql/CodeEditor';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 import { ChartIcon, CodeIcon, SearchIcon, TableIcon, UploadIcon } from '../icons';
 import { useQuestions } from '../library/api';
 import { DialogShell } from '../library/dialogs';
@@ -104,7 +104,7 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
               <TableSelect connection={connection} value={table} onChange={setTable} />
             </Flex>
             <Text fontSize="xs" color="faintText" mt={2}>
-              {t('Every column of the table, up to the row limit for sources ({limit} rows). To read less, save a question with filters and use it instead.', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString() })}
+              {t('Every column of the table, up to the row limit for sources ({limit} rows). To read less, save a question with filters and use it instead.', { limit: (ws.limits.federation_source_rows ?? 100_000).toLocaleString(locale()) })}
             </Text>
           </TabPanel>
           <TabPanel px={0}>

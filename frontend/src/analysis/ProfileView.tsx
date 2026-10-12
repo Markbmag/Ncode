@@ -1,5 +1,5 @@
 import { Badge, Box, Flex, HStack, SimpleGrid, Table, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack } from '@chakra-ui/react';
-import { t, tn } from '../i18n/index.ts';
+import { locale, t, tn } from '../i18n/index.ts';
 import { AlertIcon } from '../icons';
 import { humanize } from '../query/draft';
 import { formatNumber } from '../viz/format';
@@ -14,7 +14,7 @@ export function ProfileView({ profile, onParseAsDate }: { profile: Profile; onPa
     <VStack align="stretch" spacing={4} data-testid="profile">
       <Text fontSize="sm" color="mutedText">
         {profile.total_rows !== null && profile.total_rows !== undefined
-          ? tn(profile.rows_profiled, '{n} row profiled of {total}', '{n} rows profiled of {total}', { total: profile.total_rows.toLocaleString() })
+          ? tn(profile.rows_profiled, '{n} row profiled of {total}', '{n} rows profiled of {total}', { total: profile.total_rows.toLocaleString(locale()) })
           : tn(profile.rows_profiled, '{n} row profiled', '{n} rows profiled')}
         {profile.sampled && t(' (the first rows of the table: a sample, so the numbers are estimates)')}
         {profile.truncated && t(' (the result was cut off at the row limit)')}
@@ -65,8 +65,8 @@ function ColumnCard({ c, onParseAsDate }: { c: ColumnProfile; onParseAsDate?: (c
         <Box h="100%" w={c.rows ? `${(filled / c.rows) * 100}%` : 0} bg={c.nulls / Math.max(c.rows, 1) > 0.2 ? 'orange.400' : 'green.400'} />
       </Box>
       <SimpleGrid columns={3} spacing={2} mb={2}>
-        <Stat label={t('Empty')} value={`${c.nulls.toLocaleString()} (${pct(c.nulls, c.rows)})`} />
-        <Stat label={t('Distinct')} value={c.distinct.toLocaleString()} />
+        <Stat label={t('Empty')} value={`${c.nulls.toLocaleString(locale())} (${pct(c.nulls, c.rows)})`} />
+        <Stat label={t('Distinct')} value={c.distinct.toLocaleString(locale())} />
         {c.type === 'number' && <Stat label={t('Outliers')} value={c.outliers ?? 0} hint={t('Outside 1.5 × the interquartile range')} />}
         {(c.type === 'string' || c.type === 'unknown') && <Stat label={t('Length')} value={`${c.min_length ?? '—'}–${c.max_length ?? '—'}`} />}
         {(c.type === 'date' || c.type === 'datetime') && <Stat label={t('Per')} value={c.unit ?? '—'} />}

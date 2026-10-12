@@ -11,7 +11,7 @@ import { useCollections } from '../library/api';
 import { CollectionPicker, DialogShell, MoveDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
 import type { DashboardSummary } from '../dashboards/types';
-import { t } from '../i18n/index.ts';
+import { locale, t } from '../i18n/index.ts';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -19,7 +19,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString();
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 /** /dashboards: favourites, search and every dashboard the user can see. */

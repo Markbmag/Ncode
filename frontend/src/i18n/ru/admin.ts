@@ -259,4 +259,7 @@ export const ADMIN: Record<string, string> = {
   'relationship::From': 'Откуда',
   'relationship::To': 'Куда',
   'person::Name': 'Имя',
+  'ok': 'в порядке',
+  'running': 'работает',
+  'off': 'выключен',
 };
