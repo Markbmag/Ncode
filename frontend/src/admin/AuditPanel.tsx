@@ -8,6 +8,7 @@ import { saveBlob } from '../lib/csv';
 import { Panel } from './Panel';
 import { PAGE, useAudit } from './peopleApi';
 import type { AuditFilters } from './peopleApi';
+import { t, tn } from '../i18n/index.ts';
 
 const day = (value: string, end = false) => (value ? new Date(`${value}T00:00:00`).getTime() / 1000 + (end ? 86400 : 0) : undefined);
 
@@ -36,8 +37,8 @@ export function AuditPanel() {
   };
   return (
     <Panel
-      title="Audit log"
-      subtitle="Every sign-in, search, query, export and change, newest first. Search phrases and SQL are recorded."
+      title={t('Audit log')}
+      subtitle={t('Every sign-in, search, query, export and change, newest first. Search phrases and SQL are recorded.')}
       actions={
         <Button size="sm" leftIcon={<DownloadIcon boxSize={4} />} onClick={() => void download()} data-testid="audit-csv">
           CSV
@@ -45,25 +46,25 @@ export function AuditPanel() {
       }
     >
       <Flex gap={2} wrap="wrap" mb={3}>
-        <Select size="sm" w="160px" placeholder="Everyone" value={user} onChange={(e) => set(() => setUser(e.target.value))} data-testid="audit-user">
+        <Select size="sm" w="160px" placeholder={t('Everyone')} value={user} onChange={(e) => set(() => setUser(e.target.value))} data-testid="audit-user">
           {data?.users.map((u) => (
             <option key={u} value={u}>
               {u}
             </option>
           ))}
         </Select>
-        <Select size="sm" w="170px" placeholder="Every action" value={action} onChange={(e) => set(() => setAction(e.target.value))} data-testid="audit-action">
+        <Select size="sm" w="170px" placeholder={t('Every action')} value={action} onChange={(e) => set(() => setAction(e.target.value))} data-testid="audit-action">
           {data?.actions.map((a) => (
             <option key={a} value={a}>
               {a}
             </option>
           ))}
         </Select>
-        <Input size="sm" w="220px" placeholder="Text in phrase / SQL / details" value={text} onChange={(e) => set(() => setText(e.target.value))} data-testid="audit-text" />
+        <Input size="sm" w="220px" placeholder={t('Text in phrase / SQL / details')} value={text} onChange={(e) => set(() => setText(e.target.value))} data-testid="audit-text" />
         <HStack spacing={1}>
-          <Input size="sm" type="date" w="150px" value={from} onChange={(e) => set(() => setFrom(e.target.value))} aria-label="From" />
+          <Input size="sm" type="date" w="150px" value={from} onChange={(e) => set(() => setFrom(e.target.value))} aria-label={t('From')} />
           <Text fontSize="sm">–</Text>
-          <Input size="sm" type="date" w="150px" value={to} onChange={(e) => set(() => setTo(e.target.value))} aria-label="To" />
+          <Input size="sm" type="date" w="150px" value={to} onChange={(e) => set(() => setTo(e.target.value))} aria-label={t('To')} />
         </HStack>
       </Flex>
       {!data && <Skeleton h="200px" />}
@@ -73,12 +74,12 @@ export function AuditPanel() {
             <Table size="sm" data-testid="audit-table">
               <Thead>
                 <Tr>
-                  <Th textTransform="none">When</Th>
-                  <Th textTransform="none">Who</Th>
-                  <Th textTransform="none">Action</Th>
-                  <Th textTransform="none">What</Th>
+                  <Th textTransform="none">{t('When')}</Th>
+                  <Th textTransform="none">{t('Who')}</Th>
+                  <Th textTransform="none">{t('Action')}</Th>
+                  <Th textTransform="none">{t('What')}</Th>
                   <Th textTransform="none" isNumeric>
-                    Result
+                    {t('Result')}
                   </Th>
                 </Tr>
               </Thead>
@@ -109,7 +110,7 @@ export function AuditPanel() {
                     <Td isNumeric fontSize="xs" whiteSpace="nowrap">
                       {e.status ?? ''}
                       {e.found !== null && e.found !== undefined ? ` · ${e.found}` : ''}
-                      {e.duration_sec !== null && e.duration_sec !== undefined ? ` · ${e.duration_sec.toFixed(2)} s` : ''}
+                      {e.duration_sec !== null && e.duration_sec !== undefined ? ` · ${t('{s} s', { s: e.duration_sec.toFixed(2) })}` : ''}
                     </Td>
                   </Tr>
                 ))}
@@ -118,17 +119,17 @@ export function AuditPanel() {
           </Box>
           <HStack justify="space-between" mt={3} fontSize="sm">
             <Text color="mutedText">
-              {data.total.toLocaleString()} entr{data.total === 1 ? 'y' : 'ies'}
+              {tn(data.total, '{n} entry', '{n} entries')}
             </Text>
             <HStack>
               <Button size="xs" onClick={() => setPage((p) => Math.max(0, p - 1))} isDisabled={page === 0}>
-                Newer
+                {t('Newer')}
               </Button>
               <Text>
                 {page + 1} / {pages}
               </Text>
               <Button size="xs" onClick={() => setPage((p) => p + 1)} isDisabled={page + 1 >= pages} data-testid="audit-older">
-                Older
+                {t('Older')}
               </Button>
             </HStack>
           </HStack>

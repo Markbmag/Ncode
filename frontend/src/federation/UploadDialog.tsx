@@ -4,6 +4,7 @@ import {
 } from '@chakra-ui/react';
 import { CollectionPicker, DialogShell } from '../library/dialogs';
 import { useCollections } from '../library/api';
+import { t } from '../i18n/index.ts';
 import { UploadIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { datasets, formatBytes } from './api';
@@ -47,8 +48,8 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
     <DialogShell
       isOpen
       onClose={onClose}
-      title="Upload a file"
-      submitLabel="Upload"
+      title={t('Upload a file')}
+      submitLabel={t('Upload')}
       size="lg"
       canSubmit={!!file && !tooBig && collection !== null}
       onSubmit={async () => {
@@ -88,10 +89,10 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
       >
         <UploadIcon boxSize={6} color="brand.400" />
         <Text fontSize="sm" mt={2} fontWeight={600}>
-          {file ? `${file.name} · ${formatBytes(file.size)}` : 'Drop a file here or click to choose'}
+          {file ? `${file.name} · ${formatBytes(file.size)}` : t('Drop a file here or click to choose')}
         </Text>
         <Text fontSize="xs" color="faintText">
-          CSV, TSV, Excel (.xlsx) or Parquet · up to {maxMb} MB and {(ws.limits.dataset_max_rows ?? 1_000_000).toLocaleString()} rows
+          {t('CSV, TSV, Excel (.xlsx) or Parquet · up to {mb} MB and {rows} rows', { mb: maxMb, rows: (ws.limits.dataset_max_rows ?? 1_000_000).toLocaleString() })}
         </Text>
         <input
           ref={input}
@@ -104,37 +105,37 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
       </Box>
       {tooBig && (
         <Text fontSize="sm" color="red.400">
-          The file is larger than {maxMb} MB.
+          {t('The file is larger than {mb} MB.', { mb: maxMb })}
         </Text>
       )}
       <FormControl>
-        <FormLabel fontSize="sm">Name</FormLabel>
-        <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} placeholder={file ? file.name.replace(/\.[^.]+$/, '') : 'the file name'} maxLength={200} />
+        <FormLabel fontSize="sm">{t('Name')}</FormLabel>
+        <Input size="sm" value={name} onChange={(e) => setName(e.target.value)} placeholder={file ? file.name.replace(/\.[^.]+$/, '') : t('the file name')} maxLength={200} />
       </FormControl>
       <FormControl>
-        <FormLabel fontSize="sm">Collection</FormLabel>
+        <FormLabel fontSize="sm">{t('Collection')}</FormLabel>
         <CollectionPicker value={collection} onChange={setPicked} />
-        <FormHelperText fontSize="xs">People who can see the collection can use the file's rows.</FormHelperText>
+        <FormHelperText fontSize="xs">{t("People who can see the collection can use the file's rows.")}</FormHelperText>
       </FormControl>
       {(isText || isExcel) && (
         <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
           {isText && (
             <>
               <FormControl>
-                <FormLabel fontSize="xs">Separator</FormLabel>
+                <FormLabel fontSize="xs">{t('Separator')}</FormLabel>
                 <Select size="sm" value={delimiter} onChange={(e) => setDelimiter(e.target.value as typeof delimiter)}>
-                  <option value="auto">Detect</option>
-                  <option value="comma">Comma ,</option>
-                  <option value="semicolon">Semicolon ;</option>
-                  <option value="tab">Tab</option>
-                  <option value="pipe">Pipe |</option>
+                  <option value="auto">{t('Detect')}</option>
+                  <option value="comma">{t('Comma ,')}</option>
+                  <option value="semicolon">{t('Semicolon ;')}</option>
+                  <option value="tab">{t('Tab')}</option>
+                  <option value="pipe">{t('Pipe')} |</option>
                 </Select>
               </FormControl>
               <FormControl>
-                <FormLabel fontSize="xs">Encoding</FormLabel>
+                <FormLabel fontSize="xs">{t('Encoding')}</FormLabel>
                 <Select size="sm" value={encoding} onChange={(e) => setEncoding(e.target.value as typeof encoding)}>
                   <option value="utf-8">UTF-8</option>
-                  <option value="latin-1">Latin-1 (Windows)</option>
+                  <option value="latin-1">{t('Latin-1 (Windows)')}</option>
                   <option value="utf-16">UTF-16</option>
                 </Select>
               </FormControl>
@@ -142,13 +143,13 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
           )}
           {isExcel && (
             <FormControl>
-              <FormLabel fontSize="xs">Sheet</FormLabel>
-              <Input size="sm" value={sheet} onChange={(e) => setSheet(e.target.value)} placeholder="the first one" />
+              <FormLabel fontSize="xs">{t('Sheet')}</FormLabel>
+              <Input size="sm" value={sheet} onChange={(e) => setSheet(e.target.value)} placeholder={t('the first one')} />
             </FormControl>
           )}
           <FormControl display="flex" alignItems="flex-end">
             <Checkbox size="sm" isChecked={header} onChange={(e) => setHeader(e.target.checked)}>
-              First row has the column names
+              {t('First row has the column names')}
             </Checkbox>
           </FormControl>
         </SimpleGrid>
@@ -157,13 +158,13 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
         <HStack>
           <Progress value={progress * 100} size="sm" flex={1} borderRadius="full" isIndeterminate={progress >= 1} />
           <Text fontSize="xs" color="mutedText" w="120px">
-            {progress >= 1 ? 'Reading the file…' : `${Math.round(progress * 100)} %`}
+            {progress >= 1 ? t('Reading the file…') : `${Math.round(progress * 100)} %`}
           </Text>
         </HStack>
       )}
       {!file && (
         <Button size="sm" variant="subtle" leftIcon={<UploadIcon boxSize={4} />} onClick={() => input.current?.click()} alignSelf="flex-start">
-          Choose a file
+          {t('Choose a file')}
         </Button>
       )}
     </DialogShell>

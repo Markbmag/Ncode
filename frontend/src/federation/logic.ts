@@ -7,6 +7,7 @@
  * over one table, "result": the builder's own helpers and editors work on it.
  */
 import type { ColumnType, JoinStats } from '../api.ts';
+import { t, tn } from '../i18n/index.ts';
 import type { ParameterDef } from '../library/params.ts';
 import { syncBuilderParams, syncSqlParams } from '../library/params.ts';
 import { findParams } from '../query/dialect.ts';
@@ -123,17 +124,17 @@ export interface PreparedFederated {
 }
 
 export function sourceProblems(s: Source): string | null {
-  if (s.type === 'question' && !s.question_id) return 'Pick a saved question';
-  if (s.type === 'dataset' && !s.dataset_id) return 'Pick an uploaded file';
-  if (s.type === 'sql' && (!s.connection || !s.sql?.trim())) return 'Write the SQL';
-  if (s.type === 'builder' && !s.spec?.source?.table) return 'Pick a table';
+  if (s.type === 'question' && !s.question_id) return t('Pick a saved question');
+  if (s.type === 'dataset' && !s.dataset_id) return t('Pick an uploaded file');
+  if (s.type === 'sql' && (!s.connection || !s.sql?.trim())) return t('Write the SQL');
+  if (s.type === 'builder' && !s.spec?.source?.table) return t('Pick a table');
   return null;
 }
 
 /** The spec as it is sent: complete key pairs only, the post step cleaned like a builder question. */
 export function prepareFederated(draft: FederatedSpec, columns: ColumnHint[]): PreparedFederated {
   const problems: string[] = [];
-  if (draft.sources.length === 0) problems.push('Add a source');
+  if (draft.sources.length === 0) problems.push(t('Add a source'));
   for (const s of draft.sources) {
     const p = sourceProblems(s);
     if (p) problems.push(`${s.label || s.alias}: ${p}`);
@@ -141,13 +142,13 @@ export function prepareFederated(draft: FederatedSpec, columns: ColumnHint[]): P
   const spec: FederatedSpec = { version: 1, sources: draft.sources.map((s) => ({ ...s })), mode: draft.mode ?? 'join' };
   if (spec.mode === 'sql') {
     spec.sql = draft.sql ?? '';
-    if (!spec.sql.trim()) problems.push('Write the SQL that combines the sources');
+    if (!spec.sql.trim()) problems.push(t('Write the SQL that combines the sources'));
   } else {
     spec.joins = syncJoins(draft).map((j) => ({ ...j, on: j.on.filter((k) => k.left && k.right) }));
     for (const j of spec.joins) {
       if (j.on.length === 0) {
         const label = draft.sources.find((s) => s.alias === j.source)?.label || j.source;
-        problems.push(`Pick the key columns to join ${label}`);
+        problems.push(t('Pick the key columns to join {label}', { label }));
       }
     }
   }
@@ -205,23 +206,27 @@ export interface MatchSummary {
 }
 
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
 
 export function matchSummary(j: JoinStats, left: string, right: string): MatchSummary {
   const leftPct = pct(j.left_unmatched_keys, j.left_keys);
   const rightPct = pct(j.right_unmatched_keys, j.right_keys);
+  const noMatch = (p: number, a: string, b: string, part: number, whole: number) =>
+    t('{pct} % of {a} keys have no match in {b} ({part} of {whole})', { pct: p, a, b, part: part.toLocaleString(), whole: whole.toLocaleString() });
   const lines = [
-    `${leftPct} % of ${left} keys have no match in ${right} (${j.left_unmatched_keys.toLocaleString()} of ${j.left_keys.toLocaleString()})`,
-    `${rightPct} % of ${right} keys have no match in ${left} (${j.right_unmatched_keys.toLocaleString()} of ${j.right_keys.toLocaleString()})`,
+    noMatch(leftPct, left, right, j.left_unmatched_keys, j.left_keys),
+    noMatch(rightPct, right, left, j.right_unmatched_keys, j.right_keys),
   ];
   const warnings: string[] = [];
   if (j.right_repeated_keys > 0)
-    warnings.push(`${plural(j.right_repeated_keys, 'key repeats', 'keys repeat')} in ${right}: matching ${left} rows appear once per match (totals can grow)`);
+    warnings.push(tn(j.right_repeated_keys, '{n} key repeats in {right}: matching {left} rows appear once per match (totals can grow)', '{n} keys repeat in {right}: matching {left} rows appear once per match (totals can grow)', { left, right }));
   if (j.left_repeated_keys > 0 && j.right_repeated_keys > 0)
-    warnings.push(`Keys repeat on both sides: each repeated pair multiplies rows`);
-  if (j.left_null_keys > 0) warnings.push(`${plural(j.left_null_keys, `${left} row has`, `${left} rows have`)} an empty key and cannot match`);
-  if (j.right_null_keys > 0) warnings.push(`${plural(j.right_null_keys, `${right} row has`, `${right} rows have`)} an empty key and cannot match`);
+    warnings.push(t('Keys repeat on both sides: each repeated pair multiplies rows'));
+  const empty = (n: number, side: string) =>
+    tn(n, '{n} {side} row has an empty key and cannot match', '{n} {side} rows have an empty key and cannot match', { side });
+  if (j.left_null_keys > 0) warnings.push(empty(j.left_null_keys, left));
+  if (j.right_null_keys > 0) warnings.push(empty(j.right_null_keys, right));
   if (j.type === 'inner' && (j.left_unmatched_rows > 0 || j.right_unmatched_rows > 0))
-    warnings.push(`Only matching rows are kept: ${plural(j.left_unmatched_rows + j.right_unmatched_rows, 'row was', 'rows were')} left out`);
+    warnings.push(tn(j.left_unmatched_rows + j.right_unmatched_rows, 'Only matching rows are kept: {n} row was left out', 'Only matching rows are kept: {n} rows were left out'));
   return { leftPct, rightPct, lines, warnings };
 }

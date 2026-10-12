@@ -3,6 +3,7 @@ import { pivot } from '../../viz/data';
 import type { Table } from '../../viz/data';
 import { formatCell, formatNumber } from '../../viz/format';
 import type { VizSpec } from '../../viz/types';
+import { t } from '../../i18n/index.ts';
 
 const MAX_COLS = 60;
 const MAX_ROWS = 500;
@@ -13,7 +14,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
   if (!spec || spec.values.length === 0) {
     return (
       <Text p={4} fontSize="sm" color="mutedText">
-        Choose rows, columns and values in the chart settings.
+        {t('Choose rows, columns and values in the chart settings.')}
       </Text>
     );
   }
@@ -23,7 +24,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
   const rows = p.rowKeys.slice(0, MAX_ROWS);
   const multi = spec.values.length > 1;
   const typeOf = (name: string) => table.columns.find((c) => c.name === name)?.type ?? 'string';
-  const label = (names: string[], values: string[]) => values.map((v, i) => formatCell(v, typeOf(names[i]), names[i])).join(' · ') || 'All';
+  const label = (names: string[], values: string[]) => values.map((v, i) => formatCell(v, typeOf(names[i]), names[i])).join(' · ') || t('All');
   const fmtValue = (v: number | null, k: number) => (v === null ? '' : formatNumber(v, viz.format?.[spec.values[k].column] ?? {}));
 
   return (
@@ -40,7 +41,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
                 </Th>
               )),
             )}
-            {totals && spec.values.map((_, k) => <Th key={`t${k}`} isNumeric>Total{multi ? ` ${p.valueLabels[k]}` : ''}</Th>)}
+            {totals && spec.values.map((_, k) => <Th key={`t${k}`} isNumeric>{t('Total')}{multi ? ` ${p.valueLabels[k]}` : ''}</Th>)}
           </Tr>
         </Thead>
         <Tbody>
@@ -53,7 +54,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
           ))}
           {totals && (
             <Tr>
-              <Td fontWeight={700}>Total</Td>
+              <Td fontWeight={700}>{t('Total')}</Td>
               {cols.map((_, c) => spec.values.map((__, k) => <Td key={`${c}-${k}`} isNumeric fontWeight={700}>{fmtValue(p.colTotal(c, k), k)}</Td>))}
               {spec.values.map((_, k) => <Td key={`g${k}`} isNumeric fontWeight={700}>{fmtValue(p.grandTotal(k), k)}</Td>)}
             </Tr>
@@ -62,7 +63,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
       </CTable>
       {(p.colKeys.length > MAX_COLS || p.rowKeys.length > MAX_ROWS) && (
         <Text p={2} fontSize="xs" color="faintText">
-          Showing {rows.length} of {p.rowKeys.length} rows and {cols.length} of {p.colKeys.length} columns.
+          {t('Showing {rows} of {rowTotal} rows and {cols} of {colTotal} columns.', { rows: rows.length, rowTotal: p.rowKeys.length, cols: cols.length, colTotal: p.colKeys.length })}
         </Text>
       )}
     </Box>
