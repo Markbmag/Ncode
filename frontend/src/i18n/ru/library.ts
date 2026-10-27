@@ -239,4 +239,9 @@ export const LIBRARY: Record<string, string> = {
   'Reset': 'Сбросить',
   'This card could not be loaded': 'Не удалось загрузить карточку',
   'noun::Archive': 'Архив',
+  'Someone else saved this meanwhile': 'Пока вы редактировали, кто-то другой сохранил изменения',
+  'It changed after you opened it. Reload to see their version (your changes are dropped), or save yours anyway and replace theirs.':
+    'Это изменили после того, как вы открыли его. Загрузите их версию (ваши изменения будут отброшены) или всё равно сохраните свою и замените их версию.',
+  'Reload their version': 'Загрузить их версию',
+  'Save mine anyway': 'Всё равно сохранить мою',
 };

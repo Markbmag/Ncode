@@ -164,7 +164,8 @@ async function after<T>(promise: Promise<{ data: T }>): Promise<T> {
 
 export const library = {
   createCollection: (body: { name: string; description?: string | null; parent_id: number | null }) => after(http.post<CollectionInfo>('/api/collections', body)),
-  updateCollection: (id: number, body: Partial<{ name: string; description: string | null; parent_id: number | null; archived: boolean }>) =>
+  // base_updated_at: the version the change was made on - 409 (edit conflict, see conflict.ts) if it changed since
+  updateCollection: (id: number, body: Partial<{ name: string; description: string | null; parent_id: number | null; archived: boolean; base_updated_at: number }>) =>
     after(http.patch<CollectionInfo>(`/api/collections/${id}`, body)),
   deleteCollection: (id: number) => after(http.delete(`/api/collections/${id}`)),
   grants: async (id: number) => (await http.get<{ grants: Grant[] }>(`/api/collections/${id}/permissions`)).data.grants,
@@ -178,10 +179,17 @@ export const library = {
   },
   updateQuestion: async (
     id: number,
-    body: Partial<QuestionPayload & { name: string; description: string | null; collection_id: number; archived: boolean; model: boolean }>,
+    body: Partial<QuestionPayload & { name: string; description: string | null; collection_id: number; archived: boolean; model: boolean; base_updated_at: number }>,
   ) => {
     const q = await after(http.patch<SavedQuestion>(`/api/questions/${id}`, body));
     queryClient.setQueryData(libraryKeys.question(q.id), q);
+    return q;
+  },
+  /** The saved version now (after an edit conflict): the cache and the lists get it too. */
+  reloadQuestion: async (id: number) => {
+    const q = (await http.get<SavedQuestion>(`/api/questions/${id}`)).data;
+    queryClient.setQueryData(libraryKeys.question(id), q);
+    await refreshLibrary();
     return q;
   },
   deleteQuestion: (id: number) => after(http.delete(`/api/questions/${id}`)),

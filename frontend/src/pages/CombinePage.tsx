@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
   Alert, AlertIcon, Badge, Box, Button, ButtonGroup, Checkbox, Collapse, Flex, HStack, IconButton, Input, Spinner, Switch, Text, Tooltip,
   VStack, Wrap, WrapItem, useBreakpointValue,
@@ -82,7 +83,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
     setSearchParams((prev) => valuesToSearch(values, prev), { replace: true });
   };
   const [autoRun, setAutoRun] = useState(() => loadJson('ncode_combine_auto', true));
-  const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
+  const [smartDates, setSmartDates] = useState(() => loadJson(SMART_DATES_KEY, SMART_DATES_DEFAULT));
   const [editing, setEditing] = useState<{ index: number | null; source: Partial<Source> } | null>(null);
   const [view, setView] = useState<'result' | 'report'>('result');
   const [showFields, setShowFields] = useState(false);
@@ -102,7 +103,7 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
     if (!saved) saveJson(`${DRAFT_KEY}_viz`, viz);
   }, [viz, saved]);
   useEffect(() => saveJson('ncode_combine_auto', autoRun), [autoRun]);
-  useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
+  useEffect(() => saveJson(SMART_DATES_KEY, smartDates), [smartDates]);
 
   const labels = useMemo(() => Object.fromEntries(draft.sources.map((s) => [s.alias, s.label || s.alias])), [draft.sources]);
 
@@ -462,11 +463,12 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
         dirty={dirty}
         defaultName={draft.sources.map((s) => s.label || s.alias).join(' + ') || t('Combined')}
         payload={() => (runnable ? { kind: 'federated', spec: prepared.spec, viz, parameters: paramDefs } : null)}
-        onRevert={() => {
-          if (!saved) return;
-          setDraft(saved.spec as FederatedSpec);
-          setViz(saved.viz ?? DEFAULT_VIZ);
-          setDefs(saved.parameters);
+        onRevert={(to) => {
+          const q = to ?? saved;
+          if (!q) return;
+          setDraft(q.spec as FederatedSpec);
+          setViz(q.viz ?? DEFAULT_VIZ);
+          setDefs(q.parameters);
         }}
         onSaved={() => {
           if (saved) return;

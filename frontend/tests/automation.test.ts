@@ -21,7 +21,7 @@ test('schedules read like sentences', () => {
 test('switching frequency keeps sensible days', () => {
   assert.deepEqual(changeEvery(base, 'week').days, [0]);
   assert.deepEqual(changeEvery({ ...base, every: 'week', days: [3] }, 'week').days, [3]);
-  assert.deepEqual(changeEvery({ ...base, every: 'week', days: [3] }, 'day').days, [0, 1, 2, 3, 4]);
+  assert.deepEqual(changeEvery({ ...base, every: 'week', days: [3] }, 'day').days, [0, 1, 2, 3, 4, 5, 6]);
   assert.deepEqual(changeEvery({ ...base, every: 'week', days: [3] }, 'hour').days, [0, 1, 2, 3, 4, 5, 6]);
 });
 
@@ -44,4 +44,17 @@ test('alerts and times in words', () => {
   assert.equal(timeAgo(null), 'never');
   assert.equal(timeAgo(1000, 1000 + 7200), '2 h ago');
   assert.equal(timeAgo(1000 + 300, 1000), 'in 5 min');
+});
+
+test('new subscriptions (M10): daily is every day, browser time zone, current filters, email set up or not', () => {
+  const sub = newSubscription('dashboard', 1, 'mark', false, { filters: { region: ['EU'] } });
+  assert.equal(describeSchedule(sub.schedule, sub.schedule.timezone), 'Every day at 08:00');
+  assert.equal(sub.schedule.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  assert.deepEqual(sub.options.filters, { region: ['EU'] });
+  assert.deepEqual(sub.recipients.users, ['mark']);
+  // without email the creator is not added (they could not receive it), and only a destination will do
+  const noMail = newSubscription('dashboard', 1, 'mark', false, { emailReady: false });
+  assert.deepEqual(noMail.recipients.users, []);
+  assert.equal(problem({ ...noMail, recipients: { users: ['mark'], emails: [], destinations: [] } }, false), 'Email is not set up: choose a chat or webhook destination');
+  assert.equal(problem({ ...noMail, recipients: { users: [], emails: [], destinations: [3] } }, false), null);
 });

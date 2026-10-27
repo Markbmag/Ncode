@@ -14,9 +14,10 @@ import { useWorkspace } from '../workspace/useWorkspace';
 import { Panel } from './Panel';
 import { connectionsValue, people, useAdminUsers, useGroups, useRowRules } from './peopleApi';
 import type { AdminUser, Group } from './peopleApi';
-import { locale, t, tc, tn } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tc, tn } from '../i18n/index.ts';
 
-const when = (ts: number | null) => (ts ? new Date(ts * 1000).toLocaleString(locale()) : t('never'));
+const when = (ts: number | null) => (ts ? localDateText(ts * 1000, true) : t('never'));
 
 /** Fills {name} placeholders of a translated sentence with elements. */
 const rich = (text: string, parts: Record<string, ReactNode>) =>

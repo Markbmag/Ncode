@@ -21,6 +21,8 @@ from typing import Any, Callable
 
 from sqlalchemy.engine import Connection, Engine
 
+from ..db import SQLITE_MAX_VALUE_BYTES
+from ..dberrors import DbError, explain
 from ..results import ResultEnvelope, build_envelope
 from .dialects import MYSQL_FAMILY
 from .sqlguard import bind_params, find_params
@@ -43,6 +45,7 @@ class QueryTask:
     status: str = "running"
     result: ResultEnvelope | None = None
     error: str | None = None
+    error_details: str | None = None          # the database's own text behind `error` (for analysts)
     created_at: float = field(default_factory=time.time)
     finished_at: float | None = None
     timed_out: bool = False
@@ -73,8 +76,10 @@ class QueryTask:
             # A cancel can block (MySQL opens a connection for KILL QUERY): don't hold up the caller.
             threading.Thread(target=_safe, args=(hook,), daemon=True, name=f"ncode-cancel-{self.id[:8]}").start()
 
-    def finish(self, status: str, result: ResultEnvelope | None = None, error: str | None = None) -> None:
-        self.status, self.result, self.error = status, result, error
+    def finish(
+        self, status: str, result: ResultEnvelope | None = None, error: str | None = None, details: str | None = None
+    ) -> None:
+        self.status, self.result, self.error, self.error_details = status, result, error, details
         self.finished_at = time.time()
         self.done.set()
 
@@ -85,6 +90,7 @@ class QueryTask:
             "status": self.status,
             "result": self.result.model_dump() if self.result is not None else None,
             "error": self.error,
+            "error_details": self.error_details,
             "elapsed_ms": round((end - self.created_at) * 1000),
         }
 
@@ -216,7 +222,8 @@ class QueryRunner:
                         task.finish("cancelled")
                 else:
                     logger.info("query %s failed: %s", task.id, exc)
-                    task.finish("error", error=_short_error(exc))
+                    info = _short_error(exc)
+                    task.finish("error", error=info.message, details=info.details)
             finally:
                 timer.cancel()
                 task.set_cancel_hook(None)
@@ -230,9 +237,15 @@ class QueryRunner:
         return task
 
 
-def _short_error(exc: Exception) -> str:
+def _short_error(exc: Exception) -> DbError:
     text = str(getattr(exc, "orig", None) or exc).strip()
-    return (text.splitlines()[0] if text else type(exc).__name__)[:500]
+    if "string or blob too big" in text.lower():  # SQLite's value size cap (app/db.py)
+        limit_mb = SQLITE_MAX_VALUE_BYTES // (1024 * 1024)
+        return DbError(
+            f"A value in this query would be larger than {limit_mb} MB, the limit for SQLite (string or blob too big)",
+            text, "too_big",
+        )
+    return explain(exc)
 
 
 # ---------------------------------------------------------------------- execution
@@ -327,8 +340,8 @@ def fetch_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any],
     text = sql.rstrip()
     while text.endswith(";"):
         text = text[:-1].rstrip()
-    if find_params(text):
-        driver_sql, driver_params = bind_params(text, params, engine.dialect.paramstyle)
+    if find_params(text, dialect):
+        driver_sql, driver_params = bind_params(text, params, engine.dialect.paramstyle, dialect)
     else:
         driver_sql, driver_params = text, None
         if dialect == "postgresql":

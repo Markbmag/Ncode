@@ -4,7 +4,8 @@ import { DownloadIcon, PlusIcon, TrashIcon } from '../icons';
 import { saveBlob } from '../lib/csv';
 import { Panel } from './Panel';
 import { people, useBackups, useReady } from './peopleApi';
-import { locale, t } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t } from '../i18n/index.ts';
 
 const size = (bytes: number) =>
   bytes > 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes > 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -57,7 +58,7 @@ export function SystemPanel() {
                   {b.name}
                 </Text>
                 <Text fontSize="xs" color="mutedText">
-                  {new Date(b.created_at * 1000).toLocaleString(locale())} · {size(b.size)}
+                  {localDateText(b.created_at * 1000, true)} · {size(b.size)}
                 </Text>
               </Box>
               <Badge>{b.auto ? t('automatic') : t('by hand')}</Badge>
@@ -83,7 +84,7 @@ export function SystemPanel() {
             <Tile label={t('Scheduler')} value={checks.scheduler === 'running' ? t('running') : checks.scheduler === 'off' ? t('off') : String(checks.scheduler ?? '?')} good={checks.scheduler === 'running'} />
             <Tile label={t('Disk free')} value={checks.disk_free_mb !== undefined ? size(Number(checks.disk_free_mb) * 1024 * 1024) : '?'} good={Number(checks.disk_free_mb) > 1024} />
             <Tile label={t('Up for')} value={t('{h} h {m} min', { h: Math.floor(ready.data.uptime_sec / 3600), m: Math.floor((ready.data.uptime_sec % 3600) / 60) })} good />
-            <Tile label={t('Last backup')} value={checks.last_backup_at ? new Date(Number(checks.last_backup_at) * 1000).toLocaleString(locale()) : t('none')} good={!!checks.last_backup_at} />
+            <Tile label={t('Last backup')} value={checks.last_backup_at ? localDateText(Number(checks.last_backup_at) * 1000, true) : t('none')} good={!!checks.last_backup_at} />
           </SimpleGrid>
         )}
         <HStack mt={3}>

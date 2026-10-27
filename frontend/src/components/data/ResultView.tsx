@@ -12,7 +12,7 @@ import type { CsvDelimiter } from '../../lib/csv';
 import type { RunState } from '../../query/useQueryRun';
 import { seriesData } from '../../viz/data';
 import { chartTheme } from '../../viz/palette';
-import { effectiveViz } from '../../viz/state';
+import { effectiveViz, shownMode, startingChart } from '../../viz/state';
 import type { VizState } from '../../viz/state';
 import { CHART_TYPES } from '../../viz/types';
 import type { ChartType, VizSpec } from '../../viz/types';
@@ -48,7 +48,14 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
   const { colorMode } = useColorMode();
 
   const effective = useMemo(() => (viz && result ? effectiveViz(viz, result) : null), [viz, result]);
-  const showChart = !!viz && viz.mode === 'chart' && !!effective;
+  const mode = viz ? shownMode(viz, effective) : 'table';
+  const showChart = mode === 'chart' && !!effective;
+  // the automatic choice found nothing to draw: the Chart button explains instead of showing a table as "Chart"
+  const autoTable = !!effective && effective.auto && effective.spec.type === 'table';
+  const starting = useMemo(() => (autoTable && result ? startingChart(result) : null), [autoTable, result]);
+  const nothingToChart = autoTable && !starting;
+  // asking for a chart when the automatic choice is a table starts from bars the person can change
+  const showAsChart = () => viz && onVizChange?.(autoTable && starting ? { mode: 'chart', spec: starting } : { ...viz, mode: 'chart' });
   const spec = effective?.spec;
   const seriesNames = useMemo(() => {
     if (!result || !spec) return [];
@@ -95,12 +102,14 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
       <Flex align="center" gap={3} px={3} py={2} borderBottom="1px solid" borderColor="lineColor" wrap="wrap" minH="44px">
         {viz && onVizChange && (
           <ButtonGroup size="xs" isAttached>
-            <Button variant={viz.mode === 'table' ? 'brand' : 'subtle'} leftIcon={<TableIcon boxSize={3.5} />} onClick={() => onVizChange({ ...viz, mode: 'table' })} data-testid="view-table">
+            <Button variant={mode === 'table' ? 'brand' : 'subtle'} leftIcon={<TableIcon boxSize={3.5} />} onClick={() => onVizChange({ ...viz, mode: 'table' })} data-testid="view-table">
               {t('Table')}
             </Button>
-            <Button variant={viz.mode === 'chart' ? 'brand' : 'subtle'} leftIcon={<ChartIcon boxSize={3.5} />} onClick={() => onVizChange({ ...viz, mode: 'chart' })} data-testid="view-chart">
-              {t('Chart')}
-            </Button>
+            <Tooltip label={nothingToChart ? t('Nothing to draw: the result has no numbers. Summarise it first, for example a count per month') : undefined} hasArrow shouldWrapChildren={nothingToChart}>
+              <Button variant={mode === 'chart' ? 'brand' : 'subtle'} leftIcon={<ChartIcon boxSize={3.5} />} onClick={showAsChart} isDisabled={nothingToChart} data-testid="view-chart">
+                {t('Chart')}
+              </Button>
+            </Tooltip>
           </ButtonGroup>
         )}
         {showChart && spec && (
@@ -211,7 +220,15 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
       {state.error && (state.status === 'error' || state.status === 'failed') && (
         <Alert status="error" variant="left-accent" fontSize="sm" data-testid="query-error">
           <AlertIcon />
-          <AlertDescription whiteSpace="pre-wrap">{state.error}</AlertDescription>
+          <AlertDescription whiteSpace="pre-wrap">
+            {state.error}
+            {state.errorDetails && state.errorDetails !== state.error && (
+              <Box as="details" mt={1} fontSize="xs" color="gray.500" data-testid="query-error-details">
+                <Box as="summary" cursor="pointer">{t('Details from the database')}</Box>
+                <Box as="pre" whiteSpace="pre-wrap" fontFamily="mono" mt={1}>{state.errorDetails}</Box>
+              </Box>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 

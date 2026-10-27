@@ -24,7 +24,8 @@ from pydantic import BaseModel
 
 from ..appdb import User
 from ..content.store import ContentError
-from ..db import ConnectionRegistry, describe_error
+from ..db import ConnectionRegistry
+from ..dberrors import db_http_error
 from ..query.routes import QueryService
 from ..query.spec import QuerySpec
 from .store import FieldIn, MetricIn, RelationshipIn, SemanticStore
@@ -50,7 +51,7 @@ def register_semantic_routes(
         try:
             schema = registry.get_schema(connection)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {describe_error(exc)}") from exc
+            raise db_http_error(exc, registry.get_config(connection).engine, "Could not read the database structure") from exc
         return {t: [c["name"] for c in cols] for t, cols in schema.items()}
 
     def check_column(connection: str, table: str, column: str) -> None:

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { apiErrorMessage, http } from '../api';
 import type { ResultEnvelope } from '../api';
 import { libraryKeys, refreshLibrary } from '../library/api';
+import { withBase } from '../library/conflict';
 import { queryClient } from '../lib/queryClient';
 import type { TaskSnapshot } from '../query/useQueryRun';
 import { RunQueue } from './logic';
@@ -51,13 +52,14 @@ async function after<T>(promise: Promise<{ data: T }>): Promise<T> {
 
 export const dashboards = {
   create: (body: { name: string; description?: string | null; collection_id: number | null }) => after(http.post<Dashboard>('/api/dashboards', body)),
-  save: async (id: number, def: Definition) => {
-    const d = (await http.put<Dashboard>(`/api/dashboards/${id}`, def)).data;
+  /** base: the updated_at the editor started from (409 edit conflict if it changed); null = overwrite */
+  save: async (id: number, def: Definition, base: number | null = null) => {
+    const d = (await http.put<Dashboard>(`/api/dashboards/${id}`, withBase(def, base))).data;
     queryClient.setQueryData(dashboardKeys.one(id), d);
     await refreshLibrary();
     return d;
   },
-  update: (id: number, body: Partial<{ name: string; description: string | null; collection_id: number; archived: boolean }>) =>
+  update: (id: number, body: Partial<{ name: string; description: string | null; collection_id: number; archived: boolean; base_updated_at: number }>) =>
     after(http.patch<Dashboard>(`/api/dashboards/${id}`, body)),
   remove: (id: number) => after(http.delete(`/api/dashboards/${id}`)),
   duplicate: (id: number) => after(http.post<Dashboard>(`/api/dashboards/${id}/duplicate`, {})),

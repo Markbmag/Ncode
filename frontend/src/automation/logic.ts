@@ -67,14 +67,15 @@ export function describeSchedule(s: Schedule, localZone = browserTimeZone()): st
   return text + zone;
 }
 
+/** Daily means every day (M10: it used to skip weekends), in the browser's time zone. */
 export function defaultSchedule(): Schedule {
-  return { every: 'day', hour: 8, minute: 0, days: WEEKDAYS, monthday: 1, timezone: browserTimeZone() };
+  return { every: 'day', hour: 8, minute: 0, days: ALL_DAYS, monthday: 1, timezone: browserTimeZone() };
 }
 
 /** Switching the frequency keeps sensible days: a weekly schedule starts on Monday. */
 export function changeEvery(s: Schedule, every: Schedule['every']): Schedule {
   if (every === 'week') return { ...s, every, days: s.days.length === 1 ? s.days : [0] };
-  if ((every === 'day' || every === 'hour') && s.every === 'week') return { ...s, every, days: every === 'hour' ? ALL_DAYS : WEEKDAYS };
+  if ((every === 'day' || every === 'hour') && s.every === 'week') return { ...s, every, days: ALL_DAYS };
   return { ...s, every };
 }
 
@@ -82,14 +83,20 @@ export function emptyRecipients(): Recipients {
   return { users: [], emails: [], destinations: [] };
 }
 
-export function newSubscription(target_type: TargetType, target_id: number, me: string | null, alert = false): SubscriptionBody {
+export interface NewSubscriptionOptions {
+  emailReady?: boolean;               // email is set up on the server: only then the creator is added as a recipient
+  filters?: Record<string, unknown>;  // the dashboard's current filter values (or the question's parameters)
+}
+
+export function newSubscription(target_type: TargetType, target_id: number, me: string | null, alert = false, opts: NewSubscriptionOptions = {}): SubscriptionBody {
+  const { emailReady = true, filters = {} } = opts;
   return {
     name: '',
     target_type,
     target_id,
     schedule: alert ? { ...defaultSchedule(), every: 'hour', minute: 0, days: ALL_DAYS } : defaultSchedule(),
-    recipients: { ...emptyRecipients(), users: me ? [me] : [] },
-    options: { filters: {}, attach: 'none', rows: 10, skip_empty: false, message: '' },
+    recipients: { ...emptyRecipients(), users: me && emailReady ? [me] : [] },
+    options: { filters, attach: 'none', rows: 10, skip_empty: false, message: '' },
     alert: alert ? { type: 'rows', column: null, value: null, once: false } : null,
     enabled: true,
   };
@@ -124,9 +131,10 @@ export function domainAllowed(email: string, domains: string[]): boolean {
   return domains.includes(email.split('@').pop()!.toLowerCase());
 }
 
-/** Why the form cannot be saved yet, or null. */
-export function problem(body: SubscriptionBody): string | null {
+/** Why the form cannot be saved yet, or null. Without email set up, people and addresses cannot receive it. */
+export function problem(body: SubscriptionBody, emailReady = true): string | null {
   if (recipientCount(body.recipients) === 0) return t('Add at least one recipient');
+  if (!emailReady && body.recipients.destinations.length === 0) return t('Email is not set up: choose a chat or webhook destination');
   if ((body.schedule.every === 'day' || body.schedule.every === 'week' || body.schedule.every === 'hour') && !body.schedule.days.length)
     return t('Choose at least one day');
   if (body.alert && body.alert.type !== 'rows' && (body.alert.value === null || Number.isNaN(body.alert.value)))

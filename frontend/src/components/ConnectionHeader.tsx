@@ -26,7 +26,8 @@ export function ConnectionHeader() {
               {active.label}
             </Text>
             <Text fontSize="sm" color="mutedText">
-              {engineMeta(active.engine).label} · {active.database}
+              {engineMeta(active.engine).label}
+              {active.database && ` · ${active.database}`}
               {tables && ` · ${tn(tables.length, '{n} table', '{n} tables')}`}
             </Text>
           </Box>

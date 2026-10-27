@@ -18,8 +18,11 @@ from .config import ConnectionConfig
 from .search import SearchOptions, build_conditions, classify_type, value_matches
 from .serialize import serialize_value
 
-# Same rule as the frontend: stop spreadsheets from executing cells such as "=1+1".
-_FORMULA = re.compile(r"^(?:[=@\t\r]|[+-](?=[^\d\s.()-]))")
+# Same rule as the frontend (src/lib/csv.ts), after OWASP's CSV injection advice: text starting with
+# = + - @ tab or CR gets a leading ' so spreadsheets show it instead of running it ("-2+3+cmd|..."),
+# except plain numbers such as -12.5 or +1e3, which stay numbers.
+_FORMULA = re.compile(r"^[=+\-@\t\r]")
+_PLAIN_NUMBER = re.compile(r"^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$")
 
 
 def split_columns(columns: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -140,7 +143,7 @@ def _csv_cell(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
-        return f"'{value}" if _FORMULA.match(value) else value
+        return f"'{value}" if _FORMULA.match(value) and not _PLAIN_NUMBER.match(value) else value
     return str(serialize_value(value, clip=False))
 
 

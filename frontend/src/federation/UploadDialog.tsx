@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Checkbox, FormControl, FormHelperText, FormLabel, HStack, Input, Progress, Select, SimpleGrid, Text,
 } from '@chakra-ui/react';
@@ -8,15 +8,28 @@ import { locale, t, tc } from '../i18n/index.ts';
 import { UploadIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { datasets, formatBytes } from './api';
-import type { UploadOptions } from './api';
-import type { Dataset } from './types';
+import type { UploadOptions, UploadedDataset } from './api';
+import { encodingLabel } from './labels';
+import { sniffFile } from './sniff';
+import type { Sniffed } from './sniff';
 
 const ACCEPT = '.csv,.tsv,.txt,.xlsx,.xlsm,.parquet';
+
+/** What the file's first lines show, for the hint under the options ("" when nothing unusual). */
+function detectedText(s: Sniffed | null): string {
+  if (!s) return '';
+  const parts: string[] = [];
+  if (s.encoding !== 'utf-8') parts.push(t('encoding {name}', { name: encodingLabel(s.encoding) }));
+  if (s.delimiter === 'semicolon') parts.push(t('separator “;”'));
+  if (s.delimiter === 'tab') parts.push(t('separated by tabs'));
+  if (s.numberFormat === 'comma') parts.push(t('decimal comma (1 234,5)'));
+  return parts.length ? t('Found in the file: {list}.', { list: parts.join(', ') }) : '';
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onUploaded?: (d: Dataset) => void;
+  onUploaded?: (d: UploadedDataset) => void;
   collectionId?: number | null;
 }
 
@@ -25,7 +38,7 @@ export function UploadDialog({ isOpen, onClose, onUploaded, collectionId = null 
   return isOpen ? <UploadForm onClose={onClose} onUploaded={onUploaded} collectionId={collectionId} /> : null;
 }
 
-function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void; onUploaded?: (d: Dataset) => void; collectionId: number | null }) {
+function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void; onUploaded?: (d: UploadedDataset) => void; collectionId: number | null }) {
   const ws = useWorkspace();
   const { data } = useCollections();
   const input = useRef<HTMLInputElement | null>(null);
@@ -33,7 +46,9 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<number | null>(collectionId);
   const [delimiter, setDelimiter] = useState<NonNullable<UploadOptions['delimiter']>>('auto');
-  const [encoding, setEncoding] = useState<NonNullable<UploadOptions['encoding']>>('utf-8');
+  const [encoding, setEncoding] = useState<NonNullable<UploadOptions['encoding']>>('auto');
+  const [numberFormat, setNumberFormat] = useState<NonNullable<UploadOptions['number_format']>>('auto');
+  const [sniff, setSniff] = useState<{ file: File; found: Sniffed | null } | null>(null);
   const [header, setHeader] = useState(true);
   const [sheet, setSheet] = useState('');
   const [progress, setProgress] = useState<number | null>(null);
@@ -43,6 +58,12 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
   const isExcel = ['xlsx', 'xlsm'].includes(ext);
   const maxMb = ws.limits.dataset_max_mb ?? 100;
   const tooBig = !!file && file.size > maxMb * 1024 * 1024;
+  useEffect(() => {
+    if (file && isText) void sniffFile(file).then((found) => setSniff({ file, found }));
+  }, [file, isText]);
+  const sniffed = sniff?.file === file ? sniff.found : null;
+  const hint = encoding === 'auto' || numberFormat === 'auto' || delimiter === 'auto' ? detectedText(sniffed) : '';
+  const commaClash = delimiter === 'comma' && numberFormat === 'comma';
 
   return (
     <DialogShell
@@ -51,7 +72,7 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
       title={t('Upload a file')}
       submitLabel={t('Upload')}
       size="lg"
-      canSubmit={!!file && !tooBig && collection !== null}
+      canSubmit={!!file && !tooBig && !commaClash && collection !== null}
       onSubmit={async () => {
         if (!file) return;
         setProgress(0);
@@ -61,7 +82,7 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
             {
               name: name.trim() || undefined,
               collection_id: collection,
-              ...(isText ? { delimiter: ext === 'tsv' && delimiter === 'auto' ? 'tab' : delimiter, encoding, header } : {}),
+              ...(isText ? { delimiter: ext === 'tsv' && delimiter === 'auto' ? 'tab' : delimiter, encoding, number_format: numberFormat, header } : {}),
               ...(isExcel ? { header, sheet: sheet.trim() || undefined } : {}),
             },
             setProgress,
@@ -118,7 +139,7 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
         <FormHelperText fontSize="xs">{t("People who can see the collection can use the file's rows.")}</FormHelperText>
       </FormControl>
       {(isText || isExcel) && (
-        <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+        <SimpleGrid columns={{ base: 1, sm: isText ? 2 : 3 }} spacing={3}>
           {isText && (
             <>
               <FormControl>
@@ -134,9 +155,18 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
               <FormControl>
                 <FormLabel fontSize="xs">{t('Encoding')}</FormLabel>
                 <Select size="sm" value={encoding} onChange={(e) => setEncoding(e.target.value as typeof encoding)}>
-                  <option value="utf-8">UTF-8</option>
-                  <option value="latin-1">{t('Latin-1 (Windows)')}</option>
-                  <option value="utf-16">UTF-16</option>
+                  <option value="auto">{t('Detect')}</option>
+                  {(['utf-8', 'windows-1251', 'windows-1252', 'latin-1', 'utf-16'] as const).map((e) => (
+                    <option key={e} value={e}>{encodingLabel(e)}</option>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize="xs">{t('Numbers')}</FormLabel>
+                <Select size="sm" value={numberFormat} onChange={(e) => setNumberFormat(e.target.value as typeof numberFormat)} data-testid="upload-numbers">
+                  <option value="auto">{t('Detect')}</option>
+                  <option value="point">{t('1234.5 (decimal point)')}</option>
+                  <option value="comma">{t('1 234,5 (decimal comma, as in Russian Excel)')}</option>
                 </Select>
               </FormControl>
             </>
@@ -153,6 +183,16 @@ function UploadForm({ onClose, onUploaded, collectionId }: { onClose: () => void
             </Checkbox>
           </FormControl>
         </SimpleGrid>
+      )}
+      {isText && hint && (
+        <Text fontSize="xs" color="mutedText" data-testid="upload-detected">
+          {hint}
+        </Text>
+      )}
+      {isText && commaClash && (
+        <Text fontSize="sm" color="red.400">
+          {t('A comma cannot be both the separator and the decimal mark: choose another separator.')}
+        </Text>
       )}
       {progress !== null && (
         <HStack>

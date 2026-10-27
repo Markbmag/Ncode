@@ -76,3 +76,31 @@ def test_upgrade_twice_is_harmless(tmp_path):
     again = AppDB(tmp_path / "app.sqlite")
     assert again.get_user_by_name("bob") is not None
     again.dispose()
+
+
+def test_0008_indexes_are_made_and_an_existing_one_is_kept(tmp_path):
+    from alembic import command
+
+    from app.migrate import _config
+
+    path = tmp_path / "app.sqlite"
+    engine = create_engine(f"sqlite:///{path}")
+    cfg = _config()
+    with engine.begin() as conn:
+        cfg.attributes["connection"] = conn
+        command.upgrade(cfg, "0007")
+        conn.exec_driver_sql("CREATE INDEX ix_permissions_user_id ON permissions (user_id)")  # made by hand earlier
+    upgrade(engine)  # must not fail on the index that is there already
+    assert current_revision(engine) == head_revision()
+    names = {i["name"] for t in ("audit_log", "permissions", "questions", "favorites") for i in inspect(engine).get_indexes(t)}
+    assert {"ix_audit_log_username_ts", "ix_audit_log_action_ts", "ix_permissions_user_id", "ix_permissions_group_id",
+            "ix_questions_archived_updated_at", "ix_favorites_item"} <= names
+    with engine.connect() as conn:  # Admin → Audit filtered by person uses the index
+        plan = " ".join(str(r[-1]) for r in conn.exec_driver_sql(
+            "EXPLAIN QUERY PLAN SELECT * FROM audit_log WHERE username = 'a' AND ts >= 0"))
+    assert "ix_audit_log_username_ts" in plan
+    with engine.begin() as conn:
+        cfg.attributes["connection"] = conn
+        command.downgrade(cfg, "0007")
+    assert "ix_audit_log_username_ts" not in {i["name"] for i in inspect(engine).get_indexes("audit_log")}
+    engine.dispose()

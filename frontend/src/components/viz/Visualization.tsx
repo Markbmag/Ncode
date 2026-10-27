@@ -17,14 +17,16 @@ interface VisualizationProps {
   viz: VizSpec;
   smartDates?: boolean;
   chartRef?: Ref<EChartHandle>;
+  // the note about series of very different size; off where the chart is fixed and the note can't help
+  scaleNote?: boolean;
 }
 
 /** Draws a result the way the VizSpec says (ECharts for charts, React for table / number / pivot). */
-export function Visualization({ result, viz, smartDates, chartRef }: VisualizationProps) {
+export function Visualization({ result, viz, smartDates, chartRef, scaleNote = true }: VisualizationProps) {
   const { colorMode } = useColorMode();
   const theme = useMemo(() => chartTheme(colorMode === 'dark' ? 'dark' : 'light'), [colorMode]);
   const option = useMemo(() => buildOption(result, viz, theme), [result, viz, theme]);
-  const warning = useMemo(() => scaleWarning(result, viz), [result, viz]);
+  const warning = useMemo(() => (scaleNote ? scaleWarning(result, viz) : null), [result, viz, scaleNote]);
 
   if (viz.type === 'table') return <ResultsTable columns={result.columns} rows={result.rows} smartDates={smartDates} />;
   if (viz.type === 'kpi') return <KpiTile table={result} viz={viz} theme={theme} />;

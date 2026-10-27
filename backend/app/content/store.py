@@ -53,6 +53,24 @@ class NotFound(ContentError):
         super().__init__(f"{what} not found", 404)
 
 
+class EditConflict(ContentError):
+    """Someone else saved the item after the editor loaded it (optimistic concurrency, M10)."""
+
+    def __init__(self, what: str, by: str | None = None):
+        who = f" ({by})" if by else ""
+        super().__init__(
+            f"Someone else{who} saved this {what} after you opened it. "
+            "Reload to see their version, or save again without the check to overwrite it.", 409,
+        )
+
+
+def check_base(what: str, current: float, by: str | None, base: float | None) -> None:
+    """Refuse a change made on top of an older version. `base` is the updated_at the client
+    loaded; None (old clients, "save mine anyway") skips the check."""
+    if base is not None and abs(current - base) > 1e-6:
+        raise EditConflict(what, by)
+
+
 @dataclass(frozen=True)
 class Collection:
     id: int
@@ -232,6 +250,13 @@ class ContentStore:
             raise ContentError("You can only view this collection", 403)
         return col
 
+    def _require_open(self, snap: Snapshot, cid: int) -> None:
+        """New and moved items must stay visible: an archived collection takes none (M10)."""
+        if snap.hidden(cid):
+            raise ContentError(
+                f"The collection {snap.get(cid).name!r} is archived. Restore it first (Library → Archive), or choose another collection", 409
+            )
+
     def _require_manage(self, snap: Snapshot, user: User, cid: int) -> Collection:
         col = self._require(snap, user, cid, "view")
         if not snap.can_manage(user, cid):
@@ -312,6 +337,7 @@ class ContentStore:
         snap = self.snapshot()
         if parent_id is not None:
             self._require(snap, user, parent_id, "edit")
+            self._require_open(snap, parent_id)
             if len(snap.chain(parent_id)) >= MAX_DEPTH:
                 raise ContentError(f"Collections can be nested at most {MAX_DEPTH} levels deep")
         now = time.time()
@@ -324,9 +350,11 @@ class ContentStore:
             ).inserted_primary_key[0]
         return self.snapshot().get(int(cid))
 
-    def update_collection(self, user: User, cid: int, **changes: Any) -> Collection:
+    def update_collection(self, user: User, cid: int, base_updated_at: float | None = None, **changes: Any) -> Collection:
         snap = self.snapshot()
         col = snap.get(cid)
+        if snap.access(user, cid) is not None:
+            check_base("collection", col.updated_at, None, base_updated_at)
         values: dict[str, Any] = {}
         if "name" in changes or "description" in changes:
             self._require(snap, user, cid, "edit")
@@ -345,6 +373,8 @@ class ContentStore:
                 self._require(snap, user, target, "edit")
                 if cid in [c.id for c in snap.chain(target)]:
                     raise ContentError("A collection cannot be moved into itself")
+                if target != col.parent_id:
+                    self._require_open(snap, target)
                 depth = len(snap.chain(target)) + max(len(snap.chain(d)) - len(snap.chain(cid)) + 1 for d in snap.descendants(cid))
                 if depth > MAX_DEPTH:
                     raise ContentError(f"Collections can be nested at most {MAX_DEPTH} levels deep")
@@ -562,6 +592,7 @@ class ContentStore:
     ) -> Question:
         snap = self.snapshot()
         self._require(snap, user, collection_id, "edit")
+        self._require_open(snap, collection_id)
         now = time.time()
         with self.engine.begin() as conn:
             qid = conn.execute(
@@ -575,8 +606,9 @@ class ContentStore:
             ).inserted_primary_key[0]
         return self.get_question(user, int(qid))
 
-    def update_question(self, user: User, qid: int, **changes: Any) -> Question:
+    def update_question(self, user: User, qid: int, base_updated_at: float | None = None, **changes: Any) -> Question:
         current = self.get_question(user, qid, "edit")
+        check_base("question", current.updated_at, current.updated_by, base_updated_at)
         snap = self.snapshot()
         values: dict[str, Any] = {}
         if "name" in changes:
@@ -585,6 +617,7 @@ class ContentStore:
             values["description"] = (changes["description"] or "").strip() or None
         if "collection_id" in changes and changes["collection_id"] != current.collection_id:
             self._require(snap, user, changes["collection_id"], "edit")
+            self._require_open(snap, changes["collection_id"])
             values["collection_id"] = changes["collection_id"]
         for key in ("spec", "viz", "parameters"):
             if key in changes:

@@ -3,7 +3,7 @@ import { useToast } from '@chakra-ui/react';
 import axios from 'axios';
 import { apiErrorMessage, getToken, http, WS_URL } from '../api';
 import type { MatchMode, Progress, SearchHit, TableError, TaskMessage } from '../api';
-import { t } from '../i18n/index.ts';
+import { lang, t } from '../i18n/index.ts';
 
 export interface SearchParams {
   connection: string;
@@ -87,8 +87,8 @@ export function useSearch(onUnauthorized: () => void) {
         wsRef.current = socket;
         let finished = false;
 
-        // The server expects the session token as the first message.
-        socket.onopen = () => socket.send(JSON.stringify({ token: getToken() ?? '' }));
+        // The server expects the session token (and the UI language for its messages) as the first message.
+        socket.onopen = () => socket.send(JSON.stringify({ token: getToken() ?? '', lang: lang() }));
 
         socket.onmessage = (event: MessageEvent<string>) => {
           const data = JSON.parse(event.data) as TaskMessage;

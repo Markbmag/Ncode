@@ -32,7 +32,9 @@ from sqlalchemy import and_, delete, func, insert, or_, select, update
 
 from ..appdb import User, users_table
 from ..query.spec import QuerySpec
-from .store import ContentError, ContentStore, Level, NotFound, Question, Snapshot, _clean_name, forget_items
+from .store import (
+    ContentError, ContentStore, EditConflict, Level, NotFound, Question, Snapshot, _clean_name, check_base, forget_items,
+)
 from .tables import dashboard_cards_table, dashboards_table, favorites_table
 
 KEY = r"^[A-Za-z0-9_-]{1,40}$"
@@ -89,8 +91,8 @@ class Card(_Model):
 
     @model_validator(mode="after")
     def _shape(self) -> "Card":
-        if self.kind == "question" and self.question_id is None:
-            raise ValueError("a question card needs question_id")
+        # a question card without a question shows "deleted question" (its question was deleted);
+        # the store keeps such cards on save but refuses new ones
         if self.kind != "question" and (self.question_id is not None or self.mappings):
             raise ValueError("only question cards have a question and filter mappings")
         if self.layout.x + self.layout.w > GRID_COLS:
@@ -435,7 +437,10 @@ class DashboardStore:
     ) -> Dashboard:
         snap = self.content.snapshot()
         self.content._require(snap, user, collection_id, "edit")
+        self.content._require_open(snap, collection_id)
         definition = definition or Definition()
+        # a new dashboard has no "deleted question" cards to keep (a copy leaves them out)
+        definition.cards = [c for c in definition.cards if c.kind != "question" or c.question_id is not None]
         self._check_questions(user, definition, allowed=set())
         now = time.time()
         with self.engine.begin() as conn:
@@ -470,20 +475,33 @@ class DashboardStore:
                 text=c.text, title=c.title, position=position,
             ))
 
-    def save_definition(self, user: User, did: int, definition: Definition) -> Dashboard:
+    def save_definition(self, user: User, did: int, definition: Definition, base_updated_at: float | None = None) -> Dashboard:
+        """Replace filters, tabs, cards and settings. With `base_updated_at` (what the editor
+        loaded) the save is refused (409) when someone else saved the dashboard meanwhile."""
         current = self.get(user, did, "edit")
         self._check_questions(user, definition, allowed={c["question_id"] for c in current.cards if c.get("question_id")})
+        orphans = {c["key"] for c in current.cards if c["kind"] == "question" and c.get("question_id") is None}
+        for c in definition.cards:
+            if c.kind == "question" and c.question_id is None and c.key not in orphans:
+                raise ContentError(f"Card {c.key} has no question: choose one or remove the card")
         with self.engine.begin() as conn:
-            conn.execute(update(dashboards_table).where(dashboards_table.c.id == did).values(
+            stmt = update(dashboards_table).where(dashboards_table.c.id == did)
+            if base_updated_at is not None:
+                stmt = stmt.where(dashboards_table.c.updated_at == base_updated_at)
+            done = conn.execute(stmt.values(
                 filters=json.dumps([f.model_dump() for f in definition.filters]),
                 tabs=json.dumps([t.model_dump() for t in definition.tabs]),
                 settings=json.dumps(definition.settings), updated_at=time.time(), updated_by=user.username,
             ))
+            if done.rowcount == 0:
+                who = conn.execute(select(dashboards_table.c.updated_by).where(dashboards_table.c.id == did)).scalar()
+                raise EditConflict("dashboard", who)
             self._write_cards(conn, did, definition.cards)
         return self.get(user, did)
 
-    def update(self, user: User, did: int, **changes: Any) -> Dashboard:
+    def update(self, user: User, did: int, base_updated_at: float | None = None, **changes: Any) -> Dashboard:
         current = self.get(user, did, "edit")
+        check_base("dashboard", current.updated_at, current.updated_by, base_updated_at)
         snap = self.content.snapshot()
         values: dict[str, Any] = {}
         if "name" in changes:
@@ -492,6 +510,7 @@ class DashboardStore:
             values["description"] = (changes["description"] or "").strip() or None
         if "collection_id" in changes and changes["collection_id"] != current.collection_id:
             self.content._require(snap, user, changes["collection_id"], "edit")
+            self.content._require_open(snap, changes["collection_id"])
             values["collection_id"] = changes["collection_id"]
         if "archived" in changes:
             values["archived"] = bool(changes["archived"])
@@ -512,11 +531,12 @@ class DashboardStore:
         src = self.get(user, did)
         target = collection_id
         if target is None:
-            target = src.collection_id if src.access == "edit" else self.content.personal_collection(user).id
+            open_here = src.access == "edit" and not self.content.snapshot().hidden(src.collection_id)
+            target = src.collection_id if open_here else self.content.personal_collection(user).id
         definition = Definition.model_validate({"filters": src.filters, "tabs": src.tabs, "cards": src.cards, "settings": src.settings})
         # the copy keeps only the questions its new owner can see
         visible = {qid for qid, q in self.card_questions(user, src).items() if q is not None}
-        definition.cards = [c for c in definition.cards if c.question_id is None or c.question_id in visible]
+        definition.cards = [c for c in definition.cards if c.kind != "question" or c.question_id in visible]
         return self.create(user, name=name or f"{src.name} (copy)"[:200], collection_id=target,
                            description=src.description, definition=definition)
 

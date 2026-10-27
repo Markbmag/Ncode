@@ -9,6 +9,8 @@ import { apiErrorMessage } from '../api';
 import { EngineBadge } from '../components/EngineBadge';
 import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
 import { library } from './api';
+import { withBase } from './conflict';
+import { useEditConflict } from './ConflictDialog';
 import type { QuestionPayload, SavedQuestion } from './api';
 import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
@@ -26,7 +28,8 @@ interface Props {
   /** what would be saved now; null = not saveable (incomplete) */
   payload: () => QuestionPayload | null;
   defaultName: string;
-  onRevert?: () => void;
+  /** back to the saved question - or to `to`, a newer version just loaded ("Reload their version") */
+  onRevert?: (to?: SavedQuestion) => void;
   onSaved?: () => void;
   children?: ReactNode;
 }
@@ -45,6 +48,12 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   const [subsOpen, setSubsOpen] = useState<null | 'list' | 'alert'>(() => (search.get('subscriptions') === '1' ? 'list' : null));
   const [saving, setSaving] = useState(false);
   const canEdit = saved?.access === 'edit';
+  const conflict = useEditConflict();
+  // the version the changes are made on: kept while there are unsaved changes, so a newer
+  // version loaded meanwhile (someone else saved) is noticed when saving (409)
+  const loaded = saved?.updated_at ?? null;
+  const [base, setBase] = useState<number | null>(loaded);
+  if (!dirty && base !== loaded) setBase(loaded); // adjusted while rendering, not in an effect
 
   const fail = (e: unknown, what: string) => toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
 
@@ -57,16 +66,24 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     navigate(`/questions/${q.id}`, { replace: !saved });
   };
 
-  const saveChanges = async () => {
+  const saveChanges = async (overwrite = false) => {
     const body = payload();
     if (!saved || !body) return;
     setSaving(true);
     try {
-      await library.updateQuestion(saved.id, body);
+      await library.updateQuestion(saved.id, withBase(body, base, overwrite));
       onSaved?.();
       toast({ status: 'success', title: t('Saved'), duration: 1500 });
     } catch (e) {
-      fail(e, t('Could not save'));
+      const offered = conflict.offer(e, {
+        reload: async () => {
+          const fresh = await library.reloadQuestion(saved.id);
+          setBase(fresh.updated_at);
+          onRevert?.(fresh);
+        },
+        overwrite: () => saveChanges(true),
+      });
+      if (!offered) fail(e, t('Could not save'));
     } finally {
       setSaving(false);
     }
@@ -201,7 +218,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
                 </MenuItem>
               )}
               {canEdit && dirty && onRevert && (
-                <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={onRevert}>
+                <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={() => onRevert()}>
                   {t('Discard changes')}
                 </MenuItem>
               )}
@@ -254,6 +271,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
         )}
       </HStack>
 
+      {conflict.dialog}
       <SaveQuestionDialog
         isOpen={saveNew.isOpen}
         onClose={saveNew.onClose}
@@ -269,7 +287,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             onClose={move.onClose}
             title={t('Move “{name}”', { name: saved.name })}
             current={saved.collection_id}
-            onMove={(target) => library.updateQuestion(saved.id, { collection_id: target as number })}
+            onMove={(target, overwrite) => library.updateQuestion(saved.id, withBase({ collection_id: target as number }, saved.updated_at, overwrite))}
           />
           {details.isOpen && <DetailsDialog isOpen onClose={details.onClose} question={saved} />}
           <SubscriptionsDrawer
@@ -301,7 +319,9 @@ function DetailsDialog({ isOpen, onClose, question }: { isOpen: boolean; onClose
       title={t('Rename / describe')}
       submitLabel={t('Save')}
       canSubmit={name.trim() !== ''}
-      onSubmit={() => library.updateQuestion(question.id, { name: name.trim(), description: description.trim() || null })}
+      onSubmit={(overwrite) =>
+        library.updateQuestion(question.id, withBase({ name: name.trim(), description: description.trim() || null }, question.updated_at, overwrite))
+      }
     >
       <FormControl isRequired>
         <FormLabel fontSize="sm">{t('Name')}</FormLabel>

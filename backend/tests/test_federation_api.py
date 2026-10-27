@@ -2,6 +2,7 @@
 
 import datetime as dt
 import io
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -274,6 +275,94 @@ def test_dataset_lifecycle_removes_the_file(env, tmp_path):
     call(env, "alice", "PATCH", f"/api/collections/{col['id']}", json={"archived": True})
     call(env, "alice", "DELETE", f"/api/collections/{col['id']}")
     assert list(folder.iterdir()) == []
+
+
+def test_upload_quoted_line_breaks_and_ragged_rows(env):
+    # DuckDB's parallel reader refused null_padding with quoted line breaks ("CSV Error on Line: 2")
+    ds = upload(env, "alice", "q.csv", b'a,b\n"x\ny",2\n"he said ""hi""",3\n')
+    assert ds["row_count"] == 2 and ds["columns"] == [{"name": "a", "type": "string"}, {"name": "b", "type": "number"}]
+    ragged = upload(env, "alice", "r.csv", b"a,b,c\n1,2\n3,4,5\n")
+    assert ragged["row_count"] == 2 and [c["type"] for c in ragged["columns"]] == ["number"] * 3
+
+
+def test_upload_russian_and_european_csv(env):
+    ru = upload(env, "alice", "ru.csv", "Имя;Сумма;Итого\nИван;10,5;1\u00a0234,5\nПётр;3;12 345 678\n".encode("cp1251"))
+    assert ru["read_as"] == {"encoding": "windows-1251", "number_format": "comma"}
+    assert ru["columns"] == [{"name": "Имя", "type": "string"}, {"name": "Сумма", "type": "number"},
+                             {"name": "Итого", "type": "number"}]
+    t = {"alias": "t", "type": "dataset", "dataset_id": ru["id"]}
+    data = fed_run(env, "alice", {"sources": [t], "post": {"fields": [{"ref": "Имя"}, {"ref": "Сумма"}, {"ref": "Итого"}]}})
+    assert data["result"]["rows"] == [["Иван", 10.5, 1234.5], ["Пётр", 3, 12345678]]
+    # Western European Excel: Windows-1252 ("€" is not Latin-1), UTF-8 with a BOM
+    eu = upload(env, "alice", "eu.csv", "Name;Prix\nCafé;1,5 €\nCrème;2\n".encode("cp1252"))
+    assert eu["read_as"]["encoding"] == "windows-1252"
+    t = {"alias": "t", "type": "dataset", "dataset_id": eu["id"]}
+    data = fed_run(env, "alice", {"sources": [t], "post": {"fields": [{"ref": "Name"}, {"ref": "Prix"}]}})
+    assert data["result"]["rows"] == [["Café", "1,5 €"], ["Crème", "2"]]
+    bom = upload(env, "alice", "b.csv", "\ufeffName;Amount;Date\nA;1,5;31.01.2026\nB;2,25;01.02.2026\n".encode("utf-8"))
+    assert bom["read_as"] == {"encoding": "utf-8", "number_format": "comma"}
+    assert [c["type"] for c in bom["columns"]] == ["string", "number", "date"]
+    # chosen by hand: a decimal point keeps "1,5" as text; comma with comma is refused
+    point = upload(env, "alice", "b.csv", b"a;b\nx;1,5\n", number_format="point")
+    assert point["columns"][1]["type"] == "string"
+    comma = upload(env, "alice", "c.csv", b"a\tb\nx\t1,5\n", number_format="comma", delimiter="tab")
+    assert comma["columns"][1]["type"] == "number"
+    assert "both the separator" in upload(env, "alice", "c.csv", b"a\n1\n", 400, number_format="comma", delimiter="comma")["detail"]
+    # explicitly UTF-8 but not: a sentence, not DuckDB's text
+    detail = upload(env, "alice", "ru.csv", "Имя\nИван\n".encode("cp1251"), 400, encoding="utf-8")["detail"]
+    assert detail.startswith("The file is not UTF-8 text") and "Windows-1251" in detail
+
+
+def test_upload_errors_are_sentences_without_paths(env, tmp_path):
+    detail = upload(env, "alice", "a.parquet", b"PAR1xxxx", 400)["detail"]
+    assert detail == "The file is not a valid Parquet file"
+    assert str(tmp_path) not in detail and "upload_" not in detail
+    assert list((tmp_path / "datasets").iterdir()) == []
+
+
+def test_friendly_errors():
+    from app.federation.datasets import friendly_error
+
+    src = Path("C:/Users/me/AppData/ncode/datasets/upload_1.csv")
+    exc = RuntimeError(f"Invalid Input Error: CSV Error on Line: 2\nOriginal Line: 1,2,3,4,5\n"
+                       f"Expected Number of Columns: 4 Found: 5\n  file = {src}")
+    assert friendly_error(exc, "csv", [src]) == (
+        "Could not read the file as CSV: line 2 has 5 values, the header has 4. Check the separator.")
+    other = friendly_error(RuntimeError("IO Error: Cannot open file \"/srv/ncode/data/x.csv\": gone"), "csv", [])
+    assert other == "Could not read the file: Cannot open file the file: gone"
+
+
+def test_removing_a_file_still_open_and_sweeping_orphans(env, tmp_path, monkeypatch):
+    import os
+    import time
+
+    from app.federation import datasets as dsmod
+
+    ds = upload(env, "alice", "targets.csv", TARGETS_CSV, delimiter="semicolon")
+    folder = tmp_path / "datasets"
+    (kept,) = list(folder.iterdir())
+    call(env, "alice", "PATCH", f"/api/datasets/{ds['id']}", json={"archived": True})
+    real_remove, tries = os.remove, []
+
+    def locked(path):  # Windows: a DuckDB session still has the file open
+        tries.append(path)
+        raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+
+    monkeypatch.setattr(dsmod.os, "remove", locked)
+    monkeypatch.setattr(dsmod.time, "sleep", lambda s: None)
+    call(env, "alice", "DELETE", f"/api/datasets/{ds['id']}")  # the dataset is gone even so
+    assert len(tries) == 5 and kept.exists()
+    monkeypatch.setattr(dsmod.os, "remove", real_remove)
+    upload(env, "alice", "targets.csv", TARGETS_CSV, delimiter="semicolon")
+    stray = folder / "upload_0123456789abcdef0123456789abcdef.csv"
+    stray.write_bytes(b"a\n")
+    old = time.time() - 7200
+    for p in (kept, stray):
+        os.utime(p, (old, old))
+    # at startup: the orphan and the left-over upload go, the file a dataset uses stays
+    assert dsmod.sweep_orphans(env["db"].engine, folder) == 2
+    assert len(list(folder.iterdir())) == 1 and not kept.exists()
+    assert dsmod.sweep_orphans(env["db"].engine, folder, min_age_s=0) == 0
 
 
 # ---------------------------------------------------------------- saved, with parameters, on a dashboard

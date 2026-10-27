@@ -6,22 +6,62 @@
 Every query is already in the audit log (who, what, how long, how it ended);
 nothing extra is recorded. Runs from subscriptions, public links and embeds are
 told apart by the run's options and the name it ran under ("public#3:mark").
+
+The audit log keeps NCODE_AUDIT_KEEP_DAYS (default 365, 0 = forever): AuditRetention
+is one of the scheduler's chores and removes older entries once a day (M10).
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, Query
-from sqlalchemy import text
+from sqlalchemy import delete, select, text
 
-from .appdb import AppDB, User
+from .appdb import AppDB, User, audit_table
 from .config import Settings
 
 QUERY_ACTIONS = ("query", "sql", "federated", "profile", "xray")
 _IN = ", ".join(f"'{a}'" for a in QUERY_ACTIONS)
 _JSON = "CASE WHEN json_valid(options) THEN json_extract(options, '$.{key}') END"
+
+
+logger = logging.getLogger(__name__)
+
+
+class AuditRetention:
+    """Called on every scheduler tick: once a day, removes audit entries older than `keep_days`."""
+
+    BATCH = 5_000  # rows per transaction: the app database stays responsive while a big backlog goes
+
+    def __init__(self, app_db: AppDB, keep_days: int):
+        self.app_db, self.keep_days = app_db, keep_days
+        self.last_run: float | None = None
+
+    def tick(self, now: float | None = None) -> int | None:
+        """Entries removed, or None when it was not time yet (or retention is off)."""
+        if self.keep_days <= 0:
+            return None
+        now = time.time() if now is None else now
+        if self.last_run is not None and now - self.last_run < 24 * 3600:
+            return None
+        self.last_run = now
+        return self.prune(now - self.keep_days * 86400)
+
+    def prune(self, before: float) -> int:
+        removed = 0
+        while True:
+            with self.app_db.engine.begin() as conn:
+                ids = select(audit_table.c.id).where(audit_table.c.ts < before).limit(self.BATCH).scalar_subquery()
+                n = conn.execute(delete(audit_table).where(audit_table.c.id.in_(ids))).rowcount or 0
+            removed += n
+            if n < self.BATCH:
+                break
+        if removed:
+            logger.info("audit log: removed %d entries older than %d days", removed, self.keep_days)
+        return removed
 
 
 def _source() -> str:

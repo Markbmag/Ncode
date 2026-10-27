@@ -130,7 +130,8 @@ class ImportReport:
 def _connect(path: Path) -> sqlite3.Connection:
     if not path.is_file():
         raise ImportError_(f"No such file: {path}")
-    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    # as_uri() escapes "#", "%", "?" and spaces and writes Windows drives as file:///C:/...
+    con = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     return con
 

@@ -5,6 +5,7 @@ import { AGGREGATES, BUCKETS, aggregationName } from '../../query/draft';
 import type { Aggregation, Breakout, Bucket } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { cleanResultName } from './names';
 import { t } from '../../i18n/index.ts';
 
 const TYPES_FOR: Record<Aggregation['fn'], ColumnType[] | undefined> = {
@@ -69,7 +70,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
                 <Badge colorScheme="green" variant="subtle" textTransform="none" fontSize="xs" px={2} py={1} title={m?.description ?? undefined}>
                   ★ {m?.name ?? t('Metric {id} (not available)', { id: a.metric })}
                 </Badge>
-                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label={t('Result column name')} />
+                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} />
                 <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
               </Flex>
             );
@@ -77,7 +78,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
           const info = AGGREGATES.find((x) => x.fn === a.fn)!;
           return (
             <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="metric-row">
-              <Select size="sm" maxW="170px" value={a.fn} onChange={(e) => setAgg(i, { fn: e.target.value as Aggregation['fn'], ref: e.target.value === 'count' ? undefined : a.ref, alias: a.alias })} aria-label={t('Metric')}>
+              <Select size="sm" w="auto" flexShrink={0} value={a.fn} onChange={(e) => setAgg(i, { fn: e.target.value as Aggregation['fn'], ref: e.target.value === 'count' ? undefined : a.ref, alias: a.alias })} aria-label={t('Metric')}>
                 {AGGREGATES.map((x) => (
                   <option key={x.fn} value={x.fn}>
                     {x.label}
@@ -87,7 +88,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
               {info.needsColumn && (
                 <ColumnSelect options={options} types={TYPES_FOR[a.fn]} value={a.ref} onChange={(ref) => setAgg(i, { ...a, ref })} maxW="200px" aria-label={t('Metric column')} />
               )}
-              <Input size="sm" maxW="130px" placeholder={aggregationName({ ...a, alias: undefined })} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: e.target.value.replace(/[^A-Za-z0-9_]/g, '') || undefined })} aria-label={t('Result column name')} />
+              <Input size="sm" maxW="130px" placeholder={aggregationName({ ...a, alias: undefined })} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} />
               <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
             </Flex>
           );
@@ -129,7 +130,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
             <Flex key={i} gap={2} align="center" wrap="wrap" data-testid="group-row">
               <ColumnSelect options={options} value={b.ref || undefined} onChange={(ref) => pickBreakout(i, ref)} maxW="220px" aria-label={t('Group by column')} />
               {(type === 'date' || type === 'datetime') && (
-                <Select size="sm" maxW="120px" value={b.bucket ?? ''} onChange={(e) => setBrk(i, { ...b, bucket: (e.target.value || undefined) as Bucket | undefined })} aria-label={t('Date grouping')}>
+                <Select size="sm" w="auto" flexShrink={0} value={b.bucket ?? ''} onChange={(e) => setBrk(i, { ...b, bucket: (e.target.value || undefined) as Bucket | undefined })} aria-label={t('Date grouping')}>
                   <option value="">{t('Exact value')}</option>
                   {BUCKETS.map((x) => (
                     <option key={x.value} value={x.value}>
@@ -139,7 +140,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
                 </Select>
               )}
               {type === 'number' && (
-                <Select size="sm" maxW="130px" value={b.bin_width ?? ''} onChange={(e) => setBrk(i, { ...b, bin_width: e.target.value ? Number(e.target.value) : undefined })} aria-label={t('Number ranges')}>
+                <Select size="sm" w="auto" flexShrink={0} value={b.bin_width ?? ''} onChange={(e) => setBrk(i, { ...b, bin_width: e.target.value ? Number(e.target.value) : undefined })} aria-label={t('Number ranges')}>
                   <option value="">{t('Exact value')}</option>
                   {BINS.map((w) => (
                     <option key={w} value={w}>

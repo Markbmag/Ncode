@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
   Alert, AlertIcon, Badge, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
   VStack, Wrap, WrapItem, useBreakpointValue, useDisclosure,
@@ -64,7 +65,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
     }
   });
   const [autoPreview, setAutoPreview] = useState(() => loadJson('ncode_auto_preview', true));
-  const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
+  const [smartDates, setSmartDates] = useState(() => loadJson(SMART_DATES_KEY, SMART_DATES_DEFAULT));
   const [showFields, setShowFields] = useState(false);
   const [viz, setViz] = useState<VizState>(() => {
     if (saved) return saved.viz ?? DEFAULT_VIZ;
@@ -95,7 +96,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
       // a convenience only
     }
   }, [viz, connection, saved]);
-  useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
+  useEffect(() => saveJson(SMART_DATES_KEY, smartDates), [smartDates]);
   useEffect(() => {
     if (saved) return; // a saved question is its own draft
     try {
@@ -359,11 +360,12 @@ export function Builder({ connection, saved = null }: { connection: string; save
         dirty={dirty}
         defaultName={validDraft ? humanize(validDraft.source.table) : t('Question')}
         payload={() => (prepared0 && prepared0.problems.length === 0 ? { kind: 'builder', spec: prepared0.spec, viz, parameters: paramDefs } : null)}
-        onRevert={() => {
-          if (!saved) return;
-          setDraft(saved.spec as QuerySpec);
-          setViz(saved.viz ?? DEFAULT_VIZ);
-          setDefs(saved.parameters);
+        onRevert={(to) => {
+          const q = to ?? saved;
+          if (!q) return;
+          setDraft(q.spec as QuerySpec);
+          setViz(q.viz ?? DEFAULT_VIZ);
+          setDefs(q.parameters);
         }}
         onSaved={() => {
           if (saved) return;

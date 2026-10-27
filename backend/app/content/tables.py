@@ -1,8 +1,8 @@
-"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0006 (app/migrations/versions)."""
+"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0008 (app/migrations/versions)."""
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Table, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
 
 from ..appdb import metadata  # one MetaData for the whole app DB (the migration test compares it)
 
@@ -39,6 +39,7 @@ questions_table = Table(
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
     Column("model", Boolean, nullable=False, default=False),  # usable as a source like a table (M7)
+    Index("ix_questions_archived_updated_at", "archived", "updated_at"),  # M10 (migration 0008)
 )
 
 permissions_table = Table(
@@ -50,6 +51,8 @@ permissions_table = Table(
     Column("role", String(16)),
     Column("level", String(8), nullable=False),
     Column("group_id", Integer),  # M9
+    Index("ix_permissions_user_id", "user_id"),
+    Index("ix_permissions_group_id", "group_id"),
 )
 
 favorites_table = Table(
@@ -59,6 +62,7 @@ favorites_table = Table(
     Column("item_type", String(16), primary_key=True),
     Column("item_id", Integer, primary_key=True),
     Column("created_at", Float, nullable=False),
+    Index("ix_favorites_item", "item_type", "item_id"),
 )
 
 dashboards_table = Table(
@@ -77,6 +81,7 @@ dashboards_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+    Index("ix_dashboards_archived_updated_at", "archived", "updated_at"),
 )
 
 dashboard_cards_table = Table(
@@ -114,6 +119,7 @@ datasets_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+    Index("ix_datasets_archived_updated_at", "archived", "updated_at"),
 )
 
 # ---------------------------------------------------------------- semantic layer (M7)

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    Boolean, Column, Float, Integer, MetaData, String, Table, Text,
+    Boolean, Column, Float, Index, Integer, MetaData, String, Table, Text,
     create_engine, delete, func, insert, select, update,
 )
 from sqlalchemy.engine import URL
@@ -115,6 +115,8 @@ audit_table = Table(
     Column("found", Integer),
     Column("error_count", Integer),
     Column("duration_sec", Float),
+    Index("ix_audit_log_username_ts", "username", "ts"),  # Admin → Audit / Usage filters (migration 0008)
+    Index("ix_audit_log_action_ts", "action", "ts"),
 )
 
 
@@ -281,9 +283,11 @@ class AppDB:
             conn.execute(delete(sessions_table).where(sessions_table.c.user_id == uid))
             conn.execute(delete(group_members_table).where(group_members_table.c.user_id == uid))
             conn.execute(delete(users_table).where(users_table.c.id == uid))
-            from .content.store import forget_user  # the library imports this module
+            from .automation.store import forget_recipient  # both import this module
+            from .content.store import forget_user
 
             forget_user(conn, uid, username)
+            forget_recipient(conn, username)
         return True
 
     # -- groups (M9) ---------------------------------------------------------

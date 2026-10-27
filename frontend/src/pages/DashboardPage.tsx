@@ -8,7 +8,10 @@ import ReactGridLayout, { useContainerWidth, verticalCompactor } from 'react-gri
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { apiErrorMessage, http } from '../api';
+import { refreshLibrary } from '../library/api';
 import type { SavedQuestion } from '../library/api';
+import { withBase } from '../library/conflict';
+import { useEditConflict } from '../library/ConflictDialog';
 import {
   ArchiveIcon, BellIcon, ChartIcon, GlobeIcon, ChevronRightIcon, CopyIcon, FolderIcon, LayoutIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, SaveIcon,
   SlidersIcon, StarIcon, XIcon,
@@ -21,8 +24,10 @@ import { cardQueue, dashboards, useDashboard } from '../dashboards/api';
 import { DashboardCard } from '../dashboards/DashboardCard';
 import { AddQuestionDialog, CardDialog, FiltersDialog } from '../dashboards/EditDialogs';
 import { FilterBar } from '../dashboards/FilterBar';
+import { applyToSearch } from '../dashboards/filterValues';
+import type { FilterUpdate } from '../dashboards/filterValues';
 import {
-  DEFAULT_SIZE, addTab, applyLayout, cardsOnTab, newKey, placeNew, removeTab, runValues, toDefinition, valuesFromSearch, valuesToSearch,
+  DEFAULT_SIZE, addTab, applyLayout, cardsOnTab, newKey, placeNew, removeTab, runValues, toDefinition, valuesFromSearch,
 } from '../dashboards/logic';
 import type { FilterValues } from '../dashboards/logic';
 import { REFRESH_CHOICES } from '../dashboards/types';
@@ -59,6 +64,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const definitionOf = (d: Dashboard): Definition => ({ filters: d.filters, tabs: d.tabs, cards: d.cards, settings: d.settings });
   // set while editing; a new dashboard opens in edit mode (?edit=1)
   const [draft, setDraft] = useState<Definition | null>(() => (search.get('edit') === '1' && canEdit ? definitionOf(dashboard) : null));
+  // the version the draft was started from: a save on top of someone else's newer one is refused (409)
+  const [base, setBase] = useState<number>(dashboard.updated_at);
+  const conflict = useEditConflict();
   const editing = draft !== null;
   const def: Definition = draft ?? dashboard;
   useEffect(() => {
@@ -86,7 +94,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
 
   // filters and tab live in the URL, so a link shows the same view
   const values = useMemo(() => valuesFromSearch(search), [search]);
-  const setValues = (next: FilterValues) => setSearch((prev) => valuesToSearch(next, prev), { replace: true });
+  // The router hands setSearch the query of the last render; read the address bar instead, so a
+  // second change made before the re-render (the end of a date range) keeps the first one.
+  const setValues = (update: FilterUpdate | FilterValues) =>
+    setSearch(() => applyToSearch(update, new URLSearchParams(window.location.search)), { replace: true });
   const tabParam = search.get('tab');
   const activeTab = def.tabs.length ? (def.tabs.find((t) => t.id === tabParam)?.id ?? def.tabs[0].id) : null;
   const setTab = (id: string) =>
@@ -124,7 +135,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   };
 
   // ------------------------------------------------------------------ editing
-  const startEdit = () => setDraft(definitionOf(dashboard));
+  const startEdit = () => {
+    setBase(dashboard.updated_at);
+    setDraft(definitionOf(dashboard));
+  };
   const change = useCallback((fn: (d: Definition) => Definition) => setDraft((d) => (d ? fn(d) : d)), []);
   const tabCards = cardsOnTab(def, activeTab);
   const addCard = (card: Omit<DashCard, 'key' | 'layout' | 'tab'>) =>
@@ -142,15 +156,23 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       const byKey = new Map(updated.map((c) => [c.key, c]));
       return { ...d, cards: d.cards.map((c) => byKey.get(c.key) ?? c) };
     });
-  const save = async () => {
+  const save = async (overwrite = false) => {
     if (!draft) return;
     setSaving(true);
     try {
-      await dashboards.save(dashboard.id, toDefinition({ ...draft, settings: { ...draft.settings, refresh: refreshEvery as Definition['settings']['refresh'] } }));
+      const definition = toDefinition({ ...draft, settings: { ...draft.settings, refresh: refreshEvery as Definition['settings']['refresh'] } });
+      await dashboards.save(dashboard.id, definition, overwrite ? null : base);
       setDraft(null);
       toast({ status: 'success', title: t('Dashboard saved'), duration: 1500 });
     } catch (e) {
-      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
+      const offered = conflict.offer(e, {
+        reload: () => {
+          setDraft(null); // their version is shown once it is loaded
+          return refreshLibrary();
+        },
+        overwrite: () => save(true),
+      });
+      if (!offered) toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')), duration: 6000, isClosable: true });
     } finally {
       setSaving(false);
     }
@@ -430,6 +452,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       </Box>
 
       <PrintStyles />
+      {conflict.dialog}
 
       {/* dialogs */}
       <AddQuestionDialog
@@ -459,7 +482,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       <SubscriptionsDrawer
         isOpen={subsOpen}
         onClose={() => setSubsOpen(false)}
-        target={{ type: 'dashboard', id: dashboard.id, name: dashboard.name, filters: dashboard.filters }}
+        target={{ type: 'dashboard', id: dashboard.id, name: dashboard.name, filters: dashboard.filters, values }}
       />
       {share.isOpen && (
         <ShareDialog
@@ -473,7 +496,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         onClose={move.onClose}
         title={t('Move “{name}”', { name: dashboard.name })}
         current={dashboard.collection_id}
-        onMove={(target) => dashboards.update(dashboard.id, { collection_id: target as number })}
+        onMove={(target, overwrite) => dashboards.update(dashboard.id, withBase({ collection_id: target as number }, dashboard.updated_at, overwrite))}
       />
     </Box>
   );
@@ -504,7 +527,9 @@ function DetailsDialog({ dashboard, onClose }: { dashboard: Dashboard; onClose: 
       title={t('Rename / describe')}
       submitLabel={t('Save')}
       canSubmit={name.trim() !== ''}
-      onSubmit={() => dashboards.update(dashboard.id, { name: name.trim(), description: description.trim() || null })}
+      onSubmit={(overwrite) =>
+        dashboards.update(dashboard.id, withBase({ name: name.trim(), description: description.trim() || null }, dashboard.updated_at, overwrite))
+      }
     >
       <FormControl isRequired>
         <FormLabel fontSize="sm">{t('Name')}</FormLabel>

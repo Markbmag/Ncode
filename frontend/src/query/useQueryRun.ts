@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { apiErrorMessage, http } from '../api';
+import { apiErrorDetails, apiErrorMessage, http } from '../api';
 import type { ResultEnvelope } from '../api';
 import { t } from '../i18n/index.ts';
 
@@ -10,6 +10,7 @@ export interface TaskSnapshot {
   status: 'running' | 'completed' | 'error' | 'cancelled';
   result: ResultEnvelope | null;
   error: string | null;
+  error_details?: string | null; // the database's own text behind `error`
   elapsed_ms: number;
 }
 
@@ -18,6 +19,7 @@ export interface RunState {
   status: TaskSnapshot['status'] | 'failed' | null; // failed = the request itself was refused (400, 429 ...)
   result: ResultEnvelope | null;
   error: string | null;
+  errorDetails?: string | null;
   taskId: string | null;
   startedAt: number | null;
 }
@@ -74,6 +76,7 @@ export function useQueryRun() {
           status: snap.status,
           result: snap.status === 'completed' ? snap.result : snap.status === 'cancelled' ? prev.result : null,
           error: snap.error,
+          errorDetails: snap.error_details ?? null,
         }));
       } catch (error) {
         if (id !== runId.current) return;
@@ -84,6 +87,7 @@ export function useQueryRun() {
           status: 'failed',
           result: status === 400 || status === 422 ? null : prev.result,
           error: apiErrorMessage(error, t('The query could not be started')),
+          errorDetails: apiErrorDetails(error) ?? null,
         }));
       }
     },

@@ -28,7 +28,8 @@ from pydantic import BaseModel, Field
 
 from ..appdb import AppDB, User
 from ..config import Settings
-from ..db import ConnectionRegistry, describe_error
+from ..db import ConnectionRegistry
+from ..dberrors import db_http_error
 from ..rowsec import RowSecurityError
 from ..schema_graph import relationships
 from .compiler import CompileError, compile_spec, fingerprint, render_sql
@@ -120,6 +121,26 @@ class CheckSqlRequest(BaseModel):
     sql: str = Field(min_length=1, max_length=100_000)
 
 
+AUDIT_OPTIONS_MAX = 4_000
+
+
+def audit_options(options: dict[str, Any]) -> str:
+    """What the audit log keeps of a run's options (M10: every run adds a row, so keep it small).
+
+    Always valid JSON (usage analytics read question_id, dashboard_id and subscription_id
+    from it). A saved question's spec is left out - its id says what ran; an oversized
+    rest keeps only the plain values (ids, limit) and says "truncated"."""
+    out = dict(options)
+    if out.get("question_id") is not None:
+        out.pop("spec", None)
+    text = json.dumps(out, default=str)
+    if len(text) <= AUDIT_OPTIONS_MAX:
+        return text
+    small = {k: v[:200] if isinstance(v, str) else v for k, v in out.items() if v is None or isinstance(v, (bool, int, float, str))}
+    small["truncated"] = True
+    return json.dumps(small, default=str)
+
+
 def register_query_routes(
     app: FastAPI,
     *,
@@ -148,8 +169,7 @@ def register_query_routes(
             columns = registry.get_schema(key)
             _primary, foreign = registry.get_keys(key)
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "Could not read the database structure") from exc
         engine = registry.get_engine(key)
         fields: dict[str, Any] = {}
         metric_formats: dict[str, Any] = {}
@@ -185,8 +205,7 @@ def register_query_routes(
 
     def audit_start(user: User, action: str, connection: str, sql: str, options: dict[str, Any]) -> int:
         return app_db.audit(
-            user.username, action, connection=connection, phrase=sql[:200],
-            options=json.dumps(options, default=str)[:20_000], status="running",
+            user.username, action, connection=connection, phrase=sql[:200], options=audit_options(options), status="running",
         )
 
     def audit_finish(audit_id: int) -> Callable[[QueryTask], None]:

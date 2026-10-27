@@ -11,6 +11,7 @@
     python -m app.manage delete-user alice
     python -m app.manage audit --limit 50                  # who searched what
     python -m app.manage generate-key                      # a new NCODE_SECRET_KEY value
+    python -m app.manage check                             # ready to start? (after an upgrade; exit code 1 = no)
     python -m app.manage import-datadesk app-data.sqlite --map db1=mes,db2=crm --dry-run
 """
 
@@ -83,6 +84,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("audit")
     p.add_argument("--limit", type=int, default=50)
     sub.add_parser("generate-key", help="print a new encryption key for NCODE_SECRET_KEY")
+    sub.add_parser("check", help="check settings, app database, secret key, databases, backups (after an upgrade)")
     p = sub.add_parser("backup", help="write a backup zip (app database + uploaded files) to data/backups")
     p.add_argument("--to", default=None, help="another folder for the zip")
     p = sub.add_parser("restore", help="replace Ncode's data with a backup zip - STOP THE SERVER FIRST")
@@ -102,6 +104,10 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     init_environment()
+    if args.command == "check":  # reports bad settings itself; must not create or migrate anything
+        from .check import main as check
+
+        sys.exit(check())
     try:
         settings = load_settings()
         known = set(load_connections())

@@ -258,6 +258,20 @@ CASES: list[Case] = [
         ordered=True,
     ),
     Case(
+        # Names in any language (M10): a custom column, a breakout and a result name in Cyrillic,
+        # with spaces, quoted as identifiers on every engine (also in ORDER BY the result name).
+        "unicode_names_for_custom_columns_and_results",
+        {"source": {"table": "q_orders"},
+         "expressions": [{"name": "Размер заказа", "expr": {
+             "case": [{"when": {"ref": "total", "op": ">=", "value": 100}, "then": {"value": "big"}}],
+             "else": {"value": "small"}}}],
+         "aggregations": [{"fn": "count", "alias": "Число заказов"}],
+         "breakouts": [{"ref": "Размер заказа", "alias": "Размер"}],
+         "order": [{"ref": "Число заказов", "dir": "desc"}]},
+        [("small", 5), ("big", 2)],
+        ordered=True,
+    ),
+    Case(
         "full_join",
         {"source": {"table": "q_orders"}, "joins": [{"table": "q_customers", "type": "full"}],
          "aggregations": [{"fn": "count", "alias": "n"}]},

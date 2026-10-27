@@ -105,3 +105,15 @@ describe('collection tree', () => {
     assert.deepEqual(nodes.map((n) => [n.name, n.depth]), [['A', 0], ['A1', 1], ['A1a', 2], ['B', 0], ['Shared alone', 0]]);
   });
 });
+
+test('edit conflicts are told apart from other 409s, and "save mine anyway" drops the version check', async () => {
+  const { isEditConflict, withBase } = await import('../src/library/conflict.ts');
+  assert.equal(isEditConflict({ response: { status: 409, headers: { 'x-edit-conflict': '1' } } }), true);
+  assert.equal(isEditConflict({ response: { status: 409, headers: {} } }), false); // "archive it first"
+  assert.equal(isEditConflict({ response: { status: 400, headers: { 'x-edit-conflict': '1' } } }), false);
+  assert.equal(isEditConflict(new Error('offline')), false);
+  assert.equal(isEditConflict(null), false);
+  assert.deepEqual(withBase({ name: 'A' }, 1793122524.0389974), { name: 'A', base_updated_at: 1793122524.0389974 });
+  assert.deepEqual(withBase({ name: 'A' }, 1793122524.0389974, true), { name: 'A' });
+  assert.deepEqual(withBase({ name: 'A' }, null), { name: 'A' });
+});

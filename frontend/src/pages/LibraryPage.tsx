@@ -12,6 +12,7 @@ import {
   SearchIcon, StarIcon, TrashIcon, UploadIcon, UsersIcon,
 } from '../icons';
 import { flattenTree, library, useArchive, useCollection, useCollections, useQuestions } from '../library/api';
+import { withBase } from '../library/conflict';
 import type { CollectionInfo, QuestionKind, QuestionSummary } from '../library/api';
 import { CollectionDialog, ConfirmDialog, MoveDialog, ShareDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
@@ -19,7 +20,8 @@ import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 import { DatasetRow } from './DatasetsPage';
 import { datasets } from '../federation/api';
 import { UploadDialog } from '../federation/UploadDialog';
-import { locale, t, tc } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tc } from '../i18n/index.ts';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
@@ -29,7 +31,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString(locale());
+  return localDateText(ts * 1000);
 }
 
 /** /library, /library/c/:id and /library/archive. */
@@ -467,7 +469,7 @@ function CollectionView({ id }: { id: number }) {
         current={c.parent_id}
         allowRoot
         exclude={c.id}
-        onMove={(target) => library.updateCollection(c.id, { parent_id: target })}
+        onMove={(target, overwrite) => library.updateCollection(c.id, withBase({ parent_id: target }, c.updated_at, overwrite))}
       />
     </VStack>
   );

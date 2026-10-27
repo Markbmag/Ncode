@@ -12,6 +12,7 @@ import { UsagePanel } from '../admin/UsagePanel';
 import { PeopleSettings } from '../admin/PeopleSettings';
 import { AuditPanel } from '../admin/AuditPanel';
 import { SystemPanel } from '../admin/SystemPanel';
+import { BrokenContentPanel } from '../admin/BrokenContentPanel';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
@@ -185,6 +186,7 @@ export default function AdminPage() {
           <Tab data-testid="admin-tab-usage">{t('Usage')}</Tab>
           <Tab data-testid="admin-tab-audit">{t('Audit')}</Tab>
           <Tab data-testid="admin-tab-system">{t('System')}</Tab>
+          <Tab data-testid="admin-tab-broken">{t('Broken content')}</Tab>
         </TabList>
         <TabPanels>
           <TabPanel px={0} pt={5}>
@@ -273,10 +275,13 @@ export default function AdminPage() {
           <TabPanel px={0} pt={5}>
             <SystemPanel />
           </TabPanel>
+          <TabPanel px={0} pt={5}>
+            <BrokenContentPanel />
+          </TabPanel>
         </TabPanels>
       </Tabs>
     </VStack>
   );
 }
 
-const TABS = ['databases', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system'];
+const TABS = ['databases', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system', 'broken'];

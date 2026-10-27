@@ -23,7 +23,7 @@
     POST   /api/search                  -> {"task_id": ...}
     GET    /api/search/{task_id}        -> progress (+ results when finished)
     DELETE /api/search/{task_id}        -> cancel
-    WS     /ws/{task_id}                first client message: {"token": "..."}
+    WS     /ws/{task_id}                first client message: {"token": "...", "lang": "en" or "ru"}
 
 Send the token as `Authorization: Bearer <token>`.
 """
@@ -49,7 +49,10 @@ from pydantic import BaseModel, Field
 from .appdb import ANONYMOUS, AppDB, User
 from .config import ENGINES, ConnectionConfig, Settings, driver_available, normalize_engine
 from .crypto import CipherError
-from .db import ConnectionRegistry, describe_error, probe
+from .db import ConnectionRegistry, probe
+from .dberrors import db_http_error, explain
+from .errors import install_error_handling
+from .i18n import localize, parse_language
 from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
 from .query.routes import register_query_routes
@@ -60,8 +63,9 @@ from .automation.scheduler import Scheduler
 from .automation.settings import SettingsStore
 from .automation.store import SubscriptionStore
 from .sharing.routes import register_sharing_routes
-from .usage import register_usage_routes
+from .usage import AuditRetention, register_usage_routes
 from .admin_routes import register_admin_routes
+from .content.health import register_broken_content_routes
 from .backup import AutoBackup
 from .metrics import Metrics
 from .ops_routes import register_ops_routes
@@ -98,6 +102,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         workers=settings.query_workers,
         timeout_sec=settings.statement_timeout_sec,
         cache_ttl_sec=settings.query_cache_ttl_sec,
+        task_ttl_sec=settings.task_ttl_sec,
     )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
     semantic = SemanticStore(app_db.engine)
@@ -110,6 +115,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     scheduler = Scheduler(automation, subscriptions, interval_sec=settings.scheduler_interval_sec, workers=settings.scheduler_workers)
     scheduler.chores.append(AutoBackup(app_db.path, settings.backup_hour, settings.backup_keep).tick)
+    scheduler.chores.append(AuditRetention(app_db, settings.audit_keep_days).tick)  # M10: the audit log does not grow forever
     metrics = Metrics()
     bearer = HTTPBearer(auto_error=False)
 
@@ -130,13 +136,14 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         app_db.dispose()
 
     app = FastAPI(title="Ncode", version="0.3.0", lifespan=lifespan)
+    install_error_handling(app)  # before CORS: error answers (also unexpected 500s) keep the CORS headers
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["*"],
-        expose_headers=["Retry-After"],  # lets the login screen show the lockout countdown
+        expose_headers=["Retry-After", "X-Edit-Conflict"],  # lockout countdown; edit conflicts (M10)
     )
 
     @app.middleware("http")
@@ -351,15 +358,20 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
 
     @app.get("/api/connections", response_model=list[ConnectionInfo])
     def list_connections(user: User = Depends(current_user)):
-        # Host, user and password are never exposed here.
+        # Host, user and password are never exposed here. Non-admins (M10) see only what they
+        # pick a database by: no file paths (SQLite), no id hints, not where it is defined.
+        def file_based(c: ConnectionConfig) -> bool:
+            info = ENGINES.get(c.engine)
+            return info is not None and info.file_based
+
         return [
             ConnectionInfo(
                 key=c.key,
                 label=c.label,
                 engine=c.engine,
-                database=c.database,
-                id_hints=list(c.id_hints),
-                source=c.source,
+                database=c.database if user.is_admin or not file_based(c) else "",
+                id_hints=list(c.id_hints) if user.is_admin else [],
+                source=c.source if user.is_admin else "",
                 editable=user.is_admin and c.source == "ui",
             )
             for c in sorted(registry.configs.values(), key=lambda c: c.label.lower())
@@ -380,7 +392,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         try:
             tables = probe(replace(cfg, password=password), settings)
         except Exception as exc:
-            return {"ok": False, "error": describe_error(exc, cfg.engine)}
+            info = explain(exc, cfg.engine)
+            return {"ok": False, "error": info.message, "details": info.details}
         return {"ok": True, "tables": tables}
 
     @app.post("/api/connections", response_model=ConnectionDetails, status_code=201)
@@ -444,7 +457,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         try:
             registry.test(key)
         except Exception as exc:
-            return {"ok": False, "error": describe_error(exc, registry.get_config(key).engine)}
+            info = explain(exc, registry.get_config(key).engine)
+            return {"ok": False, "error": info.message, "details": info.details}
         return {"ok": True}
 
     @app.get("/api/connections/{key}/tables")
@@ -453,8 +467,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         try:
             schema = registry.get_schema(key, refresh=refresh)
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "Could not read the database structure") from exc
         return {
             "tables": [
                 {
@@ -475,8 +488,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             columns = registry.get_schema(key, refresh=refresh)
             primary, foreign = registry.get_keys(key, refresh=refresh)
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "Could not read the database structure") from exc
         return {"connection": key, **describe_schema(columns, primary, foreign, **schema_extras(semantic, key))}
 
     # ------------------------------------------------------------------
@@ -487,8 +499,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         try:
             schema_map = registry.get_schema(key)
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "Could not read the database structure") from exc
         if table in schema_map:
             return table, schema_map[table]
         lowered = {name.lower(): name for name in schema_map}
@@ -555,8 +566,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 row_filter=row_filter,
             )
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"The query failed: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "The query failed") from exc
         if offset == 0:  # log "opened the table" once, not every page
             app_db.audit(
                 user.username, "browse", connection=key, phrase=name + (f" ~ {search.phrase}" if search else ""), status="ok"
@@ -570,8 +580,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         try:
             cols = table_structure(registry.get_engine(key), registry.get_config(key), name, columns)
         except Exception as exc:
-            detail = describe_error(exc, registry.get_config(key).engine)
-            raise HTTPException(status_code=502, detail=f"Could not read the table: {detail}") from exc
+            raise db_http_error(exc, registry.get_config(key).engine, "Could not read the table") from exc
         return {"table": name, "columns": cols}
 
     @app.get("/api/connections/{key}/export")
@@ -597,8 +606,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             browse_table(engine, cfg, name, columns, limit=1, offset=0, sort=sort, descending=desc, search=search,
                          row_filter=row_filter)
         except Exception as exc:
-            detail = describe_error(exc, cfg.engine)
-            raise HTTPException(status_code=502, detail=f"The export failed: {detail}") from exc
+            raise db_http_error(exc, cfg.engine, "The export failed") from exc
         app_db.audit(
             user.username, "export", connection=key, phrase=name + (f" ~ {search.phrase}" if search else ""), status="ok"
         )
@@ -698,8 +706,9 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             try:
                 first = await asyncio.wait_for(websocket.receive_json(), timeout=5)
                 token = first.get("token") if isinstance(first, dict) else None
+                lang = parse_language(first.get("lang")) if isinstance(first, dict) else "en"
             except (asyncio.TimeoutError, ValueError, KeyError):
-                token = None
+                token, lang = None, "en"
             user = await asyncio.to_thread(user_from_token, token)
             if user is None:
                 await websocket.send_json({"status": "unauthorized"})
@@ -714,11 +723,11 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             last_sent = None
             while True:
                 if task.is_final:
-                    await websocket.send_json(task.snapshot(include_results=True))
+                    await websocket.send_json(localize(task.snapshot(include_results=True), lang))
                     break
                 progress = task.progress()
                 if progress != last_sent:
-                    await websocket.send_json(progress)
+                    await websocket.send_json(localize(progress, lang))
                     last_sent = progress
                 await asyncio.sleep(0.3)
         except WebSocketDisconnect:
@@ -774,5 +783,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     register_admin_routes(
         app, app_db=app_db, registry=registry, rowsec=rowsec, session_ttl_hours=settings.session_ttl_hours,
         current_user=current_user, require_admin=require_admin,
+    )
+    app.state.content_health = register_broken_content_routes(  # Admin → Broken content (M10)
+        app, app_db=app_db, registry=registry, semantic=semantic, require_admin=require_admin,
     )
     return app

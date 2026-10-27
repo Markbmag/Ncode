@@ -21,7 +21,8 @@ from pydantic import BaseModel, Field, model_validator
 from ..appdb import User
 from ..config import Settings
 from ..content.store import ContentError, ContentStore
-from ..db import ConnectionRegistry, describe_error
+from ..db import ConnectionRegistry
+from ..dberrors import db_http_error
 from ..federation.workspace import Workspace, available
 from ..query.compiler import fingerprint
 from ..query.routes import MAX_WAIT_MS, QueryService
@@ -79,7 +80,7 @@ def register_analysis_routes(
         try:
             schema = registry.get_schema(connection)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Could not read the database structure: {describe_error(exc)}") from exc
+            raise db_http_error(exc, registry.get_config(connection).engine, "Could not read the database structure") from exc
         real = table if table in schema else next((t for t in schema if t.lower() == table.lower()), None)
         if real is None:
             raise HTTPException(status_code=404, detail=f"Unknown table {table!r}")

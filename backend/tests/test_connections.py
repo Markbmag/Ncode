@@ -225,3 +225,17 @@ def test_search_can_be_limited_to_chosen_tables(env):
     assert {r["table"] for r in data["results"]} == {"notes"}
     assert data["total"] == 1
     assert "elapsed_sec" in data
+
+
+def test_non_admins_see_no_paths_or_where_a_connection_is_defined(env):
+    """M10: the list gives non-admins key, label, engine and (server databases) the database name."""
+    client, app_db, admin, alice, db = env
+    created = client.post("/api/connections", json=mysql_payload(), headers=admin)
+    assert created.status_code == 201, created.text
+    as_admin = {c["key"]: c for c in client.get("/api/connections", headers=admin).json()}
+    assert as_admin["envdb"]["database"] == str(db) and as_admin["envdb"]["source"] == "env"
+    as_alice = {c["key"]: c for c in client.get("/api/connections", headers=alice).json()}
+    assert as_alice["envdb"] == {"key": "envdb", "label": "From env", "engine": "sqlite", "database": "",
+                                 "id_hints": [], "source": "", "editable": False}
+    mysql = next(c for c in as_alice.values() if c["engine"] == "mysql")
+    assert mysql["database"] == "shop" and mysql["source"] == "" and "10.0.0.5" not in str(as_alice)

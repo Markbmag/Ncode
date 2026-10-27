@@ -21,6 +21,7 @@ from sqlalchemy.engine import Engine
 
 from .config import ConnectionConfig, Settings
 from .db import ConnectionRegistry
+from .dberrors import describe_error
 from .serialize import serialize_value
 from .tasks import SearchTask
 
@@ -198,9 +199,7 @@ def search_table(
 
 
 def _short_error(exc: Exception) -> str:
-    # `orig` is the driver's own error (cleaner than the SQLAlchemy wrapper)
-    message = str(getattr(exc, "orig", None) or exc).strip().splitlines()[0]
-    return message[:300]
+    return describe_error(exc)  # a plain sentence (app/dberrors.py)
 
 
 # --------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import type { VizSpec } from '../viz/types';
 import { useQueryLog, useUsage } from './api';
 import type { LoggedQuery } from './api';
 import { Panel } from './Panel';
+import { localDateText } from '../viz/format';
 import { locale, t, tc, tn } from '../i18n/index.ts';
 
 const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? t('{s} s', { s: v.toFixed(2) }) : t('{s} s', { s: Math.round(v) }));
@@ -62,7 +63,7 @@ export function UsagePanel() {
           {perDay && perDay.rows.length > 0 && (
             <Panel title={t('Queries per day')}>
               <Box h="240px">
-                <Visualization result={perDay} viz={chart} />
+                <Visualization result={perDay} viz={chart} scaleNote={false} />
               </Box>
             </Panel>
           )}
@@ -93,7 +94,7 @@ export function UsagePanel() {
               />
             </Panel>
             <Panel title={t('People')}>
-              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), new Date(p.last_seen * 1000).toLocaleDateString(locale())])} />
+              <Small head={[tc('person', 'Name'), t('Queries'), t('Avg'), t('Last seen')]} rows={u.people.map((p) => [p.username, p.queries, sec(p.avg_sec), localDateText(p.last_seen * 1000)])} />
             </Panel>
             <Panel title={t('Where queries come from')}>
               <Small head={[t('Source'), t('Queries')]} rows={u.sources.map((s) => [s.source, s.queries])} />
@@ -194,7 +195,7 @@ function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
           {rows.map((r) => (
             <Tr key={r.id} verticalAlign="top">
               <Td fontSize="xs" whiteSpace="nowrap">
-                {new Date(r.ts * 1000).toLocaleString(locale())}
+                {localDateText(r.ts * 1000, true)}
               </Td>
               <Td fontSize="xs">
                 {r.username}

@@ -53,14 +53,14 @@ export function JoinStep({ spec, columns, labels, onChange }: Props) {
             </Flex>
             <VStack align="stretch" spacing={1.5}>
               {j.on.map((pair, k) => (
-                <Flex key={k} gap={1.5} align="center" wrap={{ base: 'wrap', md: 'nowrap' }}>
+                <Flex key={k} gap={1.5} align="center" wrap="wrap">
                   <KeySelect options={leftOptions} value={pair.left} onChange={(left) => setKey(k, { ...pair, left })} label={t('Key on the left')} testId="key-left" />
                   <Text fontSize="sm" color="faintText">
                     =
                   </Text>
                   <KeySelect options={rightOptions} value={pair.right} onChange={(right) => setKey(k, { ...pair, right })} label={t('Key of {source}', { source: j.source })} testId="key-right" />
                   <Tooltip label={t('How the key values are compared. Automatic: numbers as numbers, text trimmed.')} hasArrow openDelay={300}>
-                    <Select size="xs" w="auto" minW="120px" maxW="190px" value={pair.match ?? 'auto'} onChange={(e) => setKey(k, { ...pair, match: e.target.value as KeyMatch })} aria-label={t('Compare keys')}>
+                    <Select size="xs" w="auto" maxW="100%" value={pair.match ?? 'auto'} onChange={(e) => setKey(k, { ...pair, match: e.target.value as KeyMatch })} aria-label={t('Compare keys')}>
                       {MATCHES.map((m) => (
                         <option key={m.value} value={m.value}>
                           {t(m.label)}
@@ -102,7 +102,7 @@ function KeySelect({ options, value, onChange, label, testId }: {
   }
   const missing = value && !options.some((o) => o.ref === value);
   return (
-    <Select size="xs" flex={1} minW="140px" value={value} onChange={(e) => onChange(e.target.value)} placeholder={t('Pick a column…')} aria-label={label} data-testid={testId}>
+    <Select size="xs" rootProps={{ flex: '1 1 140px', minW: '120px' }} value={value} onChange={(e) => onChange(e.target.value)} placeholder={t('Pick a column…')} aria-label={label} data-testid={testId}>
       {missing && <option value={value}>{value}</option>}
       {[...groups.entries()].map(([group, items]) => (
         <optgroup key={group} label={group}>

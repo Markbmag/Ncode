@@ -9,6 +9,7 @@ import { AccountDialog } from '../account/AccountDialog';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
+import { engineMeta } from '../lib/engines';
 import { t } from '../i18n/index.ts';
 
 interface SidebarProps {
@@ -170,7 +171,8 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
                   {connection.label}
                 </Text>
                 <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                  {connection.database}
+                  {/* non-admins get no file paths: the engine name stands in */}
+                  {connection.database || engineMeta(connection.engine).label}
                 </Text>
               </Box>
               {connection.source === 'env' && (

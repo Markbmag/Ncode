@@ -282,3 +282,39 @@ def test_text_dates_and_conditional_sums_on_the_server(live):
         assert rows == {None: (2, 0), "2026-01-01": (2, 0), "2026-02-01": (3, 3)}
     finally:
         md.drop_all(engine)
+
+
+def test_values_json_cannot_carry_as_they_are(ncode_engine):
+    """NaN / infinity, json, big numbers and durations reach the browser intact (M10)."""
+    import json
+
+    name = ncode_engine.dialect.name
+    if name == "postgresql":
+        env = sql(ncode_engine, "SELECT 'NaN'::float8 nan, '-Infinity'::float8 inf, '{\"a\": [1, 2]}'::jsonb j, "
+                                "12345678901234567890::numeric n, 0.1::numeric d, 9223372036854775807::bigint b, "
+                                "'infinity'::timestamp t, '-infinity'::timestamptz tz, 'infinity'::date dd")
+        assert env.rows == [[None, None, '{"a": [1, 2]}', "12345678901234567890", 0.1, "9223372036854775807",
+                             "infinity", "-infinity", "infinity"]]
+        assert [c.type for c in env.columns][6:] == ["datetime", "datetime", "date"]
+        # infinity next to real dates, through a builder-style statement too
+        with ncode_engine.connect() as conn:
+            from sqlalchemy import text
+            rows = conn.execute(text("SELECT v FROM (VALUES ('infinity'::date), ('2026-01-02'::date)) x(v) ORDER BY v")).all()
+        assert [str(r[0]) for r in rows][0] == "2026-01-02"
+    elif name == "mysql":
+        env = sql(ncode_engine, "SELECT CAST('838:59:59' AS TIME) tm, CAST('-01:02:03' AS TIME) neg, "
+                                "CAST(18446744073709551615 AS UNSIGNED) u, CAST(0.1 AS DECIMAL(30, 20)) d, "
+                                "CAST(12345678901234567890.5 AS DECIMAL(30, 1)) big")
+        assert env.rows == [["838:59:59", "-01:02:03", "18446744073709551615", 0.1, "12345678901234567890.5"]]
+    else:
+        pytest.skip("PostgreSQL and MySQL / MariaDB value types")
+    json.dumps(env.model_dump(), allow_nan=False)
+
+
+def test_number_parameter_out_of_range_has_a_clear_message(ncode_engine):
+    from app.query.sqlguard import GuardError
+
+    with pytest.raises(GuardError, match="too large"):
+        sql(ncode_engine, "SELECT {{n}} AS n", {"n": 10**30})
+    quoted = "SELECT '{{x}}' AS q, {{n}} AS n -- {{y}}"
+    assert sql(ncode_engine, quoted, {"n": 5}).rows == [["{{x}}", 5]]

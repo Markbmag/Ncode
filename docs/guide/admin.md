@@ -43,6 +43,7 @@ In the `backend` folder, `python -m app.manage`:
     list-users
     audit --limit 50                        # who searched what, when, how long
     backup / restore FILE.zip               # see install.md
+    check                                   # ready to start? run after every upgrade (install.md#upgrading)
     import-datadesk app-data.sqlite --map db1=mes --dry-run   # see using.md, "Importing from DataDesk"
 
 - Passwords are stored as scrypt hashes; sessions last `NCODE_SESSION_TTL_HOURS` (12 by default).
@@ -71,6 +72,28 @@ questions and dashboards, slow and failed queries).
 ## System (Admin → System)
 
 Backups (make, download, delete) and the server's health; see [install.md](install.md#backups).
+
+## Broken content (Admin → Broken content)
+
+Databases change: a table is renamed, a column dropped, a connection removed. Saved content that
+still points at the old names would fail when someone opens it; this page lists it in one place,
+grouped into questions, dashboards, subscriptions and uploaded files, each with a sentence saying
+what is missing and an *Open* button:
+
+- **questions** built without SQL (source table, joins, fields, filters, groups, sort, custom
+  columns, metrics), **SQL questions** (only tables that certainly do not exist are reported - views,
+  other schemas, temporary tables and table functions are left alone) and **multi-source questions**
+  (each source: database tables, saved questions, uploaded files);
+- **dashboards** with a card whose question was deleted or archived;
+- **subscriptions** of a deleted question or dashboard;
+- **uploaded files** whose data file is missing on the server, and questions on a removed database.
+
+The report is made the first time the page is opened and kept until *Check again*, which reads every
+database's structure again (one at a time per database, in parallel, at most 60 seconds each). A
+database that cannot be reached is listed as *Couldn't check* with the reason - its questions are not
+reported as broken. When the list is empty: "Everything points at existing tables and columns".
+After renaming something in a database, open this page, *Check again*, and fix what it lists (open the
+question and pick the new column, or restore the table).
 
 ## Languages
 

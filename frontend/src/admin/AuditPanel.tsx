@@ -8,7 +8,8 @@ import { saveBlob } from '../lib/csv';
 import { Panel } from './Panel';
 import { PAGE, useAudit } from './peopleApi';
 import type { AuditFilters } from './peopleApi';
-import { locale, t, tn } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tn } from '../i18n/index.ts';
 
 const day = (value: string, end = false) => (value ? new Date(`${value}T00:00:00`).getTime() / 1000 + (end ? 86400 : 0) : undefined);
 
@@ -87,7 +88,7 @@ export function AuditPanel() {
                 {data.entries.map((e) => (
                   <Tr key={e.id} verticalAlign="top">
                     <Td fontSize="xs" whiteSpace="nowrap">
-                      {new Date(e.ts * 1000).toLocaleString(locale())}
+                      {localDateText(e.ts * 1000, true)}
                     </Td>
                     <Td fontSize="xs">{e.username ?? '—'}</Td>
                     <Td>

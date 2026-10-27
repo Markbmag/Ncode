@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import {
-  Badge, Box, Button, Flex, FormControl, FormLabel, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
+  Alert, AlertIcon, Badge, Box, Button, CloseButton, Flex, FormControl, FormLabel, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
   MenuItem, MenuList, Skeleton, Text, Textarea, Tooltip, VStack, useDisclosure, useToast,
 } from '@chakra-ui/react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
-import { locale, t, tn } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tn } from '../i18n/index.ts';
 import { ArchiveIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, SearchIcon, UploadIcon } from '../icons';
 import { DialogShell, MoveDialog } from '../library/dialogs';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { datasets, formatBytes, useDatasets } from '../federation/api';
+import type { UploadedDataset } from '../federation/api';
+import { encodingLabel } from '../federation/labels';
 import type { Dataset } from '../federation/types';
 import { UploadDialog } from '../federation/UploadDialog';
 
@@ -19,7 +22,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.max(1, Math.floor(s / 60)) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString(locale());
+  return localDateText(ts * 1000);
 }
 
 /** /datasets: uploaded files (CSV, Excel, Parquet) - the sources multi-source questions can use besides databases. */
@@ -27,7 +30,7 @@ export default function DatasetsPage() {
   const ws = useWorkspace();
   const [text, setText] = useState('');
   const upload = useDisclosure();
-  const navigate = useNavigate();
+  const [uploaded, setUploaded] = useState<UploadedDataset | null>(null);
   const list = useDatasets({ q: text.trim() || undefined });
   const enabled = ws.limits.uploads_enabled !== false;
   return (
@@ -43,6 +46,7 @@ export default function DatasetsPage() {
           </Tooltip>
         }
       />
+      {uploaded && <UploadedNotice d={uploaded} onClose={() => setUploaded(null)} />}
       <InputGroup>
         <InputLeftElement pointerEvents="none">
           <SearchIcon boxSize={4} color="faintText" />
@@ -65,8 +69,32 @@ export default function DatasetsPage() {
           <DatasetRow key={d.id} d={d} showCollection />
         ))}
       </Box>
-      <UploadDialog isOpen={upload.isOpen} onClose={upload.onClose} onUploaded={(d) => navigate(`/combine?dataset=${d.id}`)} />
+      <UploadDialog isOpen={upload.isOpen} onClose={upload.onClose} onUploaded={setUploaded} />
     </VStack>
+  );
+}
+
+/** After an upload the page stays here; the new file can go to Combine from this notice. */
+function UploadedNotice({ d, onClose }: { d: UploadedDataset; onClose: () => void }) {
+  const how: string[] = [];
+  if (d.read_as?.encoding && d.read_as.encoding !== 'utf-8') how.push(t('read as {name}', { name: encodingLabel(d.read_as.encoding) }));
+  if (d.read_as?.number_format === 'comma') how.push(t('decimal comma (1 234,5)'));
+  return (
+    <Alert status="success" borderRadius="lg" fontSize="sm" gap={2} data-testid="upload-done">
+      <AlertIcon />
+      <Text flex={1}>
+        {t('“{name}” is uploaded: {rows}, {columns}.', {
+          name: d.name,
+          rows: tn(d.row_count, '{n} row', '{n} rows'),
+          columns: tn(d.columns.length, '{n} column', '{n} columns'),
+        })}
+        {how.length > 0 && ` (${how.join(', ')})`}
+      </Text>
+      <Button as={RouterLink} to={`/combine?dataset=${d.id}`} size="sm" variant="brand" leftIcon={<MergeIcon boxSize={4} />}>
+        {t('Use in Combine')}
+      </Button>
+      <CloseButton size="sm" onClick={onClose} aria-label={t('Close')} />
+    </Alert>
   );
 }
 

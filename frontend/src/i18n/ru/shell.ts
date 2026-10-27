@@ -34,6 +34,8 @@ export const SHELL: Record<string, string> = {
   'Too many attempts. Try again in {n} seconds.': 'Слишком много попыток. Повторите через {n} с.',
   'Too many attempts. Try again in a few seconds.': 'Слишком много попыток. Повторите через несколько секунд.',
   'The server is not reachable. Make sure the backend is running.': 'Сервер недоступен. Проверьте, что backend запущен.',
+  'The server ran into a problem ({status}). Try again; if it keeps happening, tell your administrator.':
+    'На сервере возникла проблема ({status}). Попробуйте ещё раз; если ошибка повторяется, сообщите администратору.',
   'Sign in': 'Войти',
   'Use the account your administrator created for you.': 'Используйте учётную запись, созданную для вас администратором.',
   'Username': 'Имя пользователя',

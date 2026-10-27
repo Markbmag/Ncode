@@ -8,6 +8,9 @@ import pytest
 from app.backup import AutoBackup, BackupError, list_backups, make_backup, prune, restore
 from app.appdb import AppDB
 
+from app.query.routes import AUDIT_OPTIONS_MAX, audit_options
+from app.usage import AuditRetention
+
 from .test_library_api import call, library_env, save_builder
 from .test_query_api import make_client
 
@@ -112,3 +115,44 @@ def test_health_and_metrics(tmp_path):
         text = client.get("/metrics", headers={"Authorization": "Bearer scrape-me"}).text
         assert "ncode_http_requests_total" in text and 'route="/api/health"' in text and "ncode_users 3" in text
         assert "/api/auth/login" in text and "alice" not in text
+
+
+def test_audit_log_is_pruned_daily(tmp_path):
+    db = AppDB(tmp_path / "app.sqlite")
+    now = 2_000_000_000.0
+    for age_days in (400, 366, 10, 0):
+        aid = db.audit("alice", "query", options="{}")
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql("UPDATE audit_log SET ts = ? WHERE id = ?", (now - age_days * 86400, aid))
+    chore = AuditRetention(db, keep_days=365)
+    assert chore.tick(now) == 2
+    db.audit("alice", "query")  # a new old entry is left until the next day
+    with db.engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE audit_log SET ts = ?", (now - 500 * 86400,))
+    assert chore.tick(now + 3600) is None
+    assert chore.tick(now + 86400) == 3
+    assert AuditRetention(db, keep_days=0).tick(now) is None  # 0 = keep forever
+    db.dispose()
+
+
+def test_audit_options_stay_small_and_readable():
+    import json
+    spec = {"connection": "shop", "source": {"table": "t"}, "filters": {"op": "in", "value": ["x" * 50] * 1000}}
+    saved = json.loads(audit_options({"spec": spec, "question_id": 3, "dashboard_id": 5}))
+    assert saved == {"question_id": 3, "dashboard_id": 5}  # the id says what ran
+    big = audit_options({"spec": spec, "subscription_id": 7})
+    assert len(big) <= AUDIT_OPTIONS_MAX and json.loads(big) == {"subscription_id": 7, "truncated": True}
+    small = {"spec": {"connection": "shop", "source": {"table": "t"}}}
+    assert json.loads(audit_options(small)) == small
+
+
+def test_usage_still_counts_dashboard_runs(env):
+    from .test_dashboards_api import card, new_dashboard, put, run_card
+    q = save_builder(env, "alice", spec={"connection": "shop", "source": {"table": "q_orders"}, "aggregations": [{"fn": "count", "alias": "n"}]})
+    d = new_dashboard(env, "alice")
+    put(env, "alice", d["id"], {"cards": [card("c", q["id"])]})
+    run_card(env, "alice", d["id"], "c")
+    usage = call(env, "admin", "GET", "/api/admin/usage")
+    assert usage["dashboards"][0]["id"] == d["id"] and usage["questions"][0]["id"] == q["id"]
+    entry = call(env, "admin", "GET", "/api/admin/audit", params={"action": "query"})["entries"][0]
+    assert '"spec"' not in entry["options"]
