@@ -23,6 +23,7 @@ from ..config import Settings
 from ..content.store import ContentError, ContentStore
 from ..db import ConnectionRegistry, describe_error
 from ..federation.workspace import Workspace, available
+from ..query.compiler import fingerprint
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.runner import QueryRunner, QueryTask, ResultCache, fetch_statement
 from ..query.spec import QuerySpec
@@ -125,11 +126,13 @@ def register_analysis_routes(
             except Exception:
                 total = None  # the count is a nicety; a timeout there must not lose the profile
             ws = Workspace(memory_mb=settings.federation_memory_mb, threads=settings.federation_threads)
+            task.set_cancel_hook(ws.interrupt)  # Stop / timeout while DuckDB profiles
             try:
                 load_typed(ws, "t", names, types, rows)
                 ws.lock()
                 profile = profile_table(ws, "t", total_rows=total, meta=meta)
             finally:
+                task.set_cancel_hook(None)
                 ws.close()
             analysis: dict[str, Any] = {"kind": kind, "title": title, "profile": profile}
             if xray:
@@ -144,7 +147,12 @@ def register_analysis_routes(
         return queries.start_task(
             user, kind="xray" if xray else "profile", connection=base["connection"], sql=f"{'x-ray' if xray else 'profile'}: {title}",
             options={"base": base, "sample": sample}, work=work,
-            cache_key=ResultCache.key("analysis", xray, base, sample), wait_ms=wait_ms, refresh=refresh,
+            # the statements as sent (incl. the viewer's row rules) are part of the key, not just the request
+            cache_key=ResultCache.key(
+                "analysis", xray, base, sample, meta,
+                fingerprint(compiled.limited(1), engine.dialect), fingerprint(counted.limited(), engine.dialect),
+            ),
+            wait_ms=wait_ms, refresh=refresh,
         )
 
     @router.post("/api/profile/table")

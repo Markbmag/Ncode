@@ -31,7 +31,7 @@ from ..config import Settings
 from ..db import ConnectionRegistry, describe_error
 from ..rowsec import RowSecurityError
 from ..schema_graph import relationships
-from .compiler import CompileError, compile_spec, render_sql
+from .compiler import CompileError, compile_spec, fingerprint, render_sql
 from ..content.store import ContentError
 from ..results import ResultEnvelope
 from .runner import QueryRunner, QueryTask, ResultCache, run_sql, run_statement
@@ -230,7 +230,7 @@ def register_query_routes(
             task,
             lambda t: finish_envelope(run_statement(engine, t, statement, compiled.limit, types, sql), meta, transforms),
             # the SQL is part of the key: a changed metric or data-model setting changes it
-            cache_key=ResultCache.key("builder", spec.model_dump(mode="json"), compiled.limit, sql),
+            cache_key=ResultCache.key("builder", spec.model_dump(mode="json"), compiled.limit, fingerprint(statement, engine.dialect)),
             read_cache=not refresh,
             on_finish=audit_finish(audit_id),
         )

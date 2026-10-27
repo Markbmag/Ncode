@@ -159,6 +159,8 @@ class FederatedRun:
                     raise QueryCancelled() from None
                 detail = str(getattr(exc, "orig", None) or exc).strip().splitlines()
                 raise FederationError(f"{src.label}: {detail[0] if detail else type(exc).__name__}") from None
+            finally:
+                child.finish(child.status if child.is_final else "completed")  # a later Stop leaves it alone
             stats = SourceStats(
                 src.alias, src.label, src.kind, src.connection, len(rows), truncated, round((time.perf_counter() - t0) * 1000)
             )

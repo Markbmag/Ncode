@@ -13,6 +13,8 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -275,11 +277,26 @@ def _unpooled_connection(engine: Engine) -> Any:
     return engine.dialect.connect(*cargs, **cparams)
 
 
+@contextmanager
+def _connection(engine: Engine, task: QueryTask, dialect: str) -> Iterator[Any]:
+    """A pooled connection whose cancel hook lives exactly as long as the task holds it.
+
+    The hook must be gone before the connection returns to the pool: a later Stop (or a timeout
+    while a profile or a combined question works in DuckDB) would otherwise interrupt whatever
+    query of another person runs on that connection by then.
+    """
+    with engine.connect() as conn:
+        task.set_cancel_hook(_cancel_hook(engine, conn, dialect))
+        try:
+            yield conn
+        finally:
+            task.set_cancel_hook(None)
+
+
 def fetch_statement(engine: Engine, task: QueryTask, statement: Any, limit: int) -> tuple[list[str], list[tuple], bool]:
     """(column names, at most `limit` raw rows, truncated) of a compiled builder statement."""
     dialect = engine.dialect.name
-    with engine.connect() as conn:
-        task.set_cancel_hook(_cancel_hook(engine, conn, dialect))
+    with _connection(engine, task, dialect) as conn:
         result = conn.execution_options(stream_results=dialect == "postgresql").execute(statement)
         names = list(result.keys())
         rows = result.fetchmany(limit + 1)
@@ -319,8 +336,7 @@ def fetch_sql(engine: Engine, task: QueryTask, sql: str, params: dict[str, Any],
             # and with parameters psycopg reads every % as a placeholder: escape them.
             driver_sql = text.replace("%", "%%")
 
-    with engine.connect() as conn:
-        task.set_cancel_hook(_cancel_hook(engine, conn, dialect))
+    with _connection(engine, task, dialect) as conn:
         dbapi = conn.connection.dbapi_connection
         cap = limit + 1
         reset: str | None = None

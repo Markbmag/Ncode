@@ -39,6 +39,7 @@ from ..content.params import (
     PARAM_OPS, ParameterDef, bind_spec, check_sql_params, resolve, sample_values, spec_params, sql_bind_values,
 )
 from ..content.store import ContentError, ContentStore
+from ..query.compiler import fingerprint
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.runner import ResultCache, fetch_sql, fetch_statement
 from ..query.spec import QuerySpec
@@ -174,7 +175,8 @@ def register_federation_routes(
         engine, compiled, _sql = queries.compile_for(QuerySpec.model_validate(data), user=user, default_limit=limit, max_limit=cap)
         statement = compiled.limited(1)
         return PreparedSource(
-            alias, label, kind, spec.connection, limit=compiled.limit, cache_part=part,
+            # the statement as sent (incl. the viewer's row rules) identifies the data, not just the spec
+            alias, label, kind, spec.connection, limit=compiled.limit, cache_part=[part, fingerprint(statement, engine.dialect)],
             fetch=lambda t: fetch_statement(engine, t, statement, compiled.limit),
         )
 

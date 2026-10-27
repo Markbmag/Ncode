@@ -621,6 +621,16 @@ def compile_spec(spec: QuerySpec, **kwargs: Any) -> Compiled:
     return SpecCompiler(spec, **kwargs).compile()
 
 
+def fingerprint(statement: Any, dialect: Dialect) -> list[Any]:
+    """What a statement asks the database exactly: SQL with placeholders plus every bound value.
+
+    Result-cache keys use this rather than the displayed SQL, whose inlining can fall back to
+    placeholders and would then hide values such as a viewer's row-level-security condition.
+    """
+    compiled = statement.compile(dialect=dialect)
+    return [str(compiled), sorted((k, repr(v)) for k, v in compiled.params.items())]
+
+
 def render_sql(statement: Any, dialect: Dialect) -> str:
     """SQL text for people to read ("View SQL"), with values inlined.
 

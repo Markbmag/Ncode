@@ -138,6 +138,29 @@ def test_rules_reach_saved_questions_dashboards_and_profiles(env):
     assert snap["result"]["analysis"]["profile"]["rows_profiled"] == 2
 
 
+def task(env, who, path, body):
+    d = call(env, who, "POST", path, json={"wait_ms": 5000, **body})
+    return wait_done(env["client"], env[who], d["task_id"]) if d["status"] == "running" else d
+
+
+def test_cached_results_never_cross_row_rules(env):
+    """A result one person ran must not be served from the cache to someone with other row rules."""
+    eu_only(env)
+    table = {"connection": "shop", "table": "q_customers"}
+    profiled = lambda d: d["result"]["analysis"]["profile"]["rows_profiled"]  # noqa: E731
+    for first, second, want in (("admin", "alice", 2), ("alice", "carol", 4)):
+        for path in ("/api/profile/table", "/api/xray"):
+            task(env, first, path, table)
+            assert profiled(task(env, second, path, table)) == want, (path, first, second)
+    spec = {"version": 1, "sources": [{"alias": "c", "type": "builder", "spec": {"connection": "shop", "source": {"table": "q_customers"}}}]}
+    body = {"spec": spec, "parameters": [], "params": {}}
+    assert len(task(env, "carol", "/api/federated/run", body)["result"]["rows"]) == 4
+    assert len(task(env, "alice", "/api/federated/run", body)["result"]["rows"]) == 2
+    assert len(task(env, "admin", "/api/federated/run", body)["result"]["rows"]) == 4
+    # the same person still gets the cached copy
+    assert task(env, "alice", "/api/federated/run", body)["result"]["stats"]["cached"] is True
+
+
 def test_sql_is_refused_where_rules_apply(env):
     eu_only(env)
     res = call(env, "alice", "POST", "/api/query/sql", 403, json={"connection": "shop", "sql": "SELECT * FROM q_customers"})
