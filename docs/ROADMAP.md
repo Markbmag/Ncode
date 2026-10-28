@@ -477,6 +477,9 @@ flowchart LR
   model ("Count per month", "Top 10 parts by quantity", "Share by line").
 - **Value pickers everywhere:** filters offer the column's values (with labels from a related table
   when an id is shown - "Line 3 - Assembly" instead of `3`), search inside long lists, recent values.
+- **Ratio metrics:** a metric can divide one total by another (scrap rate = all scrap ÷ all pieces,
+  OEE parts, % on time), compiled as `SUM(a) / NULLIF(SUM(b), 0)` so it stays right at every grouping;
+  the demo's "Average scrap rate per report" becomes a true "Scrap rate".
 - **Pivot like Excel:** a pivot editor with *Rows / Columns / Values* areas on top of the existing
   pivot chart; export keeps the layout in XLSX.
 - **Preview per step** (first rows after a join, a filter, a summary) and **undo / redo** for the

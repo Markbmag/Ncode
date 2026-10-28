@@ -107,15 +107,15 @@ def test_everyone_may_use_the_demo(env):
             "manual": False} in schema["relationships"]
 
     metrics = {m["name"]: m for m in call(env, "bob", "GET", "/api/metrics", params={"connection": DEMO_KEY})["metrics"]}
-    assert set(metrics) == {"Output", "Scrap rate", "Downtime hours"}
-    assert metrics["Scrap rate"]["translations"]["ru"]["name"] == "Доля брака"
+    assert set(metrics) == {"Output", "Average scrap rate per report", "Downtime hours"}
+    assert metrics["Average scrap rate per report"]["translations"]["ru"]["name"] == "Средняя доля брака по отчётам"
     spec = {"connection": DEMO_KEY, "source": {"table": "downtime_events"}, "joins": [{"table": "production_lines"}],
             "breakouts": [{"ref": "production_lines.name", "alias": "line"}],
             "aggregations": [{"fn": "metric", "metric": metrics["Downtime hours"]["id"]}], "order": [{"ref": "line"}]}
     rows = query(env, "bob", spec)["result"]["rows"]
     assert [r[0] for r in rows] == ["Final assembly", "Paint line", "Press line", "Welding line"] and all(r[1] > 0 for r in rows)
     rate = query(env, "bob", {"connection": DEMO_KEY, "source": {"table": "production_output"},
-                              "aggregations": [{"fn": "metric", "metric": metrics["Scrap rate"]["id"]}]})["result"]
+                              "aggregations": [{"fn": "metric", "metric": metrics["Average scrap rate per report"]["id"]}]})["result"]
     assert 0 < rate["rows"][0][0] < 0.1 and rate["columns"][0]["format"]["style"] == "percent"
 
 

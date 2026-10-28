@@ -543,8 +543,11 @@ METRICS = [  # name, description, Russian name, Russian description, table, defi
     ("Output", "Good pieces reported (vehicles on final assembly).", "Выпуск",
      "Сданные годные штуки (на главном конвейере - машины).", "production_output",
      {"fn": "sum", "ref": "production_output.good_qty"}, {"style": "number", "decimals": 0}),
-    ("Scrap rate", "Average share of scrapped pieces in an output report.", "Доля брака",
-     "Средняя доля бракованных штук в отчёте о выпуске.", "production_output",
+    # An average of per-report shares, named as such: a true scrap rate (all scrap ÷ all pieces)
+    # needs ratio metrics (planned, ROADMAP M12).
+    ("Average scrap rate per report", "The share of scrapped pieces in each output report, averaged over the reports.",
+     "Средняя доля брака по отчётам", "Доля бракованных штук в каждом отчёте о выпуске, усреднённая по отчётам.",
+     "production_output",
      {"fn": "avg", "expr": {"op": "/", "args": [
          {"ref": "production_output.scrap_qty"},
          {"op": "+", "args": [{"ref": "production_output.good_qty"}, {"ref": "production_output.scrap_qty"}]},
