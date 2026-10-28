@@ -25,14 +25,14 @@ down_revision = "0008"
 branch_labels = None
 depends_on = None
 
-COLUMNS = [
-    ("field_metadata", sa.Column("translations", sa.Text)),
-    ("metrics", sa.Column("translations", sa.Text)),
-    ("users", sa.Column("prefs", sa.Text)),
-    ("questions", sa.Column("verified_by", sa.String(64))),
-    ("questions", sa.Column("verified_at", sa.Float)),
-    ("dashboards", sa.Column("verified_by", sa.String(64))),
-    ("dashboards", sa.Column("verified_at", sa.Float)),
+COLUMNS = [  # (table, column, type)
+    ("field_metadata", "translations", sa.Text),
+    ("metrics", "translations", sa.Text),
+    ("users", "prefs", sa.Text),
+    ("questions", "verified_by", lambda: sa.String(64)),
+    ("questions", "verified_at", sa.Float),
+    ("dashboards", "verified_by", lambda: sa.String(64)),
+    ("dashboards", "verified_at", sa.Float),
 ]
 
 
@@ -82,17 +82,17 @@ def upgrade() -> None:
             sa.Column("updated_at", sa.Float, nullable=False),
             sa.Column("updated_by", sa.String(64)),
         )
-    for table, column in COLUMNS:
-        if not _has(table, column.name):
+    for table, column, kind in COLUMNS:
+        if not _has(table, column):
             with op.batch_alter_table(table) as batch:
-                batch.add_column(column.copy())
+                batch.add_column(sa.Column(column, kind()))
 
 
 def downgrade() -> None:
-    for table, column in reversed(COLUMNS):
-        if _has(table, column.name):
+    for table, column, _kind in reversed(COLUMNS):
+        if _has(table, column):
             with op.batch_alter_table(table) as batch:
-                batch.drop_column(column.name)
+                batch.drop_column(column)
     op.drop_table("glossary_terms")
     op.drop_table("item_views")
     op.drop_table("table_metadata")
