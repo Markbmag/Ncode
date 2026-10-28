@@ -1,4 +1,4 @@
-"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0008 (app/migrations/versions)."""
+"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0009 (app/migrations/versions)."""
 
 from __future__ import annotations
 
@@ -40,6 +40,8 @@ questions_table = Table(
     Column("updated_by", String(64)),
     Column("model", Boolean, nullable=False, default=False),  # usable as a source like a table (M7)
     Index("ix_questions_archived_updated_at", "archived", "updated_at"),  # M10 (migration 0008)
+    Column("verified_by", String(64)),   # M11: the official answer (cleared when the query changes)
+    Column("verified_at", Float),
 )
 
 permissions_table = Table(
@@ -82,6 +84,8 @@ dashboards_table = Table(
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
     Index("ix_dashboards_archived_updated_at", "archived", "updated_at"),
+    Column("verified_by", String(64)),   # M11
+    Column("verified_at", Float),
 )
 
 dashboard_cards_table = Table(
@@ -140,6 +144,21 @@ field_metadata_table = Table(
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
     UniqueConstraint("connection", "table_name", "column_name", name="uq_field_metadata_column"),
+    Column("translations", Text),  # M11: {"ru": {"display_name", "description"}}
+)
+
+table_metadata_table = Table(  # M11 (migration 0009): names and descriptions of tables
+    "table_metadata",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("connection", String(64), nullable=False),
+    Column("table_name", String(255), nullable=False),
+    Column("display_name", String(200)),
+    Column("description", Text),
+    Column("translations", Text),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+    UniqueConstraint("connection", "table_name", name="uq_table_metadata_table"),
 )
 
 relationships_table = Table(
@@ -165,6 +184,34 @@ metrics_table = Table(
     Column("table_name", String(255), nullable=False),
     Column("definition", Text, nullable=False),
     Column("format", Text),
+    Column("archived", Boolean, nullable=False, default=False),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+    Column("updated_by", String(64)),
+    Column("translations", Text),  # M11: {"ru": {"name", "description"}}
+)
+
+# ---------------------------------------------------------------- M11: first steps (migration 0009)
+
+item_views_table = Table(  # what each person opened last (home page)
+    "item_views",
+    metadata,
+    Column("user_id", Integer, primary_key=True),
+    Column("item_type", String(16), primary_key=True),  # "question" | "dashboard"
+    Column("item_id", Integer, primary_key=True),
+    Column("viewed_at", Float, nullable=False),
+    Index("ix_item_views_user_viewed", "user_id", "viewed_at"),
+)
+
+glossary_terms_table = Table(
+    "glossary_terms",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("term", String(120), nullable=False),
+    Column("definition", Text, nullable=False),
+    Column("translations", Text),  # {"ru": {"term", "definition"}}
+    Column("synonyms", Text),      # JSON list, both languages
+    Column("related", Text),       # JSON list of links: metrics, columns, questions
     Column("archived", Boolean, nullable=False, default=False),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),

@@ -41,6 +41,7 @@ users_table = Table(
     Column("created_at", Float, nullable=False),
     Column("email", String(254)),                                          # subscriptions (M8)
     Column("last_login_at", Float),                                        # M9
+    Column("prefs", Text),                                                 # M11: JSON, e.g. the new-user checklist
 )
 
 groups_table = Table(
