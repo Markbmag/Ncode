@@ -66,9 +66,10 @@ from .sharing.routes import register_sharing_routes
 from .usage import AuditRetention, register_usage_routes
 from .admin_routes import register_admin_routes
 from .content.health import register_broken_content_routes
-from .demo import DEMO_KEY, DemoDatabase, register_demo_routes
+from .demo import DEMO_KEY, SYSTEM as DEMO_SYSTEM_USER, DemoDatabase, register_demo_routes
 from .glossary import register_glossary_routes
-from .home import register_home_routes
+from .demo_content import seed_demo_content
+from .home import Home, register_home_routes
 from .backup import AutoBackup
 from .metrics import Metrics
 from .ops_routes import register_ops_routes
@@ -803,6 +804,16 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     register_home_routes(  # M11: recently viewed, "Start here", the new-user checklist, personal settings
         app, app_db=app_db, content=content, current_user=current_user, require_admin=require_admin,
     )
+    if demo.registered():
+        # M11: the demo's examples (a collection with questions and a dashboard), made once
+        home = Home(app_db, content)
+
+        def start_here_if_unset(cid: int) -> None:
+            if home.start_here_id(content.snapshot()) is None:
+                home.set_start_here(content.snapshot(), cid, "ncode")
+
+        seed_demo_content(app_db, content, app.state.content.dashboards, system=DEMO_SYSTEM_USER,
+                          language=settings.demo_language, set_start_here=start_here_if_unset)
     register_demo_routes(  # M11: hide / show the demo database for everyone (Admin → Databases)
         app, demo=demo, require_admin=require_admin, on_change=lambda: runner.cache.drop_connection(DEMO_KEY),
     )

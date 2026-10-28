@@ -4,7 +4,8 @@
 
 Builds a fresh data folder with the test shop database (tests/query_data.py) and three users,
 then serves the API: admin / admin-pass-1 (administrator), carol / carol-pass-1 and
-alice / alice-pass-1. Nothing outside the temporary folder is touched.
+alice / alice-pass-1. Nothing outside the temporary folder is touched. With --demo en|ru the
+Factory demo database and its examples are created too (newcomer tests).
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from app.security import hash_password
 from .query_data import load
 
 
-def build(folder: Path, origins: tuple[str, ...]):
+def build(folder: Path, origins: tuple[str, ...], *, demo: bool = False, language: str = "en"):
     shop = folder / "shop.db"
     engine = create_engine(f"sqlite:///{shop}")
     load(engine)
@@ -38,7 +39,8 @@ def build(folder: Path, origins: tuple[str, ...]):
     app_db.create_user("admin", hash_password("admin-pass-1"), "admin")
     app_db.create_user("carol", hash_password("carol-pass-1"))
     app_db.create_user("alice", hash_password("alice-pass-1"))
-    settings = Settings(cors_origins=origins, search_workers=2, query_workers=4, scheduler_interval_sec=5, backup_hour=-1)
+    settings = Settings(cors_origins=origins, search_workers=2, query_workers=4, scheduler_interval_sec=5, backup_hour=-1,
+                        demo_enabled=demo, demo_language=language)
     return create_app(settings, connections, app_db)
 
 
@@ -46,10 +48,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--origin", action="append", default=[], help="frontend origin allowed by CORS")
+    parser.add_argument("--demo", choices=("en", "ru"), help="also create the Factory demo with its examples")
     args = parser.parse_args()
     folder = Path(tempfile.mkdtemp(prefix="ncode-e2e-"))
     try:
-        app = build(folder, tuple(args.origin) or ("http://127.0.0.1:4173", "http://localhost:4173"))
+        app = build(folder, tuple(args.origin) or ("http://127.0.0.1:4173", "http://localhost:4173"),
+                    demo=args.demo is not None, language=args.demo or "en")
         uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
     finally:
         shutil.rmtree(folder, ignore_errors=True)

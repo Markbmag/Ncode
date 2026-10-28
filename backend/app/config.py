@@ -154,6 +154,7 @@ class Settings:
     # The "Factory demo" database (app/demo.py). On by default when the server is started
     # (NCODE_DEMO); off in a bare Settings() so tests and tools never create it by accident.
     demo_enabled: bool = False
+    demo_language: str = "en"            # names of the demo's example questions and dashboard: "en" or "ru"
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -222,6 +223,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         audit_keep_days=max(0, _int(env, "NCODE_AUDIT_KEEP_DAYS", defaults.audit_keep_days)),
         metrics_token=(env.get("NCODE_METRICS_TOKEN") or "").strip(),
         demo_enabled=_bool(env, "NCODE_DEMO", True),
+        demo_language="ru" if (env.get("NCODE_DEMO_LANGUAGE") or "").strip().lower().startswith("ru") else "en",
     )
 
 
