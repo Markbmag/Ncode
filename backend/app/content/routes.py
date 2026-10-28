@@ -32,7 +32,7 @@ New items cannot go into an archived collection (409): they would vanish from vi
 
 Verified (M11): every question carries "verified": {"by", "at"} or null. A save that changes
 what the question computes (spec / SQL, kind, connection, parameters) takes the mark away;
-renaming, moving or a new chart keep it. Lists put verified questions first.
+renaming, moving or a new chart keep it. Searches and collections put verified questions first.
 """
 
 from __future__ import annotations

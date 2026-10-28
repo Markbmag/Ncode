@@ -80,7 +80,8 @@ def test_verified_first_in_lists_and_search(env):
     call(env, "admin", "POST", f"/api/questions/{old['id']}/verify")
     assert names() == ["Revenue (official)", "Revenue scratch", "Revenue draft"]  # ... but the official answer leads
     assert call(env, "carol", "GET", f"/api/collections/{col}")["questions"][0]["id"] == old["id"]
-    assert call(env, "carol", "GET", "/api/questions", params={"limit": 1})["questions"][0]["id"] == old["id"]
+    # the plain list stays "recently changed", newest first
+    assert call(env, "carol", "GET", "/api/questions", params={"limit": 1})["questions"][0]["id"] == newest["id"]
     assert newest["verified"] is None
 
     first = call(env, "alice", "POST", "/api/dashboards", json={"name": "Plant overview", "collection_id": col})

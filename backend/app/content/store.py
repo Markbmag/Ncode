@@ -569,8 +569,12 @@ class ContentStore:
                 )
             )
         stmt = stmt.where(questions_table.c.archived.is_(archived))
-        # verified first (M11: the official answer ranks first), then the most recently changed
-        stmt = stmt.order_by(questions_table.c.verified_by.is_(None), questions_table.c.updated_at.desc())
+        # When searching or opening a collection the official answer ranks first (M11); the plain list
+        # is the "recently changed" list, newest first.
+        if text or collection_id is not None:
+            stmt = stmt.order_by(questions_table.c.verified_by.is_(None), questions_table.c.updated_at.desc())
+        else:
+            stmt = stmt.order_by(questions_table.c.updated_at.desc())
         with self.engine.connect() as conn:
             rows = conn.execute(stmt).all()
         out = []
