@@ -14,7 +14,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean, Column, Float, Index, Integer, MetaData, String, Table, Text,
-    create_engine, delete, func, insert, select, update,
+    create_engine, delete, event, func, insert, select, update,
 )
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import IntegrityError
@@ -179,6 +179,18 @@ def _to_user(row: Any) -> User:
     )
 
 
+def _tune_sqlite(dbapi_connection, _record) -> None:
+    # WAL: readers don't wait for writers (many people running dashboards write audit entries),
+    # and a commit no longer waits for the disk twice. NORMAL is still crash-safe in WAL mode;
+    # only the very last transactions can be lost on a power cut.
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
 class AppDB:
     def __init__(self, path: str | Path, cipher: Cipher | None = None):
         path = Path(path)
@@ -188,6 +200,7 @@ class AppDB:
         self.engine = create_engine(
             URL.create("sqlite", database=str(path)), connect_args={"timeout": 15}
         )
+        event.listen(self.engine, "connect", _tune_sqlite)
         upgrade(self.engine)  # creates or migrates the tables (app/migrations)
 
     def dispose(self) -> None:
