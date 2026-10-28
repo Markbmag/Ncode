@@ -1,18 +1,24 @@
 """Semantic layer API (roadmap M7). Reading needs access to the connection; changing needs an admin.
 
+    GET    /api/semantic/{connection}/tables                     table metadata: {"tables": {table: {"display_name",
+                                                                  "description", "translations"}}}
+    PUT    /api/semantic/{connection}/tables/{table}             {"display_name", "description", "translations"}
     GET    /api/semantic/{connection}/fields                     column metadata of the connection
     PUT    /api/semantic/{connection}/fields/{table}/{column}    {"display_name", "description", "semantic_type",
-                                                                  "format", "hidden", "parse_as_date"}
+                                                                  "format", "hidden", "parse_as_date", "translations"}
     GET    /api/semantic/{connection}/relationships              relationships added by hand
     POST   /api/semantic/{connection}/relationships              {"from_table", "from_columns", "to_table", "to_columns"}
     DELETE /api/semantic/{connection}/relationships/{id}
     GET    /api/metrics?connection=&archived=                    metrics of the connections you may use
-    POST   /api/metrics                                          {"name", "description", "connection", "table", "definition", "format"}
+    POST   /api/metrics                                          {"name", "description", "connection", "table", "definition", "format",
+                                                                  "translations"}
     PUT    /api/metrics/{id}    PATCH /api/metrics/{id} {"archived": true}
 
 A metric's definition is an aggregation of its table, e.g.
 {"fn": "sum", "ref": "orders.total", "where": {"op": "and", "rules": [{"ref": "orders.status", "op": "=", "value": "paid"}]}};
 questions use it as {"fn": "metric", "metric": <id>}.
+
+Translations: {"ru": {"display_name": "...", "description": "..."}} (metrics: "name" / "description").
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from ..db import ConnectionRegistry
 from ..dberrors import db_http_error
 from ..query.routes import QueryService
 from ..query.spec import QuerySpec
-from .store import FieldIn, MetricIn, RelationshipIn, SemanticStore
+from .store import FieldIn, MetricIn, RelationshipIn, SemanticStore, TableIn
 
 
 class ArchiveIn(BaseModel):
@@ -60,6 +66,19 @@ def register_semantic_routes(
             raise HTTPException(status_code=404, detail=f"Unknown table {table!r}")
         if column not in cols[table]:
             raise HTTPException(status_code=404, detail=f"{table!r} has no column {column!r}")
+
+    # ------------------------------------------------------------------ tables
+    @router.get("/api/semantic/{connection}/tables")
+    def get_tables(connection: str, user: User = Depends(current_user)):
+        require_connection(connection, user)
+        return {"tables": semantic.tables(connection)}
+
+    @router.put("/api/semantic/{connection}/tables/{table}")
+    def put_table(connection: str, table: str, body: TableIn, admin: User = Depends(require_admin)):
+        require_connection(connection, admin)
+        if table not in columns_of(connection):
+            raise HTTPException(status_code=404, detail=f"Unknown table {table!r}")
+        return {"table": semantic.set_table(admin, connection, table, body)}
 
     # ------------------------------------------------------------------ columns
     @router.get("/api/semantic/{connection}/fields")
@@ -144,4 +163,7 @@ def register_semantic_routes(
 
 
 def schema_extras(semantic: SemanticStore, connection: str) -> dict[str, Any]:
-    return {"fields": semantic.fields(connection), "manual": semantic.foreign_keys(connection)}
+    return {
+        "fields": semantic.fields(connection), "manual": semantic.foreign_keys(connection),
+        "table_meta": semantic.tables(connection),
+    }

@@ -17,6 +17,9 @@ import {
   SlidersIcon, StarIcon, XIcon,
 } from '../icons';
 import { DialogShell, MoveDialog } from '../library/dialogs';
+import { ShareButton } from '../library/ShareItem';
+import { VerifiedBadge, VerifyMenuItem } from '../library/VerifiedBadge';
+import { markStep } from '../home/checklist';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
 import { ShareDialog } from '../sharing/ShareDialog';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -100,8 +103,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const values = useMemo(() => valuesFromSearch(search), [search]);
   // The router hands setSearch the query of the last render; read the address bar instead, so a
   // second change made before the re-render (the end of a date range) keeps the first one.
-  const setValues = (update: FilterUpdate | FilterValues) =>
+  const setValues = (update: FilterUpdate | FilterValues) => {
+    markStep('change_filter'); // the new-user checklist on the home page (M11)
     setSearch(() => applyToSearch(update, new URLSearchParams(window.location.search)), { replace: true });
+  };
   const tabParam = search.get('tab');
   const activeTab = def.tabs.length ? (def.tabs.find((t) => t.id === tabParam)?.id ?? def.tabs[0].id) : null;
   const setTab = (id: string) =>
@@ -248,6 +253,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                 onClick={() => void act(t('Could not change favourites'), () => dashboards.favorite(dashboard.id, !dashboard.favorite))}
               />
             )}
+            <VerifiedBadge verified={dashboard.verified} />
             {!canEdit && !tv && <Badge className="no-print">{t('view only')}</Badge>}
             {editing && <Badge colorScheme="orange">{t('editing')}</Badge>}
           </HStack>
@@ -296,6 +302,12 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
             </Select>
             {!tv && (
               <>
+                <ShareButton
+                  target={{
+                    type: 'dashboard', id: dashboard.id, name: dashboard.name, collectionId: dashboard.collection_id, canEdit,
+                    questionIds: dashboard.cards.map((c) => c.question_id), params: dashboard.filters.map((f) => ({ name: f.id, label: f.label })),
+                  }}
+                />
                 <Tooltip label={t('Subscriptions: send it by email or to a chat')} hasArrow>
                   <IconButton aria-label={t('Subscriptions')} size="sm" variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
                 </Tooltip>
@@ -319,6 +331,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                     <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/dashboards/${(await dashboards.duplicate(dashboard.id)).id}`))}>
                       {t('Duplicate')}
                     </MenuItem>
+                    <VerifyMenuItem kind="dashboard" id={dashboard.id} verified={dashboard.verified} />
                     {canEdit && (
                       <>
                         <MenuItem icon={<PencilIcon boxSize={4} />} onClick={details.onOpen}>

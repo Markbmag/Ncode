@@ -10,6 +10,8 @@ import { AlertIcon, ChartIcon, CodeIcon, DownloadIcon, MoreIcon, PencilIcon, Ref
 import { buildCsvFromArrays, downloadText, safeFilename, saveBlob } from '../lib/csv';
 import { chartTheme } from '../viz/palette';
 import { DEFAULT_VIZ, effectiveViz } from '../viz/state';
+import { labelColumns } from '../query/outputs';
+import { useQuestionCaption } from '../query/useCaption';
 import type { VizSpec } from '../viz/types';
 import { CardEndpointsContext, useCardRun } from './api';
 import { activeMappings, editorParams } from './logic';
@@ -59,9 +61,10 @@ export function DashboardCard(props: Props) {
 }
 
 function Frame({
-  title, editing, onEdit, onRemove, menu, status, children, plain = false, testId,
+  title, caption, editing, onEdit, onRemove, menu, status, children, plain = false, testId,
 }: {
   title?: string;
+  caption?: string | null; // what the card shows, in one line under its title (M11)
   editing: boolean;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -84,7 +87,7 @@ function Frame({
       data-testid={testId ?? 'dash-card'}
     >
       {(title !== undefined || editing || menu) && (
-        <Flex align="center" gap={2} px={3} py={1.5} minH="36px" className={editing ? DRAG : undefined} cursor={editing ? 'grab' : undefined} borderBottom={title !== undefined ? '1px solid' : undefined} borderColor="lineColor">
+        <Flex align="center" gap={2} px={3} py={1.5} minH="36px" className={editing ? DRAG : undefined} cursor={editing ? 'grab' : undefined} borderBottom={title !== undefined && !caption ? '1px solid' : undefined} borderColor="lineColor">
           <Text fontSize="sm" fontWeight={600} noOfLines={1} flex={1} title={title}>
             {title}
           </Text>
@@ -98,6 +101,11 @@ function Frame({
             menu
           )}
         </Flex>
+      )}
+      {caption && (
+        <Text px={3} mt={-1} pb={1.5} fontSize="xs" color="mutedText" isTruncated title={caption} borderBottom="1px solid" borderColor="lineColor" data-testid="card-caption">
+          {caption}
+        </Text>
       )}
       <Box flex={1} minH={0} display={plain ? 'flex' : undefined} alignItems={plain ? 'center' : undefined} px={plain ? 1 : 0}>
         {children}
@@ -134,7 +142,9 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const { colorMode } = useColorMode();
   const chartRef = useRef<EChartHandle | null>(null);
   const vizState = card.viz ?? q?.viz ?? DEFAULT_VIZ;
-  const result = run.result;
+  // readable column names and the caption, from the question (public links have no spec: plain names)
+  const named = useQuestionCaption(q && runnable ? q : null, !endpoints);
+  const result = useMemo(() => (run.result && named.labels ? { ...run.result, columns: labelColumns(run.result.columns, named.labels) } : run.result), [run.result, named.labels]);
   const spec: VizSpec | null = useMemo(() => {
     if (!result) return null;
     if (vizState.mode === 'table') return { version: 1, type: 'table' };
@@ -235,6 +245,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   return (
     <Frame
       title={title}
+      caption={named.caption}
       editing={editing}
       onEdit={onEdit}
       onRemove={onRemove}

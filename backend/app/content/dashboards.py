@@ -154,6 +154,12 @@ class Dashboard:
     favorite: bool = False
     access: Level | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    verified_by: str | None = None  # M11: an admin checked it - "the official answer"
+    verified_at: float | None = None
+
+    @property
+    def verified(self) -> dict[str, Any] | None:
+        return {"by": self.verified_by, "at": self.verified_at} if self.verified_by else None
 
 
 def _loads(text: str | None, default: Any) -> Any:
@@ -356,6 +362,7 @@ class DashboardStore:
             created_at=row.created_at, updated_at=row.updated_at, updated_by=row.updated_by, favorite=bool(row.fav),
             access=snap.access(user, row.collection_id),
             extra={"collection": {"id": col.id, "name": col.name} if col else None},
+            verified_by=getattr(row, "verified_by", None), verified_at=getattr(row, "verified_at", None),
         )
 
     def _cards(self, dashboard_id: int) -> list[dict[str, Any]]:
@@ -417,7 +424,10 @@ class DashboardStore:
             stmt = stmt.where(dashboards_table.c.id.in_(
                 select(favorites_table.c.item_id).where(favorites_table.c.user_id == user.id, favorites_table.c.item_type == "dashboard")
             ))
-        stmt = stmt.where(dashboards_table.c.archived.is_(archived)).order_by(dashboards_table.c.updated_at.desc())
+        # verified first (M11), then the most recently changed
+        stmt = stmt.where(dashboards_table.c.archived.is_(archived)).order_by(
+            dashboards_table.c.verified_by.is_(None), dashboards_table.c.updated_at.desc()
+        )
         with self.engine.connect() as conn:
             rows = conn.execute(stmt).all()
         out = []
@@ -518,6 +528,20 @@ class DashboardStore:
             values.update(updated_at=time.time(), updated_by=user.username)
             with self.engine.begin() as conn:
                 conn.execute(update(dashboards_table).where(dashboards_table.c.id == did).values(**values))
+        return self.get(user, did)
+
+    def set_verified(self, user: User, did: int, on: bool) -> Dashboard:
+        """Mark a dashboard as the official one (admins), or take the mark away; the dashboard
+        itself does not change (no new version)."""
+        if not user.is_admin:
+            raise ContentError("Only an administrator can do this", 403)
+        d = self.get(user, did)
+        if on and (d.archived or self.content.snapshot().hidden(d.collection_id)):
+            raise ContentError("An archived dashboard cannot be verified. Restore it first", 409)
+        with self.engine.begin() as conn:
+            conn.execute(update(dashboards_table).where(dashboards_table.c.id == did).values(
+                verified_by=user.username if on else None, verified_at=time.time() if on else None,
+            ))
         return self.get(user, did)
 
     def delete(self, user: User, did: int) -> None:

@@ -8,6 +8,7 @@
     DELETE /api/dashboards/{id}                        an archived dashboard
     POST   /api/dashboards/{id}/duplicate
     PUT    /api/dashboards/{id}/favorite               (DELETE to remove the star)
+    POST   /api/dashboards/{id}/verify                 (admins) "the official one"; DELETE to take it away (M11)
     POST   /api/dashboards/{id}/cards/{key}/run        {"filters": {"period": ["2026-01-01", "2026-03-31"]}, "wait_ms", "refresh"}
 
 A card run applies the dashboard's filter values to the card's question (parameters or
@@ -22,6 +23,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 from ..appdb import AppDB, User
+from ..home import record_view
 from ..query.routes import MAX_WAIT_MS
 from .dashboards import (
     Card, Dashboard, DashboardFilter, DashboardStore, Definition, apply_filters, filter_values, param_shapes,
@@ -69,6 +71,7 @@ def dashboard_summary(d: Dashboard) -> dict[str, Any]:
         "created_at": d.created_at,
         "updated_at": d.updated_at,
         "updated_by": d.updated_by,
+        "verified": d.verified,  # {"by", "at"} | None (M11)
     }
 
 
@@ -87,6 +90,9 @@ def _question_info(q: Question | None, qid: int | None) -> dict[str, Any]:
         "viz": q.viz,
         "tables": _builder_tables(q),
         "fields": _federated_fields(q),
+        # the card's one-line caption ("Sum of Total per month · Status is paid", M11) is built from these
+        "description": q.description,
+        "spec": q.spec if q.kind == "builder" else None,
     }
 
 
@@ -157,9 +163,11 @@ def register_dashboard_routes(
     @router.get("/api/dashboards/{did}")
     def get(did: int, user: User = Depends(current_user)):
         try:
-            return full(user, store.get(user, did))
+            d = store.get(user, did)
         except ContentError as exc:
             raise fail(exc) from exc
+        record_view(app_db.engine, user, "dashboard", did)  # the home page's "recently viewed" (M11)
+        return full(user, d)
 
     @router.put("/api/dashboards/{did}")
     def save(did: int, body: dict[str, Any], user: User = Depends(current_user)):
@@ -200,6 +208,24 @@ def register_dashboard_routes(
             return full(user, store.duplicate(user, did, body.name, body.collection_id))
         except ContentError as exc:
             raise fail(exc) from exc
+
+    @router.post("/api/dashboards/{did}/verify")
+    def verify(did: int, user: User = Depends(current_user)):
+        try:
+            d = store.set_verified(user, did, True)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "dashboard_verify", phrase=f"dashboard {did}", status="ok")
+        return full(user, d)
+
+    @router.delete("/api/dashboards/{did}/verify")
+    def unverify(did: int, user: User = Depends(current_user)):
+        try:
+            d = store.set_verified(user, did, False)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "dashboard_unverify", phrase=f"dashboard {did}", status="ok")
+        return full(user, d)
 
     @router.put("/api/dashboards/{did}/favorite")
     def star(did: int, user: User = Depends(current_user)):

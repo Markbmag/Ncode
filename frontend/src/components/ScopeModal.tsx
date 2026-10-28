@@ -6,6 +6,8 @@ import {
 } from '@chakra-ui/react';
 import type { TableInfo } from '../api';
 import { SearchIcon } from '../icons';
+import { byLabel, nameMatches } from '../lib/names';
+import { FriendlyName } from './FriendlyName';
 import { t, tn } from '../i18n/index.ts';
 
 const MAX_SHOWN = 300;
@@ -39,11 +41,13 @@ function ScopeBody({ onClose, connectionLabel, tables, loadError, selected, excl
   const [filter, setFilter] = useState('');
   const [exclude, setExclude] = useState(excludeText);
 
-  const visible = useMemo(() => {
-    if (!tables) return [];
-    const needle = filter.trim().toLowerCase();
-    return needle ? tables.filter((t) => t.name.toLowerCase().includes(needle)) : tables;
-  }, [tables, filter]);
+  // found by the technical or the data model name (M11)
+  const labelled = useMemo(() => byLabel(tables ?? []), [tables]);
+  const visible = useMemo(
+    () => labelled.filter((l) => nameMatches(filter, l.name, l.showTechnical ? l.label : null)).map((l) => l.item),
+    [labelled, filter],
+  );
+  const labelOf = useMemo(() => new Map(labelled.map((l) => [l.name, l])), [labelled]);
 
   const toggle = (name: string) =>
     setPicked((prev) => {
@@ -150,9 +154,15 @@ function ScopeBody({ onClose, connectionLabel, tables, loadError, selected, excl
                           isChecked={picked.has(table.name)}
                           onChange={() => toggle(table.name)}
                         />
-                        <Text flex={1} fontFamily="mono" fontSize="sm" noOfLines={1}>
-                          {table.name}
-                        </Text>
+                        <Box flex={1} minW={0} fontSize="sm">
+                          <FriendlyName
+                            label={labelOf.get(table.name)?.label ?? table.name}
+                            name={table.name}
+                            description={labelOf.get(table.name)?.description}
+                            showTechnical={labelOf.get(table.name)?.showTechnical}
+                            mono
+                          />
+                        </Box>
                         {table.searchable === 0 ? (
                           <Badge bg="chipBg" color="faintText" fontSize="2xs">
                             {t('no text columns')}

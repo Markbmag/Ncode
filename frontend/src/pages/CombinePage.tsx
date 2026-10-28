@@ -256,9 +256,19 @@ export function CombineWorkspace({ saved = null, start = null }: { saved?: Saved
           }
         >
           {draft.sources.length === 0 ? (
-            <Text fontSize="sm" color="mutedText">
-              {t('Add up to {max} sources: saved questions, tables, SQL on any of your databases, or uploaded files.', { max: MAX_SOURCES })}
-            </Text>
+            <VStack align="flex-start" spacing={2}>
+              <Text fontSize="sm" color="mutedText">
+                {t('Add up to {max} sources: saved questions, tables, SQL on any of your databases, or uploaded files.', { max: MAX_SOURCES })}
+              </Text>
+              <Text fontSize="xs" color="faintText">
+                {t('Example: {example}', { example: t('planned quantities from an uploaded spreadsheet next to the built quantities from a database, matched by part number.') })}
+              </Text>
+              {canEdit && (
+                <Button size="sm" variant="brand" leftIcon={<PlusIcon boxSize={4} />} onClick={() => setEditing({ index: null, source: {} })} data-testid="add-first-source">
+                  {t('Add the first source')}
+                </Button>
+              )}
+            </VStack>
           ) : (
             <VStack align="stretch" spacing={1.5}>
               {draft.sources.map((s, i) => (

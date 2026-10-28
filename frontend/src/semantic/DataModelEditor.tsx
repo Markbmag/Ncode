@@ -5,17 +5,111 @@ import {
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { apiErrorMessage } from '../api';
-import type { SchemaColumn, SchemaV2 } from '../api';
+import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
+import { FriendlyName } from '../components/FriendlyName';
 import { FilterEditor } from '../components/query/FilterEditor';
 import { ColumnSelect } from '../components/query/ColumnSelect';
 import { t } from '../i18n/index.ts';
 import { PencilIcon, PlusIcon, TrashIcon } from '../icons';
+import { GlossaryLinks } from '../glossary/GlossaryLinks';
 import { ConfirmDialog, DialogShell } from '../library/dialogs';
-import { AGGREGATES, humanize } from '../query/draft';
+import { AGGREGATES } from '../query/draft';
+import { byLabel, descriptionOf, differsFromTechnical, nameOf, prettify, setTranslation } from '../lib/names';
+import type { Translations } from '../lib/names';
 import type { FilterGroup } from '../query/types';
 import type { ColumnFormat, NumberStyle } from '../viz/types';
 import { SEMANTIC_TYPES, semantic, useMetrics } from './api';
 import type { FieldMeta, Metric, MetricDefinition } from './api';
+
+// ---------------------------------------------------------------- translations (M11)
+
+/** The Russian name and description next to the base ones: what people see when the interface is in Russian. */
+function RussianFields({ translations, onChange, nameField = 'display_name', nameMax = 200, namePlaceholder, testId = 'ru' }: {
+  translations: Translations | null;
+  onChange: (tr: Translations) => void;
+  nameField?: 'display_name' | 'name';
+  nameMax?: number;
+  namePlaceholder?: string;
+  testId?: string;
+}) {
+  const ru = translations?.ru ?? {};
+  return (
+    <Box border="1px dashed" borderColor="lineColor" borderRadius="md" px={3} py={2}>
+      <Text fontSize="xs" fontWeight={700} color="faintText" mb={1}>
+        Русский
+      </Text>
+      <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2}>
+        <Input
+          size="sm"
+          value={ru[nameField] ?? ''}
+          placeholder={namePlaceholder ?? t('Name in Russian')}
+          aria-label={t('Name in Russian')}
+          maxLength={nameMax}
+          onChange={(e) => onChange(setTranslation(translations, 'ru', nameField, e.target.value))}
+          data-testid={`${testId}-name`}
+        />
+        <Input
+          size="sm"
+          value={ru.description ?? ''}
+          placeholder={t('Description in Russian')}
+          aria-label={t('Description in Russian')}
+          maxLength={5000}
+          onChange={(e) => onChange(setTranslation(translations, 'ru', 'description', e.target.value))}
+          data-testid={`${testId}-description`}
+        />
+      </SimpleGrid>
+      <Text fontSize="xs" color="faintText" mt={1}>
+        {t('Shown when the interface is in Russian; empty fields show the text above.')}
+      </Text>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------- a table
+
+/** A table's friendly name with its technical one, and a button to name and describe it. */
+export function TableHeading({ connection, table }: { connection: string; table: SchemaTable }) {
+  const [editing, setEditing] = useState(false);
+  const label = nameOf(table.name, table);
+  return (
+    <HStack spacing={1} minW={0}>
+      <FriendlyName label={label} name={table.name} description={descriptionOf(table)} showTechnical={differsFromTechnical(table.name, label)} mono fontSize="sm" fontWeight={700} />
+      <Tooltip label={t('Name and describe the table')} hasArrow>
+        <IconButton aria-label={t('Name and describe {table}', { table: table.name })} size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={() => setEditing(true)} data-testid="table-name-edit" />
+      </Tooltip>
+      {editing && <TableDialog connection={connection} table={table} onClose={() => setEditing(false)} />}
+    </HStack>
+  );
+}
+
+function TableDialog({ connection, table, onClose }: { connection: string; table: SchemaTable; onClose: () => void }) {
+  const [name, setName] = useState(table.display_name ?? '');
+  const [description, setDescription] = useState(table.description ?? '');
+  const [translations, setTranslations] = useState<Translations | null>(table.translations ?? null);
+  return (
+    <DialogShell
+      isOpen
+      onClose={onClose}
+      title={table.name}
+      submitLabel={t('Save')}
+      size="lg"
+      onSubmit={() => semantic.setTable(connection, table.name, { display_name: name, description, translations })}
+    >
+      <FormControl>
+        <FormLabel fontSize="sm">{t('Display name')}</FormLabel>
+        <Input size="sm" value={name} placeholder={prettify(table.name)} onChange={(e) => setName(e.target.value)} maxLength={200} data-testid="table-display-name" />
+      </FormControl>
+      <FormControl>
+        <FormLabel fontSize="sm">{t('Description')}</FormLabel>
+        <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder={t('What one row is, where the data comes from')} data-testid="table-description" />
+      </FormControl>
+      <RussianFields translations={translations} onChange={setTranslations} testId="table-ru" />
+      <Text fontSize="xs" color="mutedText">
+        {t('People see this name in table lists and pickers; the technical name stays next to it and still finds the table.')}
+      </Text>
+    </DialogShell>
+  );
+}
 
 // ---------------------------------------------------------------- a column
 
@@ -63,6 +157,7 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
     semantic_type: column.semantic_type ?? '',
     hidden: !!column.hidden,
     parse_as_date: !!column.parse_as_date,
+    translations: column.translations ?? null,
   });
   const [format, setFormat] = useState<ColumnFormat>((column.format as ColumnFormat) ?? {});
   const text = /char|text|string|clob/i.test(column.db_type) || column.parse_as_date;
@@ -82,7 +177,7 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
       <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
         <FormControl>
           <FormLabel fontSize="sm">{t('Display name')}</FormLabel>
-          <Input size="sm" value={meta.display_name ?? ''} placeholder={humanize(column.name)} onChange={(e) => set({ display_name: e.target.value })} maxLength={200} data-testid="field-display-name" />
+          <Input size="sm" value={meta.display_name ?? ''} placeholder={prettify(column.name)} onChange={(e) => set({ display_name: e.target.value })} maxLength={200} data-testid="field-display-name" />
         </FormControl>
         <FormControl>
           <FormLabel fontSize="sm">{t('What it is')}</FormLabel>
@@ -100,6 +195,7 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
         <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={2} value={meta.description ?? ''} onChange={(e) => set({ description: e.target.value })} maxLength={5000} placeholder={t('Shown as a tooltip on the column')} />
       </FormControl>
+      <RussianFields translations={meta.translations ?? null} onChange={(translations) => set({ translations })} testId="field-ru" />
       <FormatFields format={format} onChange={setFormat} />
       <VStack align="stretch" spacing={2}>
         <Checkbox size="sm" isChecked={!!meta.hidden} onChange={(e) => set({ hidden: e.target.checked })} data-testid="field-hidden">
@@ -140,11 +236,12 @@ export function EditableColumns({ connection, table, columns, onEdit }: { connec
             <Text fontFamily="mono" fontSize="xs" noOfLines={1}>
               {col.name}
             </Text>
-            {col.display_name && (
+            {(col.display_name || col.translations?.ru?.display_name) && (
               <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                {col.display_name}
+                {[col.display_name, col.translations?.ru?.display_name].filter(Boolean).join(' · ')}
               </Text>
             )}
+            <GlossaryLinks target={{ connection, table, column: col.name }} plain />
           </Box>
           {col.parse_as_date && <Badge fontSize="0.6rem" colorScheme="teal">{t('as date')}</Badge>}
           {col.hidden && <Badge fontSize="0.6rem">{t('hidden')}</Badge>}
@@ -277,12 +374,19 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
               <Box flex={1} minW={0}>
                 <Text fontSize="sm" fontWeight={600}>
                   ★ {m.name}
+                  {m.translations?.ru?.name && (
+                    <Text as="span" fontWeight={400} color="mutedText">
+                      {' · '}
+                      {m.translations.ru.name}
+                    </Text>
+                  )}
                 </Text>
                 <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                  {AGGREGATES.find((a) => a.fn === m.definition.fn)?.label ?? m.definition.fn} {m.definition.ref ?? ''} · {m.table}
+                  {AGGREGATES.find((a) => a.fn === m.definition.fn)?.label ?? m.definition.fn} {m.definition.ref ?? (m.definition.expr ? t('a formula') : '')} · {m.table}
                   {m.definition.where ? t(' · with a condition') : ''}
                   {m.description ? ` · ${m.description}` : ''}
                 </Text>
+                <GlossaryLinks target={{ metric: m.id }} />
               </Box>
               <IconButton aria-label={t('Change {name}', { name: m.name })} size="xs" variant="ghost" icon={<PencilIcon boxSize={3} />} onClick={() => setEditing(m)} />
               <IconButton aria-label={t('Archive {name}', { name: m.name })} size="xs" variant="ghost" icon={<TrashIcon boxSize={3} />} onClick={() => setArchiving(m)} />
@@ -313,14 +417,18 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
   const [ref, setRef] = useState<string | undefined>(metric?.definition.ref ? (metric.definition.ref.includes('.') ? metric.definition.ref : `${metric.table}.${metric.definition.ref}`) : undefined);
   const [where, setWhere] = useState<FilterGroup>(metric?.definition.where ?? { op: 'and', rules: [] });
   const [format, setFormat] = useState<ColumnFormat>(metric?.format ?? {});
+  const [translations, setTranslations] = useState<Translations | null>(metric?.translations ?? null);
   const options = useMemo(
     () =>
       (schema.tables.find((tb) => tb.name === table)?.columns ?? [])
         .filter((c) => c.type !== 'binary')
-        .map((c) => ({ ref: `${table}.${c.name}`, label: c.display_name || humanize(c.name), type: c.type })),
+        .map((c) => ({ ref: `${table}.${c.name}`, label: nameOf(c.name, c), type: c.type })),
     [schema, table],
   );
+  const tables = useMemo(() => byLabel(schema.tables), [schema]);
   const needsColumn = AGGREGATES.find((a) => a.fn === fn)?.needsColumn ?? true;
+  // a formula set up outside this dialog (the demo's "Scrap rate") is kept until a column is picked
+  const formula = !ref && metric?.definition.expr && table === metric.table ? metric.definition.expr : undefined;
   const cleanWhere = (g: FilterGroup): FilterGroup | null => {
     const rules = g.rules.filter((r) => ('rules' in r ? r.rules.length > 0 : !!r.ref));
     return rules.length ? { ...g, rules } : null;
@@ -332,7 +440,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
       title={metric ? t('Change “{name}”', { name: metric.name }) : t('New metric')}
       submitLabel={t('Save')}
       size="xl"
-      canSubmit={!!name.trim() && !!table && (!needsColumn || !!ref)}
+      canSubmit={!!name.trim() && !!table && (!needsColumn || !!ref || !!formula)}
       onSubmit={() =>
         semantic.saveMetric(
           {
@@ -340,8 +448,9 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
             description: description.trim() || null,
             connection,
             table,
-            definition: { fn, ...(needsColumn && ref ? { ref } : {}), where: cleanWhere(where) },
+            definition: { fn, ...(needsColumn && ref ? { ref } : needsColumn && formula ? { expr: formula } : {}), where: cleanWhere(where) },
             format: cleanFormat(format),
+            translations,
           },
           metric?.id,
         )
@@ -355,9 +464,9 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
         <FormControl isRequired>
           <FormLabel fontSize="sm">{t('Table')}</FormLabel>
           <Select size="sm" value={table} placeholder={t('Pick a table…')} onChange={(e) => { setTable(e.target.value); setRef(undefined); setWhere({ op: 'and', rules: [] }); }} data-testid="metric-table">
-            {schema.tables.map((tb) => (
+            {tables.map((tb) => (
               <option key={tb.name} value={tb.name}>
-                {tb.name}
+                {tb.showTechnical ? `${tb.label} (${tb.name})` : tb.name}
               </option>
             ))}
           </Select>
@@ -378,6 +487,11 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
           <FormControl>
             <FormLabel fontSize="sm">{t('Column')}</FormLabel>
             <ColumnSelect options={options} value={ref} onChange={setRef} types={fn === 'sum' || fn === 'avg' ? ['number'] : undefined} data-testid="metric-column" />
+            {formula && (
+              <Text fontSize="xs" color="mutedText" mt={1}>
+                {t('Calculated with a formula; pick a column to replace it.')}
+              </Text>
+            )}
           </FormControl>
         )}
       </HStack>
@@ -394,6 +508,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
         <FormLabel fontSize="sm">{t('Description')}</FormLabel>
         <Textarea size="sm" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder={t('How it is defined, who owns it')} />
       </FormControl>
+      <RussianFields translations={translations} onChange={setTranslations} nameField="name" nameMax={120} testId="metric-ru" />
     </DialogShell>
   );
 }

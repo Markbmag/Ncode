@@ -16,6 +16,7 @@
     POST   /api/questions/{id}/duplicate            {"collection_id", "name"}
     POST   /api/questions/{id}/run                  {"params": {...}, "wait_ms", "refresh"} -> a query task
     PUT    /api/questions/{id}/favorite             star; DELETE to unstar
+    POST   /api/questions/{id}/verify               (admins) "the official answer"; DELETE to take it away
 
     GET    /api/library/archive                     archived collections and questions
     GET    /api/library/people                      user names and roles to share with
@@ -28,6 +29,10 @@ may carry "base_updated_at", the updated_at the editor loaded. If the item was s
 since, the answer is 409 with the header X-Edit-Conflict: 1 and nothing changes;
 without the field (old clients, "save mine anyway") the change simply wins.
 New items cannot go into an archived collection (409): they would vanish from view.
+
+Verified (M11): every question carries "verified": {"by", "at"} or null. A save that changes
+what the question computes (spec / SQL, kind, connection, parameters) takes the mark away;
+renaming, moving or a new chart keep it. Lists put verified questions first.
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from pydantic import BaseModel, Field, ValidationError
 from ..appdb import AppDB, User
 from ..config import Settings
 from ..federation.routes import register_federation_routes
+from ..home import record_view
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.spec import QuerySpec, Transform
 from .dashboard_routes import dashboard_summary, register_dashboard_routes
@@ -151,6 +157,7 @@ def question_json(q: Question) -> dict[str, Any]:
         "created_at": q.created_at,
         "updated_at": q.updated_at,
         "updated_by": q.updated_by,
+        "verified": q.verified,  # {"by", "at"} | None (M11)
     }
 
 
@@ -340,9 +347,11 @@ def register_content_routes(
     @router.get("/api/questions/{qid}")
     def get_question(qid: int, user: User = Depends(current_user)):
         try:
-            return question_json(store.get_question(user, qid))
+            q = store.get_question(user, qid)
         except ContentError as exc:
             raise fail(exc) from exc
+        record_view(app_db.engine, user, "question", qid)  # the home page's "recently viewed" (M11)
+        return question_json(q)
 
     @router.patch("/api/questions/{qid}")
     def patch_question(qid: int, body: QuestionPatch, user: User = Depends(current_user)):
@@ -363,9 +372,30 @@ def register_content_routes(
         if "viz" in changes:
             check_viz(changes["viz"])
         try:
-            return question_json(store.update_question(user, qid, **changes))
+            saved = store.update_question(user, qid, **changes)
         except ContentError as exc:
             raise fail(exc) from exc
+        if current.verified_by and not saved.verified_by:
+            app_db.audit(user.username, "question_unverify", phrase=f"question {qid}: the query changed", status="ok")
+        return question_json(saved)
+
+    @router.post("/api/questions/{qid}/verify")
+    def verify_question(qid: int, user: User = Depends(current_user)):
+        try:
+            q = store.set_verified(user, qid, True)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "question_verify", phrase=f"question {qid}", status="ok")
+        return question_json(q)
+
+    @router.delete("/api/questions/{qid}/verify")
+    def unverify_question(qid: int, user: User = Depends(current_user)):
+        try:
+            q = store.set_verified(user, qid, False)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "question_unverify", phrase=f"question {qid}", status="ok")
+        return question_json(q)
 
     @router.delete("/api/questions/{qid}")
     def delete_question(qid: int, user: User = Depends(current_user)):

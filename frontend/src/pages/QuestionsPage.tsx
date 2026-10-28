@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
-  Alert, AlertIcon, Badge, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
+  Alert, AlertIcon, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
   VStack, Wrap, WrapItem, useBreakpointValue, useDisclosure,
 } from '@chakra-ui/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,10 +18,16 @@ import { Step } from '../components/query/Step';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import { useMetrics } from '../semantic/api';
-import { CodeIcon, RefreshIcon } from '../icons';
+import { ChevronDownIcon, CodeIcon, PlusIcon, RefreshIcon } from '../icons';
 import { loadJson, saveJson } from '../lib/storage';
-import { columnOptions, humanize, isSummarised, newSpec, prepareSpec, queryTables, summaryOutputs } from '../query/draft';
+import { columnOptions, isSummarised, newSpec, prepareSpec, queryTables, summaryOutputs } from '../query/draft';
+import { byLabel, labelIn, metricDescription, metricName } from '../lib/names';
 import type { SchemaInfo } from '../query/draft';
+import { questionCaption } from '../query/caption';
+import { labelColumns, namerFromOptions, outputLabels } from '../query/outputs';
+import type { Namer } from '../query/outputs';
+import { applicableSteps, usedSteps } from '../query/steps';
+import type { ExtraStep } from '../query/steps';
 import type { FilterGroup, QuerySpec } from '../query/types';
 import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
 import type { TaskSnapshot } from '../query/useQueryRun';
@@ -39,6 +45,17 @@ import { locale, t, tn } from '../i18n/index.ts';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
 const draftKey = (connection: string) => `ncode_question_${connection}`;
+
+/** The steps under "More steps" (M11): plain names and what each is for. */
+const STEP_TEXT = (): Record<ExtraStep, { title: string; add: string; hint: string }> => ({
+  join: { title: t('Data from another table'), add: t('Add data from another table'), hint: t('Like VLOOKUP in Excel') },
+  custom: { title: t('New column from a formula'), add: t('New column from a formula'), hint: t('For example [total] - [discount]') },
+  having: { title: t('Filter the summary'), add: t('Filter the summary'), hint: t('For example only groups whose total is above 1000') },
+  columns: { title: t('Columns'), add: t('Choose columns'), hint: t('Show only some of the columns') },
+  sort: { title: t('Sort'), add: t('Sort'), hint: t('Biggest first, A → Z, newest first') },
+  calculate: { title: t('Compare and running totals'), add: t('Compare and running totals'), hint: t('vs. last year, running totals, shares, ranks') },
+  limit: { title: t('Row limit'), add: t('Row limit'), hint: t('For example only the first 10 rows') },
+});
 
 /** Questions: the notebook-style builder (one draft per database, kept in this browser tab). */
 export default function QuestionsPage() {
@@ -86,6 +103,23 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const { state, run, cancel } = useQueryRun();
   const metricsQuery = useMetrics(connection);
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
+  // M11: Data · Filter · Summarise first; the other steps appear when used or opened from "More steps"
+  const [opened, setOpened] = useState<Set<ExtraStep>>(() => new Set());
+  const [justOpened, setJustOpened] = useState<ExtraStep | null>(null);
+  const [moreOpen, setMoreOpen] = useState(() => usedSteps(draft).size > 0);
+  const scrollTo = useRef<ExtraStep | null>(null);
+  useEffect(() => {
+    if (!scrollTo.current) return;
+    document.querySelector(`[data-step="${scrollTo.current}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    scrollTo.current = null;
+  });
+  // the spec of the result on screen: its names and caption describe what is shown, not the draft
+  const [ranSpec, setRanSpec] = useState<QuerySpec | null>(null);
+  const start = useCallback(
+    (spec: QuerySpec, refresh = false) =>
+      void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec, wait_ms: START_WAIT_MS, ...(refresh ? { refresh: true } : {}) })).data, true, () => setRanSpec(spec)),
+    [run],
+  );
 
   useEffect(() => saveJson('ncode_auto_preview', autoPreview), [autoPreview]);
   useEffect(() => {
@@ -112,6 +146,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
     [schemaQuery.data],
   );
   const tableNames = useMemo(() => (schema ? schema.tables.map((t) => t.name).sort((a, b) => a.localeCompare(b)) : []), [schema]);
+  const tablePicks = useMemo(() => byLabel(schema?.tables ?? []), [schema]); // data model names (M11)
   const validDraft = draft && schema && tableNames.includes(draft.source.table) ? draft : null;
 
   const prepared0 = useMemo(() => (validDraft && schema ? prepareSpec(validDraft, schema) : null), [validDraft, schema]);
@@ -147,30 +182,48 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const current = prepared0 ? JSON.stringify({ spec: prepared0.spec, viz, params: paramDefs }) : null;
   const dirty = !!saved && baseline !== null && current !== baseline;
 
-  const runNow = () => {
+  const runNow = (refresh = false) => {
     if (!prepared || prepared.problems.length > 0) return;
-    const spec = prepared.spec;
-    void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec, wait_ms: START_WAIT_MS })).data);
+    start(prepared.spec, refresh);
   };
 
   // Live preview: run shortly after the question stops changing.
   useEffect(() => {
     if (!autoPreview || !preparedJson || (prepared?.problems.length ?? 0) > 0) return;
-    const timer = window.setTimeout(() => {
-      const spec = JSON.parse(preparedJson) as QuerySpec;
-      void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec, wait_ms: START_WAIT_MS })).data);
-    }, 700);
+    const timer = window.setTimeout(() => start(JSON.parse(preparedJson) as QuerySpec), 700);
     return () => window.clearTimeout(timer);
-  }, [preparedJson, autoPreview, prepared?.problems.length, run]);
+  }, [preparedJson, autoPreview, prepared?.problems.length, start]);
 
   // A saved question shows its result when opened, even without live preview.
   const openedRun = useRef(false);
   useEffect(() => {
     if (!saved || autoPreview || openedRun.current || !preparedJson || (prepared?.problems.length ?? 0) > 0) return;
     openedRun.current = true;
-    const spec = JSON.parse(preparedJson) as QuerySpec;
-    void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec, wait_ms: START_WAIT_MS })).data);
-  }, [saved, autoPreview, preparedJson, prepared?.problems.length, run]);
+    start(JSON.parse(preparedJson) as QuerySpec);
+  }, [saved, autoPreview, preparedJson, prepared?.problems.length, start]);
+
+  // Friendly names (M11): of the tables and saved metrics, in the UI language (columns come with the options).
+  const namerExtra = useMemo<Omit<Namer, 'column' | 'full'>>(() => {
+    const metricsList = metricsQuery.data ?? [];
+    return {
+      table: (name) => labelIn(schema?.tables, name),
+      metric: (id) => {
+        const m = metricsList.find((x) => x.id === id);
+        return m ? { label: metricName(m), description: metricDescription(m), slug: m.slug } : undefined;
+      },
+    };
+  }, [schema, metricsQuery.data]);
+  // ... of what the result on screen shows, and the one-line caption under it
+  const shown = useMemo(() => {
+    if (!ranSpec || !schema) return { labels: null, caption: null };
+    const ranOptions = columnOptions(ranSpec, schema);
+    const namer = namerFromOptions(ranOptions, namerExtra);
+    return { labels: outputLabels(ranSpec, namer, ranOptions), caption: questionCaption(ranSpec, namer) };
+  }, [ranSpec, schema, namerExtra]);
+  const shownState = useMemo(
+    () => (state.result && shown.labels ? { ...state, result: { ...state.result, columns: labelColumns(state.result.columns, shown.labels) } } : state),
+    [state, shown.labels],
+  );
 
   // Ctrl/Cmd+Enter runs now
   useEffect(() => {
@@ -199,19 +252,51 @@ export function Builder({ connection, saved = null }: { connection: string; save
   const options = validDraft ? columnOptions(validDraft, schema) : [];
   const summarised = validDraft ? isSummarised(validDraft) : false;
   const outputs = validDraft && summarised ? summaryOutputs(validDraft, options) : [];
-  const outputOptions = outputs.map((o) => ({ ref: o.name, label: o.name, type: o.type }));
+  // sorting and "filter the summary" pick result columns by their readable names (sum_total -> Sum of Total)
+  const draftLabels = prepared0 && summarised ? outputLabels(prepared0.spec, namerFromOptions(options, namerExtra)) : null;
+  const outputOptions = outputs.map((o) => {
+    const own = draftLabels?.get(o.name);
+    return { ref: o.name, label: own?.label ?? o.name, description: own?.description, type: o.type };
+  });
   const baseOptions = validDraft ? columnOptions({ ...validDraft, expressions: [] }, schema) : [];
   const inQuery = validDraft ? new Set(queryTables(validDraft, schema).map((t) => t.table)) : new Set<string>();
-  const metrics = (metricsQuery.data ?? []).filter((m) => inQuery.has(m.table));
+  const metrics = (metricsQuery.data ?? []).filter((m) => inQuery.has(m.table)).map((m) => ({ ...m, name: metricName(m), description: metricDescription(m) }));
+
+  const used = usedSteps(validDraft);
+  const isShown = (step: ExtraStep) => used.has(step) || opened.has(step);
+  const hiddenSteps = applicableSteps(validDraft).filter((step) => !isShown(step));
+  const steps = STEP_TEXT();
+  const openStep = (step: ExtraStep) => {
+    setOpened((prev) => new Set(prev).add(step));
+    setJustOpened(step);
+    scrollTo.current = step;
+    // one click gets the step going
+    if (step === 'sort' && validDraft && !(validDraft.order ?? []).length) update({ order: [{ ref: '', dir: 'asc' }] });
+    if (step === 'having' && validDraft && !(validDraft.having?.rules ?? []).length) update({ having: { op: 'and', rules: [{ op: '=', value: '' }] } });
+    if (step === 'columns') setShowFields(true);
+  };
+  const hideStep = (step: ExtraStep) =>
+    setOpened((prev) => {
+      const next = new Set(prev);
+      next.delete(step);
+      return next;
+    });
+  // an opened step nobody used can go back under "More steps"
+  const hideAction = (step: ExtraStep) =>
+    opened.has(step) && !used.has(step) ? (
+      <Button size="xs" variant="ghost" onClick={() => hideStep(step)} data-testid={`hide-${step}`}>
+        {t('Hide')}
+      </Button>
+    ) : undefined;
 
   const builder = (
     <Box h="100%" overflowY="auto" pr={{ base: 0, lg: 3 }} pb={6} data-testid="builder">
       <VStack align="stretch" spacing={4}>
         <Step title={t('Data')} color="brand.300" testId="step-data">
           <Select size="sm" value={validDraft?.source.table ?? ''} onChange={(e) => pickSource(e.target.value)} placeholder={t('Pick a table…')} aria-label={t('Table')}>
-            {tableNames.map((t) => (
-              <option key={t} value={t}>
-                {humanize(t)}
+            {tablePicks.map((p) => (
+              <option key={p.name} value={p.name} title={[p.showTechnical ? p.name : null, p.description].filter(Boolean).join(' — ') || undefined}>
+                {p.label}
               </option>
             ))}
           </Select>
@@ -220,13 +305,17 @@ export function Builder({ connection, saved = null }: { connection: string; save
 
         {validDraft && (
           <>
-            <Step title={t('Join')} color="teal.300" testId="step-join">
-              <JoinEditor spec={validDraft} schema={schema} onChange={(joins) => update({ joins })} />
-            </Step>
+            {isShown('join') && (
+              <Step title={steps.join.title} color="teal.300" testId="step-join" anchor="join" hint={t('Like VLOOKUP in Excel: rows are matched on a shared column (a join in SQL).')} actions={hideAction('join')}>
+                <JoinEditor spec={validDraft} schema={schema} onChange={(joins) => update({ joins })} openMenu={justOpened === 'join'} />
+              </Step>
+            )}
 
-            <Step title={t('Custom columns')} color="cyan.300" hint={t('Formulas such as [total] - [discount] or round([total] / [qty], 2).')}>
-              <CustomColumnsEditor columns={validDraft.expressions ?? []} onChange={(expressions) => update({ expressions })} options={baseOptions} />
-            </Step>
+            {isShown('custom') && (
+              <Step title={steps.custom.title} color="cyan.300" anchor="custom" hint={t('Formulas such as [total] - [discount] or round([total] / [qty], 2).')} actions={hideAction('custom')}>
+                <CustomColumnsEditor columns={validDraft.expressions ?? []} onChange={(expressions) => update({ expressions })} options={baseOptions} />
+              </Step>
+            )}
 
             <Step title={t('Filter')} color="purple.300" testId="step-filter">
               <FilterEditor
@@ -243,22 +332,28 @@ export function Builder({ connection, saved = null }: { connection: string; save
                 breakouts={validDraft.breakouts ?? []}
                 options={options}
                 metrics={metrics}
+                namer={namerFromOptions(options, namerExtra)}
                 onChange={(aggregations, breakouts) => update({ aggregations, breakouts, ...(isSummarised({ ...validDraft, aggregations, breakouts }) ? {} : { having: null }) })}
               />
             </Step>
 
-            {summarised ? (
-              <Step title={t('Filter the summary')} color="pink.300" hint={t('Like HAVING in SQL: e.g. only groups whose total is above 1000.')}>
+            {summarised && isShown('having') && (
+              <Step title={steps.having.title} color="pink.300" anchor="having" hint={t('Keeps only some groups, e.g. those whose total is above 1000 (HAVING in SQL).')} actions={hideAction('having')}>
                 <FilterEditor group={validDraft.having ?? EMPTY_GROUP} onChange={(having) => update({ having })} options={outputOptions} emptyText={t('Every group is shown.')} />
               </Step>
-            ) : (
+            )}
+            {!summarised && isShown('columns') && (
               <Step
-                title={t('Columns')}
+                title={steps.columns.title}
                 color="blue.300"
+                anchor="columns"
                 actions={
-                  <Button size="xs" variant="ghost" onClick={() => setShowFields((v) => !v)}>
-                    {showFields ? t('Done') : t('Choose')}
-                  </Button>
+                  <HStack spacing={0}>
+                    <Button size="xs" variant="ghost" onClick={() => setShowFields((v) => !v)}>
+                      {showFields ? t('Done') : t('Choose')}
+                    </Button>
+                    {hideAction('columns')}
+                  </HStack>
                 }
               >
                 <Text fontSize="sm" color="mutedText">
@@ -277,7 +372,9 @@ export function Builder({ connection, saved = null }: { connection: string; save
                               update({ fields: e.target.checked ? [...(validDraft.fields ?? []), { ref: o.ref }] : (validDraft.fields ?? []).filter((f) => f.ref !== o.ref) })
                             }
                           >
-                            <Text fontSize="xs">{o.label}</Text>
+                            <Text fontSize="xs" title={o.description ?? undefined}>
+                              {o.label}
+                            </Text>
                           </Checkbox>
                         </WrapItem>
                       );
@@ -287,32 +384,70 @@ export function Builder({ connection, saved = null }: { connection: string; save
               </Step>
             )}
 
-            <Step title={t('Sort')} color="orange.300">
-              <SortEditor order={validDraft.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => update({ order })} />
-            </Step>
+            {isShown('sort') && (
+              <Step title={steps.sort.title} color="orange.300" anchor="sort" actions={hideAction('sort')}>
+                <SortEditor order={validDraft.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => update({ order })} />
+              </Step>
+            )}
 
-            <Step title={t('Calculate')} color="teal.200" testId="step-calculate" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')}>
-              <TransformsEditor transforms={validDraft.transforms ?? []} columns={state.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
-            </Step>
+            {isShown('calculate') && (
+              <Step title={steps.calculate.title} color="teal.200" testId="step-calculate" anchor="calculate" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')} actions={hideAction('calculate')}>
+                <TransformsEditor transforms={validDraft.transforms ?? []} columns={shownState.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
+              </Step>
+            )}
 
-            <Step title={t('Row limit')} color="gray.400">
-              <HStack>
-                <Input
-                  size="sm"
-                  type="number"
-                  min={1}
-                  max={ws.limits.query_max_rows}
-                  maxW="140px"
-                  placeholder={String(ws.limits.query_default_rows)}
-                  value={validDraft.limit ?? ''}
-                  onChange={(e) => update({ limit: e.target.value ? Math.min(Number(e.target.value), ws.limits.query_max_rows ?? 10000) : null })}
-                  aria-label={t('Row limit')}
-                />
-                <Text fontSize="xs" color="faintText">
-                  {t('at most {n}', { n: (ws.limits.query_max_rows ?? 10000).toLocaleString(locale()) })}
-                </Text>
-              </HStack>
-            </Step>
+            {isShown('limit') && (
+              <Step title={steps.limit.title} color="gray.400" anchor="limit" actions={hideAction('limit')}>
+                <HStack>
+                  <Input
+                    size="sm"
+                    type="number"
+                    min={1}
+                    max={ws.limits.query_max_rows}
+                    maxW="140px"
+                    placeholder={String(ws.limits.query_default_rows)}
+                    value={validDraft.limit ?? ''}
+                    onChange={(e) => update({ limit: e.target.value ? Math.min(Number(e.target.value), ws.limits.query_max_rows ?? 10000) : null })}
+                    aria-label={t('Row limit')}
+                    autoFocus={justOpened === 'limit'}
+                  />
+                  <Text fontSize="xs" color="faintText">
+                    {t('at most {n}', { n: (ws.limits.query_max_rows ?? 10000).toLocaleString(locale()) })}
+                  </Text>
+                </HStack>
+              </Step>
+            )}
+
+            {hiddenSteps.length > 0 && (
+              <Box data-testid="more-steps">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  color="mutedText"
+                  px={1}
+                  rightIcon={<ChevronDownIcon boxSize={3.5} transform={moreOpen ? 'rotate(180deg)' : undefined} transition="transform 0.15s" />}
+                  onClick={() => setMoreOpen((v) => !v)}
+                  aria-expanded={moreOpen}
+                  data-testid="more-steps-toggle"
+                >
+                  {t('More steps')}
+                </Button>
+                <Collapse in={moreOpen} animateOpacity>
+                  <VStack align="stretch" spacing={1.5} pt={2}>
+                    {hiddenSteps.map((step) => (
+                      <Flex key={step} align="center" gap={3} wrap="wrap">
+                        <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => openStep(step)} data-testid={`more-${step}`}>
+                          {steps[step].add}
+                        </Button>
+                        <Text fontSize="xs" color="faintText">
+                          {steps[step].hint}
+                        </Text>
+                      </Flex>
+                    ))}
+                  </VStack>
+                </Collapse>
+              </Box>
+            )}
           </>
         )}
       </VStack>
@@ -329,13 +464,16 @@ export function Builder({ connection, saved = null }: { connection: string; save
       )}
       <ParametersBar defs={paramDefs} shapes={paramShapes} values={paramValues} onValues={setParamValues} onDefs={!saved || saved.access === 'edit' ? setDefs : null} />
       <ResultView
-        state={state}
+        state={shownState}
         onCancel={cancel}
         smartDates={smartDates}
         onSmartDates={setSmartDates}
         filename={saved ? saved.name : `${conn?.label ?? connection}_${validDraft?.source.table ?? 'question'}`}
         viz={viz}
         onVizChange={setViz}
+        caption={shownState.result ? shown.caption : null}
+        rowLimit={ranSpec?.limit ?? null}
+        onRefresh={() => runNow(true)}
         empty={
           <Flex h="100%" align="center" justify="center" p={6} color="mutedText" fontSize="sm" textAlign="center">
             {validDraft ? t('Run the question to see the result (Ctrl/Cmd + Enter).') : t('Pick a table to start. The result appears here while you build.')}
@@ -353,12 +491,12 @@ export function Builder({ connection, saved = null }: { connection: string; save
         subtitle={
           <>
             {conn?.label}
-            {validDraft && ` · ${humanize(validDraft.source.table)}`}
+            {validDraft && ` · ${labelIn(schema?.tables, validDraft.source.table)}`}
           </>
         }
         saved={saved}
         dirty={dirty}
-        defaultName={validDraft ? humanize(validDraft.source.table) : t('Question')}
+        defaultName={validDraft ? labelIn(schema?.tables, validDraft.source.table) : t('Question')}
         payload={() => (prepared0 && prepared0.problems.length === 0 ? { kind: 'builder', spec: prepared0.spec, viz, parameters: paramDefs } : null)}
         onRevert={(to) => {
           const q = to ?? saved;
@@ -385,11 +523,10 @@ export function Builder({ connection, saved = null }: { connection: string; save
             </Text>
           </HStack>
         </Tooltip>
-        {summarised && <Badge colorScheme="green">{t('summarised')}</Badge>}
         <Button size="sm" variant="subtle" leftIcon={<CodeIcon boxSize={4} />} onClick={sqlModal.onOpen} isDisabled={!prepared || prepared.problems.length > 0} data-testid="view-sql">
           {t('View SQL')}
         </Button>
-        <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={runNow} isDisabled={!prepared || prepared.problems.length > 0} data-testid="run-question">
+        <Button size="sm" leftIcon={<RefreshIcon boxSize={4} />} onClick={() => runNow()} isDisabled={!prepared || prepared.problems.length > 0} data-testid="run-question">
           {t('Run')}
         </Button>
         {!saved && (

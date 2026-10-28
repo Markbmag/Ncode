@@ -66,6 +66,9 @@ from .sharing.routes import register_sharing_routes
 from .usage import AuditRetention, register_usage_routes
 from .admin_routes import register_admin_routes
 from .content.health import register_broken_content_routes
+from .demo import DEMO_KEY, DemoDatabase, register_demo_routes
+from .glossary import register_glossary_routes
+from .home import register_home_routes
 from .backup import AutoBackup
 from .metrics import Metrics
 from .ops_routes import register_ops_routes
@@ -106,6 +109,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     throttle = LoginThrottle(settings.login_max_failures, settings.login_lock_sec)
     semantic = SemanticStore(app_db.engine)
+    demo = DemoDatabase(settings, app_db, registry, semantic)  # M11: "Factory demo" (NCODE_DEMO)
+    demo.start()
     rowsec = RowRules(app_db.engine)
     settings_store = SettingsStore(app_db.engine, app_db.cipher)
     subscriptions = SubscriptionStore(app_db.engine)
@@ -271,7 +276,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             base = f"db_{base}"
         existing = registry.configs
         key, n = base, 2
-        while key in existing:
+        while key in existing or key == DEMO_KEY:  # the demo keeps its key even while hidden
             key = f"{base}_{n}"
             n += 1
         return key
@@ -332,6 +337,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         cfg = registry.configs.get(key)
         if cfg is None:
             raise HTTPException(status_code=404, detail=f"Unknown connection {key!r}")
+        if cfg.source == "demo":
+            raise HTTPException(status_code=400, detail="The demo database cannot be changed; an admin can hide it")
         if cfg.source != "ui":
             raise HTTPException(
                 status_code=400, detail="This connection is defined in the .env file — it can only be changed there"
@@ -371,7 +378,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 engine=c.engine,
                 database=c.database if user.is_admin or not file_based(c) else "",
                 id_hints=list(c.id_hints) if user.is_admin else [],
-                source=c.source if user.is_admin else "",
+                source=c.source if user.is_admin or c.source == "demo" else "",  # the demo says what it is (M11)
                 editable=user.is_admin and c.source == "ui",
             )
             for c in sorted(registry.configs.values(), key=lambda c: c.label.lower())
@@ -468,6 +475,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
             schema = registry.get_schema(key, refresh=refresh)
         except Exception as exc:
             raise db_http_error(exc, registry.get_config(key).engine, "Could not read the database structure") from exc
+        names = semantic.tables(key)  # display names from the data model (M11), cached
         return {
             "tables": [
                 {
@@ -475,6 +483,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                     "columns": len(cols),
                     # columns that a text search can look into
                     "searchable": sum(1 for c in cols if classify_type(c["type"]) == "text"),
+                    **(names.get(name) or {}),
                 }
                 for name, cols in sorted(schema.items(), key=lambda item: item[0].lower())
             ]
@@ -763,6 +772,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         app, registry=registry, settings=settings, runner=runner, queries=queries, content=content, semantic=semantic,
         current_user=current_user, require_connection=require_connection,
     )
+    register_glossary_routes(  # M11: business terms, linked to metrics, columns and questions
+        app, app_db=app_db, content=content, semantic=semantic, registry=registry,
+        current_user=current_user, require_admin=require_admin,
+    )
     app.state.scheduler = scheduler
     register_automation_routes(
         app, app_db=app_db, settings_store=settings_store, subs=subscriptions, engine=automation,
@@ -786,5 +799,11 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     app.state.content_health = register_broken_content_routes(  # Admin → Broken content (M10)
         app, app_db=app_db, registry=registry, semantic=semantic, require_admin=require_admin,
+    )
+    register_home_routes(  # M11: recently viewed, "Start here", the new-user checklist, personal settings
+        app, app_db=app_db, content=content, current_user=current_user, require_admin=require_admin,
+    )
+    register_demo_routes(  # M11: hide / show the demo database for everyone (Admin → Databases)
+        app, demo=demo, require_admin=require_admin, on_change=lambda: runner.cache.drop_connection(DEMO_KEY),
     )
     return app

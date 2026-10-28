@@ -70,7 +70,7 @@ def finish_envelope(env: ResultEnvelope, meta: list[dict[str, Any] | None], tran
     """Column metadata from the data model, then the transforms (running totals ...)."""
     for col, m in zip(env.columns, meta):
         if m:
-            for key in ("display_name", "description", "semantic_type", "format"):
+            for key in ("display_name", "description", "semantic_type", "format", "translations"):
                 if m.get(key) is not None:
                     setattr(col, key, m[key])
     if transforms:
@@ -110,6 +110,7 @@ def column_meta(compiled: Any, fields: dict[str, Any], metric_formats: dict[str,
         out.append({
             "display_name": info.get("display_name") if same else None,
             "description": info.get("description") if same else None,
+            "translations": info.get("translations") if same else None,
             "semantic_type": info.get("semantic_type"),
             "format": info.get("format"),
         })

@@ -7,6 +7,7 @@ import type { VizState } from '../viz/state';
 import type { DashboardSummary } from '../dashboards/types';
 import type { Dataset, FederatedSpec } from '../federation/types';
 import type { ParameterDef } from './params';
+import type { Verified } from './verified.ts';
 import { t } from '../i18n/index.ts';
 
 export { flattenTree } from './tree.ts';
@@ -46,6 +47,7 @@ export interface QuestionSummary {
   created_at: number;
   updated_at: number;
   updated_by: string | null;
+  verified?: Verified | null; // an admin marked it as the official answer (M11)
 }
 
 export interface SqlQuestionSpec {

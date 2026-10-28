@@ -5,6 +5,7 @@
 import type { ResultColumn } from '../api';
 import { MAX_PIE_SLICES, MAX_SERIES, OTHER } from './palette.ts';
 import type { AggregateFn, PivotSpec, VizSpec } from './types.ts';
+import { titleOf } from './labels.ts';
 import { t as tr } from '../i18n/index.ts';
 
 const EMPTY = tr('(empty)');
@@ -227,7 +228,7 @@ export function pivot(t: Table, spec: PivotSpec): PivotResult {
   return {
     rowKeys: [...rowKeys.values()],
     colKeys: [...colKeys.values()],
-    valueLabels: spec.values.map((v) => tr('{agg} of {column}', { agg: tr(v.agg), column: v.column })),
+    valueLabels: spec.values.map((v) => tr('{agg} of {column}', { agg: tr(v.agg), column: titleOf(t.columns, v.column) })),
     cell: (r, c, v) => get(`${rList[r]}|${cList[c]}`, v),
     rowTotal: (r, v) => get(`${rList[r]}|*`, v),
     colTotal: (c, v) => get(`*|${cList[c]}`, v),

@@ -4,6 +4,7 @@ import type { Table } from '../../viz/data';
 import { formatNumber } from '../../viz/format';
 import type { ChartTheme } from '../../viz/palette';
 import type { VizSpec } from '../../viz/types';
+import { columnDescription, titleOf } from '../../viz/labels';
 import { t } from '../../i18n/index.ts';
 
 /** Stat tile: label, value, change against the previous row, and a 24-point sparkline. */
@@ -17,8 +18,8 @@ export function KpiTile({ table, viz, theme }: { table: Table; viz: VizSpec; the
 
   return (
     <Flex h="100%" direction="column" justify="center" align="center" gap={2} p={4} data-testid="kpi">
-      <Text fontSize="sm" color="mutedText">
-        {column ?? t('No number column')}
+      <Text fontSize="sm" color="mutedText" title={columnDescription(table.columns.find((c) => c.name === column)) ?? undefined}>
+        {column ? titleOf(table.columns, column) : t('No number column')}
       </Text>
       <Text fontSize={{ base: '4xl', md: '5xl' }} fontWeight={600} lineHeight="1.05" color="bodyText" data-testid="kpi-value">
         {value === null ? '—' : formatNumber(value, { compact: Math.abs(value) >= 1e6, ...fmt })}

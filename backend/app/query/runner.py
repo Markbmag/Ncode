@@ -116,17 +116,23 @@ class ResultCache:
         return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
     def get(self, key: str) -> ResultEnvelope | None:
+        found = self.get_with_age(key)
+        return found[0] if found else None
+
+    def get_with_age(self, key: str) -> tuple[ResultEnvelope, float] | None:
+        """The cached result and its age in seconds."""
         if self.ttl <= 0:
             return None
         with self._lock:
             item = self._items.get(key)
             if item is None:
                 return None
-            if time.time() - item[0] > self.ttl:
+            age = time.time() - item[0]
+            if age > self.ttl:
                 del self._items[key]
                 return None
             self._items.move_to_end(key)
-            return item[1]
+            return item[1], age
 
     def put(self, key: str, value: ResultEnvelope) -> None:
         if self.ttl <= 0:
@@ -192,10 +198,11 @@ class QueryRunner:
         with self._lock:
             self._tasks[task.id] = task
         if cache_key is not None and read_cache:
-            cached = self.cache.get(cache_key)
+            cached = self.cache.get_with_age(cache_key)
             if cached is not None:
-                envelope = cached.model_copy(deep=True)
+                envelope = cached[0].model_copy(deep=True)
                 envelope.stats.cached = True
+                envelope.stats.cached_age_sec = max(0, round(cached[1]))
                 task.finish("completed", envelope)
                 if on_finish:
                     on_finish(task)

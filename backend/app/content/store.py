@@ -30,8 +30,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ..appdb import User, groups_table, users_table
 from .tables import (
-    collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, permissions_table,
-    questions_table, share_links_table, subscription_runs_table, subscriptions_table,
+    collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, item_views_table,
+    permissions_table, questions_table, share_links_table, subscription_runs_table, subscriptions_table,
 )
 
 Level = Literal["view", "edit"]
@@ -119,6 +119,19 @@ class Question:
     model: bool = False
     access: Level | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    verified_by: str | None = None   # M11: an admin checked it - "the official answer"
+    verified_at: float | None = None
+
+    @property
+    def verified(self) -> dict[str, Any] | None:
+        return {"by": self.verified_by, "at": self.verified_at} if self.verified_by else None
+
+
+def query_identity(kind: str, connection: str, spec: dict[str, Any], parameters: list[dict[str, Any]]) -> str:
+    """What a question computes (not its name, place or chart): when it changes, the Verified
+    badge goes. The combined columns a multi-source editor saves are only a hint for dashboards."""
+    spec = {k: v for k, v in spec.items() if not (kind == "federated" and k == "result_columns")}
+    return json.dumps([kind, connection, spec, parameters], sort_keys=True, default=str)
 
 
 class Snapshot:
@@ -214,6 +227,7 @@ def _question(row: Any) -> Question:
         owner_id=row.owner_id, owner=row.owner, archived=bool(row.archived), import_key=row.import_key,
         model=bool(getattr(row, "model", False)),
         created_at=row.created_at, updated_at=row.updated_at, updated_by=row.updated_by,
+        verified_by=getattr(row, "verified_by", None), verified_at=getattr(row, "verified_at", None),
     )
 
 
@@ -555,7 +569,8 @@ class ContentStore:
                 )
             )
         stmt = stmt.where(questions_table.c.archived.is_(archived))
-        stmt = stmt.order_by(questions_table.c.updated_at.desc())
+        # verified first (M11: the official answer ranks first), then the most recently changed
+        stmt = stmt.order_by(questions_table.c.verified_by.is_(None), questions_table.c.updated_at.desc())
         with self.engine.connect() as conn:
             rows = conn.execute(stmt).all()
         out = []
@@ -630,10 +645,32 @@ class ContentStore:
             values["archived"] = bool(changes["archived"])
         if changes.get("model") is not None:
             values["model"] = bool(changes["model"])
+        if current.verified_by and {"spec", "kind", "connection", "parameters"} & values.keys():
+            before = query_identity(current.kind, current.connection, current.spec, current.parameters)
+            after = query_identity(
+                values.get("kind", current.kind), values.get("connection", current.connection),
+                changes.get("spec", current.spec) or {}, changes.get("parameters", current.parameters) or [],
+            )
+            if before != after:  # a changed query is no longer the answer that was checked (M11)
+                values.update(verified_by=None, verified_at=None)
         if values:
             values.update(updated_at=time.time(), updated_by=user.username)
             with self.engine.begin() as conn:
                 conn.execute(update(questions_table).where(questions_table.c.id == qid).values(**values))
+        return self.get_question(user, qid)
+
+    def set_verified(self, user: User, qid: int, on: bool) -> Question:
+        """Mark a question as the official answer (admins), or take the mark away. The question
+        itself does not change: no new version, no edit conflict for people editing it."""
+        if not user.is_admin:
+            raise ContentError("Only an administrator can do this", 403)
+        q = self.get_question(user, qid)
+        if on and (q.archived or self.snapshot().hidden(q.collection_id)):
+            raise ContentError("An archived question cannot be verified. Restore it first", 409)
+        with self.engine.begin() as conn:
+            conn.execute(update(questions_table).where(questions_table.c.id == qid).values(
+                verified_by=user.username if on else None, verified_at=time.time() if on else None,
+            ))
         return self.get_question(user, qid)
 
     def delete_question(self, user: User, qid: int) -> None:
@@ -680,6 +717,9 @@ def forget_items(conn: Any, target_type: str, ids: list[int]) -> None:
     conn.execute(delete(share_links_table).where(
         share_links_table.c.target_type == target_type, share_links_table.c.target_id.in_(ids)
     ))
+    conn.execute(delete(item_views_table).where(  # "recently viewed" on home pages (M11)
+        item_views_table.c.item_type == target_type, item_views_table.c.item_id.in_(ids)
+    ))
 
 
 def forget_user(conn: Any, user_id: int, username: str) -> None:
@@ -689,6 +729,7 @@ def forget_user(conn: Any, user_id: int, username: str) -> None:
     personal collection becomes an ordinary admin-only collection.
     """
     conn.execute(delete(favorites_table).where(favorites_table.c.user_id == user_id))
+    conn.execute(delete(item_views_table).where(item_views_table.c.user_id == user_id))
     conn.execute(delete(permissions_table).where(permissions_table.c.user_id == user_id))
     conn.execute(
         update(collections_table)

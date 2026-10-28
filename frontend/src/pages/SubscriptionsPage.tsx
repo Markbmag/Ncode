@@ -13,6 +13,7 @@ import { PageHeader } from '../components/PageHeader';
 import { BellIcon, LayoutIcon, ChartIcon, MailIcon, SendIcon, TrashIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { LoadError } from '../components/LoadError';
+import { useHome } from '../home/api';
 
 /** /subscriptions: everything that is sent on a schedule - yours, the ones you receive, and (admins) everyone's. */
 export default function SubscriptionsPage() {
@@ -22,6 +23,8 @@ export default function SubscriptionsPage() {
   const subs = list.data ?? [];
   const mine = subs.filter((s) => s.can_manage);
   const receiving = subs.filter((s) => !s.can_manage);
+  const home = useHome(list.isSuccess && subs.length === 0); // what the person uses: the empty page offers to send that
+  const starter = home.data ? (home.data.dashboards[0] ?? home.data.recent[0] ?? null) : null;
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
@@ -44,9 +47,19 @@ export default function SubscriptionsPage() {
           <Text fontSize="sm" maxW="460px">
             {t('Nothing is sent yet. Open a dashboard or a saved question and use the bell button to send it every morning, every Monday or when a number crosses a line.')}
           </Text>
-          <Button as={RouterLink} to="/dashboards" size="sm" variant="brand">
-            {t('Dashboards')}
-          </Button>
+          <Text fontSize="xs" color="faintText" maxW="460px">
+            {t('Example: {example}', { example: t('“Line output” every Monday at 7:00, by email to you and your team.') })}
+          </Text>
+          {/* one action right here (M11): set it up on something the person already uses */}
+          {starter ? (
+            <Button as={RouterLink} to={`/${starter.type === 'dashboard' ? 'dashboards' : 'questions'}/${starter.id}?subscriptions=1`} size="sm" variant="brand" data-testid="subscribe-starter">
+              {t('Send “{name}” on a schedule…', { name: starter.name })}
+            </Button>
+          ) : (
+            <Button as={RouterLink} to="/dashboards" size="sm" variant="brand">
+              {t('Pick a dashboard')}
+            </Button>
+          )}
         </Flex>
       )}
       {mine.length > 0 && <Group title={everyone ? t('All subscriptions') : t('Yours')} subs={mine} />}

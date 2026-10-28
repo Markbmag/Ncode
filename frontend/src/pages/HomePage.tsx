@@ -1,27 +1,36 @@
-import { Badge, Box, Flex, SimpleGrid, Text, VStack } from '@chakra-ui/react';
+import { useEffect } from 'react';
+import { Box, Button, Link, SimpleGrid, Skeleton, VStack } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
-import { NAV_ITEMS } from '../shell/nav';
+import { InlineHint } from '../components/InlineHint';
+import { LoadError } from '../components/LoadError';
+import { ActivityIcon, LayoutIcon } from '../icons';
+import { useHome } from '../home/api';
+import { rememberChecklist, setChecklistHidden } from '../home/checklist';
+import { EverythingSection, FirstSteps, ItemList, Panel, StartHereSection } from '../home/HomeSections';
+import { progress } from '../home/steps';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { t, tn } from '../i18n/index.ts';
-import { LoadError } from '../components/LoadError';
 
-const BLURBS: Record<string, string> = {
-  '/search': t('Find a value in every table of a database at once.'),
-  '/browse': t('Page through any table, sort, filter and export it to CSV.'),
-  '/questions': t('Build questions without SQL: join, filter, group and chart.'),
-  '/sql': t('Write read-only SQL with autocomplete and safe limits.'),
-  '/library': t('Saved questions, dashboards and models in shared collections.'),
-  '/combine': t('Join results from several databases and uploaded files.'),
-  '/datasets': t('Upload CSV, Excel or Parquet files and query them like tables.'),
-  '/dashboards': t('Put questions together on a dashboard with shared filters.'),
-  '/subscriptions': t('Reports and alerts sent by email, Slack, Teams or Telegram on a schedule.'),
-  '/admin': t('Databases, the data model, people and groups, delivery, audit log and backups.'),
-};
+const DEMO_KEY = 'demo'; // the "Factory demo" database that ships with Ncode (app/demo.py)
 
+/**
+ * The home page per person (M11): first steps for newcomers, the admins' "Start here" collection,
+ * what you opened last, your dashboards - then everything Ncode can do, in plain words.
+ */
 export default function HomePage() {
   const { user, isAdmin, connections, loaded, connectionsError, reloadConnections } = useWorkspace();
-  const items = NAV_ITEMS.filter((item) => item.to !== '/' && (isAdmin || !item.adminOnly));
+  const home = useHome();
+  const data = home.data;
+  useEffect(() => {
+    if (data) rememberChecklist(data.checklist); // the other pages then tick steps without asking first
+  }, [data]);
+  const demo = connections.find((c) => c.key === DEMO_KEY)?.label ?? null;
+  // the first steps link to a real dashboard when there is one: the official ones first
+  const firstDashboard = data
+    ? (data.start_here?.items.find((i) => i.type === 'dashboard') ?? data.dashboards[0] ?? data.recent.find((i) => i.type === 'dashboard') ?? null)
+    : null;
+  const steps = data ? progress(data.checklist) : null;
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
@@ -29,39 +38,67 @@ export default function HomePage() {
         subtitle={loaded && !connectionsError ? tn(connections.length, '{n} database available to you', '{n} databases available to you') : ' '}
       />
       {connectionsError !== null && <LoadError error={connectionsError} title={t('Could not load your databases')} onRetry={reloadConnections} />}
-      <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
-        {items.map((item) => (
-          <Box
-            as={RouterLink}
-            key={item.to}
-            to={item.to}
-            bg="panelBg"
-            border="1px solid"
-            borderColor="lineColor"
-            borderRadius="2xl"
-            p={5}
-            transition="border-color 0.15s, transform 0.15s"
-            _hover={{ borderColor: 'brand.400', transform: 'translateY(-1px)' }}
-          >
-            <Flex align="center" gap={3} mb={2}>
-              <Flex w="36px" h="36px" align="center" justify="center" borderRadius="lg" bg="chipBg" color="brand.300">
-                <item.icon boxSize={5} />
-              </Flex>
-              <Text fontWeight={700} flex={1}>
-                {item.label}
-              </Text>
-              {item.milestone && (
-                <Badge bg="chipBg" color="faintText" borderRadius="full" px={2} fontSize="0.65rem">
-                  {item.milestone}
-                </Badge>
-              )}
-            </Flex>
-            <Text fontSize="sm" color="mutedText">
-              {BLURBS[item.to]}
-            </Text>
-          </Box>
-        ))}
-      </SimpleGrid>
+      {home.isError && <LoadError compact error={home.error} title={t('Could not load your home page')} onRetry={() => void home.refetch()} />}
+      {home.isPending && <Skeleton h="180px" borderRadius="2xl" />}
+
+      {data && (
+        <>
+          <FirstSteps state={data.checklist} dashboardTo={firstDashboard ? `/dashboards/${firstDashboard.id}` : null} demo={demo} />
+          <StartHereSection startHere={data.start_here} isAdmin={isAdmin} />
+          <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="start">
+            <Panel title={t('Recently viewed')} testId="home-recent">
+              <ItemList
+                items={data.recent}
+                empty={
+                  <InlineHint icon={<ActivityIcon boxSize={4} />} example={t('a dashboard you check every morning')}>
+                    {t('Questions and dashboards you open show up here, so you can get back to them in one click.')}
+                  </InlineHint>
+                }
+              />
+            </Panel>
+            <Panel
+              title={t('Your dashboards')}
+              subtitle={t('Starred first, then the ones you opened or made.')}
+              actions={
+                <Link as={RouterLink} to="/dashboards" fontSize="xs">
+                  {t('All dashboards')}
+                </Link>
+              }
+              testId="home-dashboards"
+            >
+              <ItemList
+                items={data.dashboards}
+                empty={
+                  <InlineHint
+                    icon={<LayoutIcon boxSize={4} />}
+                    example={t('“Line output this week”, with a date filter on top')}
+                    action={
+                      <Button as={RouterLink} to="/dashboards" size="sm" variant="subtle">
+                        {t('Open dashboards')}
+                      </Button>
+                    }
+                  >
+                    {t('Star a dashboard you use, or make your own from saved questions: it then shows up here.')}
+                  </InlineHint>
+                }
+              />
+            </Panel>
+          </SimpleGrid>
+        </>
+      )}
+
+      <EverythingSection
+        isAdmin={isAdmin}
+        footer={
+          data && data.checklist.hidden && steps?.next ? (
+            <Box mt={3}>
+              <Button size="xs" variant="ghost" onClick={() => void setChecklistHidden(false).catch(() => undefined)} data-testid="first-steps-show">
+                {t('Show the first steps again')}
+              </Button>
+            </Box>
+          ) : undefined
+        }
+      />
     </VStack>
   );
 }

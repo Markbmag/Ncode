@@ -15,6 +15,7 @@ import { t } from '../i18n/index.ts';
 import { LayoutIcon, SparklesIcon } from '../icons';
 import { library, useCollections } from '../library/api';
 import { effectiveViz } from '../viz/state';
+import { useNames } from '../lib/useNames';
 
 const ROW_PX = 40;
 
@@ -33,6 +34,9 @@ export default function XrayPage() {
     queryFn: ({ signal }) => runAnalysis('/api/xray', body, signal),
   });
   const [showProfile, setShowProfile] = useState(false);
+  const names = useNames(connection ?? '');
+  // a table by its data model name (M11); a question by its own name
+  const title = xray.data ? (!question && table ? names.table(table) : xray.data.title) : '';
   const wide = useBreakpointValue({ base: false, md: true }) ?? true;
   const toast = useToast();
   const navigate = useNavigate();
@@ -44,7 +48,7 @@ export default function XrayPage() {
     setSaving(true);
     try {
       const collection = cols.personal_id;
-      const board = await dashboards.create({ name: t('X-ray: {title}', { title: xray.data.title }), description: t('Made by X-ray'), collection_id: collection });
+      const board = await dashboards.create({ name: t('X-ray: {title}', { title }), description: t('Made by X-ray'), collection_id: collection });
       const cards = [];
       for (const c of xray.data.cards) {
         const q = await library.createQuestion({ name: c.title, kind: 'builder', spec: c.spec, viz: c.viz, parameters: [], collection_id: collection });
@@ -71,7 +75,7 @@ export default function XrayPage() {
   return (
     <VStack align="stretch" spacing={4}>
       <PageHeader
-        title={xray.data ? t('X-ray: {title}', { title: xray.data.title }) : t('X-ray')}
+        title={xray.data ? t('X-ray: {title}', { title }) : t('X-ray')}
         subtitle={t('A first look, made automatically from what is in the data. Save it to keep and change it.')}
         actions={
           <HStack>

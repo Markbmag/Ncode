@@ -301,4 +301,25 @@ export const ADMIN: Record<string, string> = {
   'Could not check the server': 'Не удалось проверить сервер',
   'Could not load the usage figures': 'Не удалось загрузить статистику использования',
   'Could not load the query log': 'Не удалось загрузить журнал запросов',
+  'Add a database first (Databases tab): its tables and columns show up here to name and describe.':
+    'Сначала добавьте базу данных (вкладка «Базы данных»): здесь появятся её таблицы и столбцы, чтобы дать им названия и описания.',
+  // M11: table names, translations, the demo database
+  'Name in Russian': 'Название по-русски',
+  'Description in Russian': 'Описание по-русски',
+  'Shown when the interface is in Russian; empty fields show the text above.': 'Показывается, когда интерфейс на русском; вместо пустых полей — текст выше.',
+  'Name and describe the table': 'Дать таблице название и описание',
+  'Name and describe {table}': 'Название и описание {table}',
+  'What one row is, where the data comes from': 'Что означает одна строка, откуда данные',
+  'People see this name in table lists and pickers; the technical name stays next to it and still finds the table.':
+    'Это название видно в списках таблиц и при выборе таблицы; техническое имя остаётся рядом, и по нему таблицу тоже можно найти.',
+  'Calculated with a formula; pick a column to replace it.': 'Считается по формуле; выберите столбец, чтобы заменить её.',
+  'a formula': 'формула',
+  'demo': 'демо',
+  'Demo database': 'Демо-база',
+  '“Factory demo” is a small car plant with a year of made-up data (work orders, downtime, scrap, vehicles with VINs) for trying things out. Everyone may use it; it does not touch your real databases.':
+    '«Демо: завод» — небольшой автозавод с придуманными данными за год (заказы, простои, брак, автомобили с VIN), чтобы всё попробовать. Пользоваться ею может каждый; ваши настоящие базы она не затрагивает.',
+  'Not available: another database uses the key “demo”.': 'Недоступна: ключ «demo» занят другой базой данных.',
+  'Not available: it could not be created on the server (see the server log).': 'Недоступна: её не удалось создать на сервере (подробности в журнале сервера).',
+  'Hidden for everyone': 'Скрыта для всех',
+  'Shown to everyone': 'Видна всем',
 };

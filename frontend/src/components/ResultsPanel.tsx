@@ -11,6 +11,9 @@ import type { CsvDelimiter } from '../lib/csv';
 import { ChevronDownIcon, DownloadIcon, TableIcon } from '../icons';
 import { Highlight } from './Highlight';
 import { RowDrawer } from './RowDrawer';
+import { FriendlyName } from './FriendlyName';
+import { byLabel } from '../lib/names';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { t, tn } from '../i18n/index.ts';
 
 const MAX_COLUMNS = 10;
@@ -69,6 +72,12 @@ export function ResultsPanel({ state, connectionLabel, onOpenTable }: ResultsPan
   const [drawerHit, setDrawerHit] = useState<SearchHit | null>(null);
 
   const groups = useMemo(() => groupHits(state.results), [state.results]);
+  // the searched database's table list carries the data model names (M11)
+  const { tables } = useWorkspace();
+  const names = useMemo(() => new Map(byLabel(tables ?? []).map((l) => [l.name, l])), [tables]);
+  const tableName = (table: string, props: { fontWeight?: number; fontSize?: string } = {}) => (
+    <FriendlyName label={names.get(table)?.label ?? table} name={table} description={names.get(table)?.description} showTechnical={names.get(table)?.showTechnical} mono {...props} />
+  );
   const group = groups.find((g) => g.table === selectedTable) ?? groups[0];
   const columns = useMemo(() => (group ? displayColumns(group) : null), [group]);
 
@@ -193,9 +202,7 @@ export function ResultsPanel({ state, connectionLabel, onOpenTable }: ResultsPan
                   onClick={() => setSelectedTable(g.table)}
                 >
                   <TableIcon boxSize={4} color={active ? 'brand.300' : 'faintText'} flexShrink={0} />
-                  <Text flex={1} fontFamily="mono" fontSize="sm" noOfLines={1} fontWeight={active ? 600 : 400}>
-                    {g.table}
-                  </Text>
+                  <Box flex={1} minW={0}>{tableName(g.table, { fontSize: 'sm', fontWeight: active ? 600 : 400 })}</Box>
                   <Badge colorScheme={active ? 'brand' : undefined} bg={active ? undefined : 'chipBg'} color={active ? undefined : 'mutedText'}>
                     {g.hits.length}
                     {state.truncatedTables.includes(g.table) ? '+' : ''}
@@ -208,9 +215,7 @@ export function ResultsPanel({ state, connectionLabel, onOpenTable }: ResultsPan
           <Box flex={1} minW={0} bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden">
             <Flex px={4} py={3} borderBottom="1px solid" borderColor="lineColor" justify="space-between" align="center" gap={3}>
               <HStack spacing={3} minW={0}>
-                <Text fontFamily="mono" fontWeight={600} noOfLines={1}>
-                  {group.table}
-                </Text>
+                {tableName(group.table, { fontWeight: 600 })}
                 <Text fontSize="xs" color="mutedText" whiteSpace="nowrap">
                   {tn(group.hits.length, '{n} row', '{n} rows')}
                   {columns.hidden > 0 && tn(columns.hidden, ' · {n} more column in the record view', ' · {n} more columns in the record view')}

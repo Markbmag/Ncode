@@ -15,7 +15,9 @@ import { SystemPanel } from '../admin/SystemPanel';
 import { BrokenContentPanel } from '../admin/BrokenContentPanel';
 import { http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
-import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
+import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel, TableHeading } from '../semantic/DataModelEditor';
+import { DemoDatabasePanel } from '../admin/DemoDatabase';
+import { nameMatches } from '../lib/names';
 import { EngineBadge } from '../components/EngineBadge';
 import { PageHeader } from '../components/PageHeader';
 import { LockIcon, PencilIcon, PlusIcon, RefreshIcon, SearchIcon } from '../icons';
@@ -29,10 +31,8 @@ function TableCard({ table, connection }: { table: SchemaTable; connection: stri
   const [editing, setEditing] = useState<SchemaColumn | null>(null);
   return (
     <Box border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden" data-testid="model-table">
-      <Flex px={3} py={2} bg="chipBg" align="center" justify="space-between">
-        <Text fontWeight={700} fontSize="sm" noOfLines={1}>
-          {table.name}
-        </Text>
+      <Flex px={3} py={2} bg="chipBg" align="center" justify="space-between" gap={2}>
+        <TableHeading connection={connection} table={table} />
         <HStack spacing={2}>
           <Text fontSize="xs" color="mutedText">
             {tn(table.columns.length, '{n} column', '{n} columns')}
@@ -69,7 +69,10 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
   const data = schemaQuery.data;
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    return (data?.tables ?? []).filter((tb) => !needle || tb.name.toLowerCase().includes(needle)).slice(0, 60);
+    // by the technical or the data model name (M11)
+    return (data?.tables ?? [])
+      .filter((tb) => !needle || nameMatches(needle, tb.name, tb.display_name, tb.translations?.ru?.display_name))
+      .slice(0, 60);
   }, [data, filter]);
 
   if (schemaQuery.isPending) return <Skeleton h="240px" borderRadius="xl" />;
@@ -178,6 +181,7 @@ export default function AdminPage() {
       <Tabs index={tabIndex} onChange={setTab} size="sm" variant="soft-rounded" colorScheme="purple" isLazy>
         <TabList flexWrap="wrap" gap={1}>
           <Tab data-testid="admin-tab-databases">{t('Databases')}</Tab>
+          <Tab data-testid="admin-tab-data-model">{t('Data model')}</Tab>
           <Tab data-testid="admin-tab-people">{t('People')}</Tab>
           <Tab data-testid="admin-tab-delivery">{t('Delivery')}</Tab>
           <Tab data-testid="admin-tab-sharing">{t('Sharing')}</Tab>
@@ -219,7 +223,11 @@ export default function AdminPage() {
                               {engineMeta(c.engine).label} · {c.database}
                             </Text>
                           </Box>
-                          {c.editable ? (
+                          {c.source === 'demo' ? (
+                            <Badge fontSize="0.65rem" colorScheme="purple" textTransform="none">
+                              {t('demo')}
+                            </Badge>
+                          ) : c.editable ? (
                             <IconButton
                               aria-label={t('Edit {name}', { name: c.label })}
                               size="sm"
@@ -238,24 +246,31 @@ export default function AdminPage() {
                     </VStack>
                   )}
                 </Panel>
-
-                {ws.connections.length > 0 && (
-                  <Panel
-                    title={t('Data model')}
-                    actions={
-                      <Select size="sm" maxW="260px" value={selected} onChange={(e) => setModelKey(e.target.value)}>
-                        {ws.connections.map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </Select>
-                    }
-                  >
-                    <DataModel key={selected} connectionKey={selected} />
-                  </Panel>
-                )}
+                <DemoDatabasePanel />
             </VStack>
+          </TabPanel>
+          <TabPanel px={0} pt={5}>
+            {/* its own tab since M11: names, descriptions, metrics and relationships people see everywhere */}
+            {ws.connections.length > 0 ? (
+              <Panel
+                title={t('Data model')}
+                actions={
+                  <Select size="sm" maxW="260px" value={selected} onChange={(e) => setModelKey(e.target.value)} aria-label={t('Database')} data-testid="data-model-connection">
+                    {ws.connections.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </Select>
+                }
+              >
+                <DataModel key={selected} connectionKey={selected} />
+              </Panel>
+            ) : (
+              <Text fontSize="sm" color="mutedText">
+                {t('Add a database first (Databases tab): its tables and columns show up here to name and describe.')}
+              </Text>
+            )}
           </TabPanel>
           <TabPanel px={0} pt={5}>
             <PeopleSettings />
@@ -284,4 +299,4 @@ export default function AdminPage() {
   );
 }
 
-const TABS = ['databases', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system', 'broken'];
+const TABS = ['databases', 'data-model', 'people', 'delivery', 'sharing', 'usage', 'audit', 'system', 'broken'];

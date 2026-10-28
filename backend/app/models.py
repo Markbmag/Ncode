@@ -38,7 +38,7 @@ class ConnectionInfo(BaseModel):
     engine: str
     database: str
     id_hints: list[str]
-    source: str = "env"        # "env" (from .env, read-only) | "ui" (managed in the interface); "" for non-admins
+    source: str = "env"        # "env" (from .env, read-only) | "ui" (managed in the interface) | "demo" (M11); "" for non-admins (but "demo")
     editable: bool = False     # true only for admins looking at a UI-managed connection
 
 

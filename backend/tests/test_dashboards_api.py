@@ -154,6 +154,19 @@ def test_filter_values_take_the_shape_of_the_parameter(env):
     assert "takes one" in run_card(env, "alice", d["id"], "one", {"status": ["paid", "refunded"]}, status=400)["detail"]
 
 
+def test_cards_carry_what_their_caption_is_built_from(env):
+    """M11: each card's question comes with its description, and a builder question with its spec."""
+    q = save_builder(env, "alice", spec=COUNT_ORDERS, name="Orders")
+    call(env, "alice", "PATCH", f"/api/questions/{q['id']}", json={"description": "All orders", "base_updated_at": q["updated_at"]})
+    sql = save_sql(env, "alice", "SELECT 1 AS one")
+    d = new_dashboard(env, "alice")
+    put(env, "alice", d["id"], {"cards": [card("b", q["id"]), card("s", sql["id"], x=6)]})
+    cards = {c["key"]: c["question"] for c in call(env, "alice", "GET", f"/api/dashboards/{d['id']}")["cards"]}
+    assert cards["b"]["description"] == "All orders"
+    assert cards["b"]["spec"]["source"] == {"table": "q_orders"} and cards["b"]["spec"]["aggregations"][0]["fn"] == "count"
+    assert cards["s"]["spec"] is None and cards["s"]["description"] is None  # SQL stays on the server
+
+
 def test_sql_cards_cannot_be_filtered_by_column(env):
     sql = save_sql(env, "alice", "SELECT 1 AS one")
     d = new_dashboard(env, "alice")

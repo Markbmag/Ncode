@@ -8,6 +8,7 @@ export interface PickOption {
   label: string;
   table?: string;
   type: ColumnType;
+  description?: string | null; // from the data model: shown on hover (M11)
 }
 
 interface ColumnSelectProps extends Omit<SelectProps, 'onChange' | 'value'> {
@@ -27,24 +28,23 @@ export function ColumnSelect({ options, value, onChange, types, placeholder = t(
     groups.get(key)!.push(o);
   }
   const missing = value && !allowed.some((o) => o.ref === value);
+  // the picked column's description shows when pointing at the select; each option carries its own
+  const picked = allowed.find((o) => o.ref === value);
+  const option = (o: PickOption) => (
+    <option key={o.ref} value={o.ref} title={o.description ?? undefined}>
+      {o.label}
+    </option>
+  );
   return (
-    <Select size="sm" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} {...rest}>
+    <Select size="sm" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} title={picked?.description ?? undefined} {...rest}>
       {missing && <option value={value}>{t('{name} (not available)', { name: value })}</option>}
       {[...groups.entries()].map(([table, items]) =>
         table ? (
           <optgroup key={table} label={table}>
-            {items.map((o) => (
-              <option key={o.ref} value={o.ref}>
-                {o.label}
-              </option>
-            ))}
+            {items.map(option)}
           </optgroup>
         ) : (
-          items.map((o) => (
-            <option key={o.ref} value={o.ref}>
-              {o.label}
-            </option>
-          ))
+          items.map(option)
         ),
       )}
     </Select>

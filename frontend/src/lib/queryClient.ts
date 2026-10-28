@@ -24,4 +24,5 @@ export const queryKeys = {
   limits: ['limits'] as const,
   tables: (key: string) => ['tables', key] as const,
   schema: (key: string) => ['schema', key] as const,
+  tableNames: (key: string) => ['table-names', key] as const, // data model names of the tables (src/lib/names.ts)
 };

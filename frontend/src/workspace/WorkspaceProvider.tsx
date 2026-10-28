@@ -10,6 +10,7 @@ import { useSearch } from '../hooks/useSearch';
 import { EMPTY_TARGET } from '../lib/explorer';
 import type { ExplorerTarget } from '../lib/explorer';
 import { queryKeys } from '../lib/queryClient';
+import { connectionLabel } from '../lib/names';
 import { loadJson, saveJson } from '../lib/storage';
 import { WorkspaceContext } from './context';
 import type { Prefs, Scope, WorkspaceValue } from './context';
@@ -42,7 +43,8 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
   // ---------------------------------------------------------------- server state
   const connectionsQuery = useQuery({
     queryKey: queryKeys.connections,
-    queryFn: async () => (await http.get<Connection[]>('/api/connections')).data,
+    // the demo database's label in the UI language (M11)
+    queryFn: async () => (await http.get<Connection[]>('/api/connections')).data.map((c) => ({ ...c, label: connectionLabel(c) })),
   });
   const enginesQuery = useQuery({
     queryKey: queryKeys.engines,

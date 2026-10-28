@@ -2,7 +2,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
 import { queryClient, queryKeys } from '../lib/queryClient';
-import type { Aggregation, FilterGroup } from '../query/types';
+import { cleanTranslations } from '../lib/names';
+import type { Translations } from '../lib/names';
+import type { Aggregation, Expr, FilterGroup } from '../query/types';
 import type { ColumnFormat } from '../viz/types';
 
 export const SEMANTIC_TYPES: { value: string; label: string }[] = [
@@ -29,11 +31,20 @@ export interface FieldMeta {
   format?: ColumnFormat | null;
   hidden?: boolean;
   parse_as_date?: boolean;
+  translations?: Translations | null; // M11: {"ru": {"display_name", "description"}}
+}
+
+/** A table's name in the data model (M11). */
+export interface TableMeta {
+  display_name?: string | null;
+  description?: string | null;
+  translations?: Translations | null;
 }
 
 export interface MetricDefinition {
   fn: Exclude<Aggregation['fn'], 'metric'>;
   ref?: string;
+  expr?: Expr; // a formula instead of a column (set up through the API, e.g. the demo's "Scrap rate")
   where?: FilterGroup | null;
 }
 
@@ -49,6 +60,7 @@ export interface Metric {
   archived: boolean;
   updated_at: number;
   updated_by: string | null;
+  translations?: Translations | null; // M11: {"ru": {"name", "description"}}
 }
 
 export const metricKeys = { list: (connection: string) => ['metrics', connection] as const };
@@ -62,10 +74,12 @@ export function useMetrics(connection: string) {
   });
 }
 
-/** The schema carries the metadata: after a change, read it again (and the metrics). */
+/** The schema and the table lists carry the metadata: after a change, read them again (and the metrics). */
 async function refresh(connection: string) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.schema(connection) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.tables(connection) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.tableNames(connection) }),
     queryClient.invalidateQueries({ queryKey: metricKeys.list(connection) }),
   ]);
 }
@@ -76,7 +90,17 @@ export const semantic = {
     for (const k of ['display_name', 'description'] as const) if (!body[k]?.trim()) body[k] = null;
     if (!body.semantic_type) body.semantic_type = null;
     if (!body.format || Object.keys(body.format).length === 0) body.format = null;
+    body.translations = cleanTranslations(body.translations);
     await http.put(`/api/semantic/${encodeURIComponent(connection)}/fields/${encodeURIComponent(table)}/${encodeURIComponent(column)}`, body);
+    await refresh(connection);
+  },
+  setTable: async (connection: string, table: string, meta: TableMeta) => {
+    const body: TableMeta = {
+      display_name: meta.display_name?.trim() || null,
+      description: meta.description?.trim() || null,
+      translations: cleanTranslations(meta.translations),
+    };
+    await http.put(`/api/semantic/${encodeURIComponent(connection)}/tables/${encodeURIComponent(table)}`, body);
     await refresh(connection);
   },
   addRelationship: async (connection: string, rel: { from_table: string; from_columns: string[]; to_table: string; to_columns: string[] }) => {
@@ -92,10 +116,14 @@ export const semantic = {
     await refresh(connection);
   },
   saveMetric: async (
-    body: { name: string; description: string | null; connection: string; table: string; definition: MetricDefinition; format: ColumnFormat | null },
+    body: {
+      name: string; description: string | null; connection: string; table: string; definition: MetricDefinition; format: ColumnFormat | null;
+      translations?: Translations | null;
+    },
     id?: number,
   ) => {
-    const res = id ? await http.put<Metric>(`/api/metrics/${id}`, body) : await http.post<Metric>('/api/metrics', body);
+    const clean = { ...body, translations: cleanTranslations(body.translations) };
+    const res = id ? await http.put<Metric>(`/api/metrics/${id}`, clean) : await http.post<Metric>('/api/metrics', clean);
     await refresh(body.connection);
     return res.data;
   },

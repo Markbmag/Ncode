@@ -7,9 +7,11 @@ import type { Connection, User } from '../api';
 import { LockIcon, LogOutIcon, MailIcon, MoonIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';
 import { AccountDialog } from '../account/AccountDialog';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
-import { NAV_ITEMS } from '../shell/nav';
+import { navTestId, visibleGroups } from '../shell/nav';
+import type { NavItem } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 import { engineMeta } from '../lib/engines';
+import { isDemo } from '../lib/names';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { t } from '../i18n/index.ts';
 
@@ -67,49 +69,82 @@ export function ColorModeButton() {
   );
 }
 
-/** The app's sections. `compact` is the horizontal strip used on small screens. */
+/** The app's sections, grouped (shell/nav.ts). `compact` is the horizontal strip used on small screens. */
 export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compact?: boolean }) {
   return (
     <Flex
       as="nav"
       aria-label={t('Sections')}
       direction={compact ? 'row' : 'column'}
-      gap={compact ? 1 : 0.5}
+      align={compact ? 'center' : 'stretch'}
+      gap={compact ? 1 : 0}
       overflowX={compact ? 'auto' : undefined}
     >
-      {NAV_ITEMS.filter((item) => isAdmin || !item.adminOnly).map((item) => (
-        <Box
-          as={NavLink}
-          key={item.to}
-          to={item.to}
-          end={item.to === '/' || item.end}
-          display="flex"
-          alignItems="center"
-          gap={3}
-          px={3}
-          py={compact ? 1.5 : 2}
+      {visibleGroups(isAdmin).map((group, index) => (
+        <Flex
+          key={group.id}
+          role="group"
+          aria-label={group.label ?? undefined}
+          direction={compact ? 'row' : 'column'}
+          align={compact ? 'center' : 'stretch'}
+          gap={compact ? 1 : 0.5}
           flexShrink={0}
-          borderRadius="lg"
-          fontSize="sm"
-          fontWeight={600}
-          color="mutedText"
-          _hover={{ bg: 'panelHover', color: 'bodyText' }}
-          sx={{ '&.active': { bg: 'rgba(99,102,241,0.14)', color: 'bodyText' } }}
+          data-testid={`nav-group-${group.id}`}
         >
-          <item.icon boxSize={4} />
-          <Text as="span" flex={1} whiteSpace="nowrap">
-            {item.label}
-          </Text>
-          {item.milestone && !compact && (
-            <Tooltip label={t('Coming in milestone {milestone} of the roadmap', { milestone: item.milestone })} hasArrow>
-              <Badge fontSize="0.6rem" bg="chipBg" color="faintText" borderRadius="full" px={1.5}>
-                {t('soon')}
-              </Badge>
-            </Tooltip>
-          )}
-        </Box>
+          {compact
+            ? index > 0 && <Box w="1px" h="18px" bg="lineColor" mx={1} flexShrink={0} aria-hidden />
+            : group.label
+              ? (
+                <Text px={3} pt={3} pb={1} fontSize="2xs" fontWeight={700} letterSpacing="0.08em" textTransform="uppercase" color="faintText">
+                  {group.label}
+                </Text>
+              )
+              : index > 0 && <Box h={3} aria-hidden />}
+          {group.items.map((item) => (
+            <NavEntry key={item.to} item={item} compact={compact} />
+          ))}
+        </Flex>
       ))}
     </Flex>
+  );
+}
+
+function NavEntry({ item, compact }: { item: NavItem; compact: boolean }) {
+  const sub = item.sub && !compact;
+  return (
+    <Tooltip label={item.hint} placement="right" openDelay={700} hasArrow isDisabled={compact}>
+      <Box
+        as={NavLink}
+        to={item.to}
+        end={item.end}
+        display="flex"
+        alignItems="center"
+        gap={sub ? 2.5 : 3}
+        pl={sub ? 9 : 3}
+        pr={3}
+        py={sub ? 1 : 1.5}
+        flexShrink={0}
+        borderRadius="lg"
+        fontSize={sub ? 'xs' : 'sm'}
+        fontWeight={600}
+        color="mutedText"
+        _hover={{ bg: 'panelHover', color: 'bodyText' }}
+        sx={{ '&.active': { bg: 'rgba(99,102,241,0.14)', color: 'bodyText' } }}
+        data-testid={navTestId(item.to)}
+      >
+        <item.icon boxSize={sub ? 3.5 : 4} />
+        <Text as="span" flex={1} whiteSpace="nowrap">
+          {item.label}
+        </Text>
+        {item.milestone && !compact && (
+          <Tooltip label={t('Coming in milestone {milestone} of the roadmap', { milestone: item.milestone })} hasArrow>
+            <Badge fontSize="0.6rem" bg="chipBg" color="faintText" borderRadius="full" px={1.5}>
+              {t('soon')}
+            </Badge>
+          </Tooltip>
+        )}
+      </Box>
+    </Tooltip>
   );
 }
 
@@ -173,8 +208,10 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
                   {connection.label}
                 </Text>
                 <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                  {/* non-admins get no file paths: the engine name stands in */}
-                  {connection.database || engineMeta(connection.engine).label}
+                  {/* non-admins get no file paths: the engine name stands in; the demo says what it is (M11) */}
+                  {isDemo(connection)
+                    ? t('Sample data to try things out')
+                    : connection.database || engineMeta(connection.engine).label}
                 </Text>
               </Box>
               {connection.source === 'env' && (

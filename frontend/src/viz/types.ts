@@ -58,7 +58,7 @@ export interface VizSpec {
   bins?: number;                      // histogram
   pivot?: PivotSpec;
   kpi?: { compare?: boolean; sparkline?: boolean; upIsGood?: boolean };
-  axis?: { xTitle?: string; yTitle?: string; yMin?: number | null; yMax?: number | null };
+  axis?: { xTitle?: string; yTitle?: string; yMin?: number | null; yMax?: number | null; titles?: boolean }; // titles: false hides the automatic ones (M11)
   highlight?: string | null;          // emphasis: this series in colour, the others grey
   colors?: Record<string, number>;    // series name -> palette slot (colour follows the entity)
   format?: Record<string, ColumnFormat>;

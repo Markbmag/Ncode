@@ -10,6 +10,7 @@ import { operatorInfo, valueComplete } from './operators.ts';
 import type { Aggregation, Breakout, Expr, FilterGroup, FilterNode, QuerySpec } from './types.ts';
 import { isGroup } from './types.ts';
 import { t } from '../i18n/index.ts';
+import { descriptionOf, nameOf } from '../lib/names.ts';
 
 export interface SchemaInfo {
   tables: SchemaTable[];
@@ -19,6 +20,8 @@ export interface SchemaInfo {
 export interface ColumnOption {
   ref: string;          // what goes into the spec: "alias.column" or a custom column name
   label: string;        // "Orders → Total"
+  name: string;         // the column's own friendly name, without its table: "Total" (M11)
+  description?: string | null; // from the data model, in the UI language (M11)
   table: string;        // alias (or "Custom")
   column: string;
   type: ColumnType;
@@ -97,10 +100,12 @@ export function columnOptions(spec: QuerySpec, schema: SchemaInfo, upToCustom?: 
     if (!table) continue;
     for (const col of table.columns) {
       if (col.type === 'binary' || col.hidden) continue; // hidden in the data model
-      const name = col.display_name || humanize(col.name);
+      const name = nameOf(col.name, col); // the data model's name in the UI language (M11)
       out.push({
         ref: `${qt.alias}.${col.name}`,
-        label: multi ? `${humanize(qt.alias)} → ${name}` : name,
+        label: multi ? `${qt.alias === qt.table ? nameOf(qt.table, table) : humanize(qt.alias)} → ${name}` : name,
+        name,
+        description: descriptionOf(col),
         table: qt.alias,
         column: col.name,
         type: col.type,
@@ -112,6 +117,7 @@ export function columnOptions(spec: QuerySpec, schema: SchemaInfo, upToCustom?: 
     out.push({
       ref: custom.name,
       label: custom.name,
+      name: custom.name,
       table: t('Custom'),
       column: custom.name,
       type: inferType(custom.expr, (ref) => out.find((o) => o.ref === ref || o.column === ref)?.type ?? 'unknown'),

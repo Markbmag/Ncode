@@ -8,6 +8,7 @@ import { PlusIcon, XIcon } from '../../icons';
 import { CATEGORICAL, MAX_SERIES } from '../../viz/palette';
 import { CHART_TYPES } from '../../viz/types';
 import type { AggregateFn, ChartType, ColumnFormat, NumberStyle, VizSpec } from '../../viz/types';
+import { columnDescription, columnTitle, titleOf } from '../../viz/labels';
 import { t as tr } from '../../i18n/index.ts';
 
 interface VizSettingsProps {
@@ -43,8 +44,8 @@ function ColumnPick({ columns, value, onChange, numeric, allowNone, label }: {
     <Select size="sm" value={value ?? ''} onChange={(e) => onChange(e.target.value || undefined)} aria-label={label}>
       {(allowNone || !value) && <option value="">{allowNone ? tr('— none —') : tr('Pick…')}</option>}
       {options.map((c) => (
-        <option key={c.name} value={c.name}>
-          {c.name}
+        <option key={c.name} value={c.name} title={columnDescription(c) ?? undefined}>
+          {columnTitle(c)}
         </option>
       ))}
     </Select>
@@ -195,9 +196,13 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
               <Input size="sm" type="number" min={1} value={spec.topN ?? ''} placeholder={tr('all')} onChange={(e) => set({ topN: e.target.value ? Math.max(1, Number(e.target.value)) : null })} />
             </Field>
           )}
+          <HStack>
+            <Switch size="sm" isChecked={spec.axis?.titles !== false} onChange={(e) => set({ axis: { ...spec.axis, titles: e.target.checked ? undefined : false } })} id="viz-axis-titles" data-testid="viz-axis-titles" />
+            <FormLabel htmlFor="viz-axis-titles" m={0} fontSize="sm">{tr('Axis titles')}</FormLabel>
+          </HStack>
           <SimpleGrid columns={2} spacing={2}>
-            <Field label={tr('X axis title')}><Input size="sm" value={spec.axis?.xTitle ?? ''} onChange={(e) => set({ axis: { ...spec.axis, xTitle: e.target.value || undefined } })} /></Field>
-            <Field label={tr('Y axis title')}><Input size="sm" value={spec.axis?.yTitle ?? ''} onChange={(e) => set({ axis: { ...spec.axis, yTitle: e.target.value || undefined } })} /></Field>
+            <Field label={tr('X axis title')}><Input size="sm" value={spec.axis?.xTitle ?? ''} placeholder={spec.axis?.titles === false ? undefined : titleOf(columns, spec.x)} onChange={(e) => set({ axis: { ...spec.axis, xTitle: e.target.value || undefined } })} /></Field>
+            <Field label={tr('Y axis title')}><Input size="sm" value={spec.axis?.yTitle ?? ''} placeholder={spec.axis?.titles === false ? undefined : spec.breakout || series.length === 1 ? titleOf(columns, series[0]?.y) : undefined} onChange={(e) => set({ axis: { ...spec.axis, yTitle: e.target.value || undefined } })} /></Field>
             <Field label={tr('Y min')}><Input size="sm" type="number" placeholder={tr('auto')} value={spec.axis?.yMin ?? ''} onChange={(e) => set({ axis: { ...spec.axis, yMin: e.target.value === '' ? null : Number(e.target.value) } })} /></Field>
             <Field label={tr('Y max')}><Input size="sm" type="number" placeholder={tr('auto')} value={spec.axis?.yMax ?? ''} onChange={(e) => set({ axis: { ...spec.axis, yMax: e.target.value === '' ? null : Number(e.target.value) } })} /></Field>
           </SimpleGrid>
@@ -219,7 +224,7 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
         <Field label={tr('Highlight one series')} hint={tr('The others turn grey: good when one of them is the story')}>
           <Select size="sm" value={spec.highlight ?? ''} onChange={(e) => set({ highlight: e.target.value || null })}>
             <option value="">{tr('— none —')}</option>
-            {seriesNames.map((n) => <option key={n} value={n}>{n}</option>)}
+            {seriesNames.map((n) => <option key={n} value={n}>{spec.breakout ? n : titleOf(columns, n)}</option>)}
           </Select>
         </Field>
       )}
@@ -229,7 +234,7 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
           <VStack align="stretch" spacing={1}>
             {seriesNames.slice(0, MAX_SERIES).map((n) => (
               <HStack key={n} spacing={2}>
-                <Text fontSize="xs" flex={1} noOfLines={1}>{n}</Text>
+                <Text fontSize="xs" flex={1} noOfLines={1}>{spec.breakout ? n : titleOf(columns, n)}</Text>
                 <HStack spacing={1}>
                   {CATEGORICAL.light.map((hex, slot) => (
                     <Box key={hex} as="button" aria-label={tr('Colour {slot} for {name}', { slot: slot + 1, name: n })} w="14px" h="14px" borderRadius="sm" bg={hex}
@@ -248,7 +253,7 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
           <Divider />
           <Text fontSize="xs" fontWeight={700} color="mutedText">{tr('Number formats')}</Text>
           {numeric.map((c) => (
-            <FormatRow key={c.name} name={c.name} fmt={spec.format?.[c.name] ?? {}} onChange={(f) => set({ format: { ...spec.format, [c.name]: f } })} />
+            <FormatRow key={c.name} name={c.name} title={columnTitle(c)} fmt={spec.format?.[c.name] ?? {}} onChange={(f) => set({ format: { ...spec.format, [c.name]: f } })} />
           ))}
         </>
       )}
@@ -256,10 +261,10 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
   );
 }
 
-function FormatRow({ name, fmt, onChange }: { name: string; fmt: ColumnFormat; onChange: (f: ColumnFormat) => void }) {
+function FormatRow({ name, title, fmt, onChange }: { name: string; title: string; fmt: ColumnFormat; onChange: (f: ColumnFormat) => void }) {
   return (
     <Box>
-      <Text fontSize="xs" fontFamily="mono" mb={1}>{name}</Text>
+      <Text fontSize="xs" mb={1} title={title !== name ? name : undefined}>{title}</Text>
       <Flex gap={1.5} wrap="wrap">
         <Select size="xs" maxW="110px" value={fmt.style ?? 'auto'} onChange={(e) => onChange({ ...fmt, style: e.target.value as NumberStyle })} aria-label={tr('Format of {name}', { name })}>
           <option value="auto">{tr('Number')}</option>
@@ -285,10 +290,10 @@ function PivotFields({ spec, columns, set }: { spec: VizSpec; columns: ResultCol
   return (
     <VStack align="stretch" spacing={3}>
       <Field label={tr('Rows')}>
-        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.rows.includes(c.name)} onChange={() => update({ rows: toggle(p.rows, c.name) })}><Text fontSize="xs">{c.name}</Text></Checkbox>)}</Flex>
+        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.rows.includes(c.name)} onChange={() => update({ rows: toggle(p.rows, c.name) })}><Text fontSize="xs">{columnTitle(c)}</Text></Checkbox>)}</Flex>
       </Field>
       <Field label={tr('Columns')}>
-        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.columns.includes(c.name)} onChange={() => update({ columns: toggle(p.columns, c.name) })}><Text fontSize="xs">{c.name}</Text></Checkbox>)}</Flex>
+        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.columns.includes(c.name)} onChange={() => update({ columns: toggle(p.columns, c.name) })}><Text fontSize="xs">{columnTitle(c)}</Text></Checkbox>)}</Flex>
       </Field>
       <Field label={tr('Values')}>
         <VStack align="stretch" spacing={1.5}>

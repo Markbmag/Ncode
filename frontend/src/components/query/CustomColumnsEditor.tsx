@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Box, Button, Flex, HStack, IconButton, Input, Popover, PopoverArrow, PopoverBody, PopoverContent, PopoverTrigger, Text, VStack,
 } from '@chakra-ui/react';
-import { PlusIcon, XIcon } from '../../icons';
+import { XIcon } from '../../icons';
 import { FormulaError, FUNCTIONS, formatFormula, parseFormula } from '../../query/expression';
 import type { CustomColumn } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
@@ -114,8 +114,11 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
 function InsertColumn({ options, onPick }: { options: PickOption[]; onPick: (ref: string) => void }) {
   return (
     <Popover placement="bottom-end" isLazy>
+      {/* not a second "add": it puts a column or a function into the formula (M11) */}
       <PopoverTrigger>
-        <IconButton aria-label={t('Insert a column or see functions')} size="sm" icon={<PlusIcon boxSize={3.5} />} />
+        <Button size="sm" variant="ghost" flexShrink={0} fontFamily="mono" fontStyle="italic" aria-label={t('Insert a column or see functions')} title={t('Insert a column or see functions')}>
+          fx
+        </Button>
       </PopoverTrigger>
       <PopoverContent w="320px">
         <PopoverArrow />

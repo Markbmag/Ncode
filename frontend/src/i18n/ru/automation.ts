@@ -238,4 +238,7 @@ export const AUTOMATION: Record<string, string> = {
   'Email address saved': 'Адрес почты сохранён',
   'recipients::To': 'Кому',
   'Could not load the subscriptions': 'Не удалось загрузить подписки',
+  // M11: home page, menu, share dialog, empty states
+  '“Line output” every Monday at 7:00, by email to you and your team.': '«Выпуск линий» каждый понедельник в 7:00 — на почту вам и вашей команде.',
+  'Send “{name}” on a schedule…': 'Отправлять «{name}» по расписанию…',
 };
