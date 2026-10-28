@@ -275,7 +275,7 @@ export function ResultsPanel({ state, connectionLabel, onOpenTable }: ResultsPan
         </Flex>
       )}
 
-      <RowDrawer hit={drawerHit} onClose={() => setDrawerHit(null)} phrase={phrase} matchMode={matchMode} caseSensitive={caseSensitive} />
+      <RowDrawer hit={drawerHit} connection={params.connection} onClose={() => setDrawerHit(null)} phrase={phrase} matchMode={matchMode} caseSensitive={caseSensitive} />
     </VStack>
   );
 }

@@ -104,6 +104,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   // The router hands setSearch the query of the last render; read the address bar instead, so a
   // second change made before the re-render (the end of a date range) keeps the first one.
   const setValues = (update: FilterUpdate | FilterValues) => {
+    // Typed while the next page is still loading (this one stays on screen meanwhile): setSearch
+    // would navigate back here, so a change after leaving the dashboard is dropped.
+    if (!window.location.pathname.endsWith(`/dashboards/${dashboard.id}`)) return;
     markStep('change_filter'); // the new-user checklist on the home page (M11)
     setSearch(() => applyToSearch(update, new URLSearchParams(window.location.search)), { replace: true });
   };

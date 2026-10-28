@@ -651,6 +651,7 @@ export function TableExplorer({
 
       <RowDrawer
         hit={drawerHit}
+        connection={connectionKey}
         onClose={() => setDrawerRow(null)}
         phrase={applied.q}
         matchMode={applied.mode}

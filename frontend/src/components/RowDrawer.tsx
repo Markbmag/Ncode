@@ -6,9 +6,11 @@ import type { MatchMode, SearchHit } from '../api';
 import { CopyIcon } from '../icons';
 import { Highlight } from './Highlight';
 import { t } from '../i18n/index.ts';
+import { useNames } from '../lib/useNames';
 
 interface RowDrawerProps {
   hit: SearchHit | null;
+  connection: string; // for the data model's names of the table and its columns (M11)
   onClose: () => void;
   phrase: string;
   matchMode: MatchMode;
@@ -20,8 +22,9 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
-export function RowDrawer({ hit, onClose, phrase, matchMode, caseSensitive }: RowDrawerProps) {
+export function RowDrawer({ hit, connection, onClose, phrase, matchMode, caseSensitive }: RowDrawerProps) {
   const toast = useToast();
+  const names = useNames(connection, { columns: true });
 
   const copy = async (text: string, done: string) => {
     try {
@@ -44,8 +47,8 @@ export function RowDrawer({ hit, onClose, phrase, matchMode, caseSensitive }: Ro
                 {t('Record from table')}
               </Text>
               <HStack spacing={3} mt={1} flexWrap="wrap">
-                <Text fontFamily="mono" fontSize="lg">
-                  {hit.table}
+                <Text fontSize="lg" fontWeight={600} title={hit.table}>
+                  {names.table(hit.table)}
                 </Text>
                 {hit.id_column && (
                   <Badge colorScheme="brand" fontSize="xs" textTransform="none">
@@ -84,8 +87,8 @@ export function RowDrawer({ hit, onClose, phrase, matchMode, caseSensitive }: Ro
                       role="group"
                     >
                       <HStack justify="space-between">
-                        <Text fontFamily="mono" fontSize="xs" color={isMatch ? 'brand.300' : 'mutedText'}>
-                          {column}
+                        <Text fontSize="xs" color={isMatch ? 'brand.300' : 'mutedText'} title={column}>
+                          {names.column(hit.table, column)}
                           {isMatch && t(' · match')}
                         </Text>
                         {value !== null && value !== undefined && (
