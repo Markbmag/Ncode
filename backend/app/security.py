@@ -12,20 +12,23 @@ import hmac
 import secrets
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 _SCRYPT_N, _SCRYPT_R, _SCRYPT_P = 2**14, 8, 1
 _PBKDF2_ITERATIONS = 600_000
 MIN_PASSWORD_LENGTH = 8
 
-# Each scrypt run needs 16 MB (128 * n * r bytes) and a CPU core. Letting a burst of sign-ins
-# hash all at once only costs memory (which the process keeps afterwards) without being any
-# faster, and a flood of sign-in attempts could exhaust it: at most a few run at a time.
-_HASHING = threading.BoundedSemaphore(4)
+# Each scrypt run needs 16 MB (128 * n * r bytes) and a CPU core. Hashing runs on a few
+# threads of its own: a burst of sign-ins is no slower that way, and memory stays bounded.
+# (With every request thread hashing, the allocator kept 16 MB per thread: 50 parallel
+# sign-ins left the process at about 900 MB; a flood of attempts could exhaust memory.)
+_HASHING = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ncode-hash")
 
 
 def _scrypt(raw: bytes, salt: bytes, n: int, r: int, p: int) -> bytes:
-    with _HASHING:
-        return hashlib.scrypt(raw, salt=salt, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32)
+    return _HASHING.submit(
+        hashlib.scrypt, raw, salt=salt, n=n, r=r, p=p, maxmem=64 * 1024 * 1024, dklen=32
+    ).result()
 
 
 def _b64(data: bytes) -> str:
@@ -56,8 +59,7 @@ def verify_password(password: str, stored: str) -> bool:
             key = _scrypt(raw, _unb64(salt), int(n), int(r), int(p))
         elif parts[0] == "pbkdf2":
             _, iterations, salt, expected = parts
-            with _HASHING:
-                key = hashlib.pbkdf2_hmac("sha256", raw, _unb64(salt), int(iterations))
+            key = _HASHING.submit(hashlib.pbkdf2_hmac, "sha256", raw, _unb64(salt), int(iterations)).result()
         else:
             return False
         return hmac.compare_digest(key, _unb64(expected))
