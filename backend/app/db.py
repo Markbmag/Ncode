@@ -8,17 +8,22 @@ databases (driver, timeouts, read-only sessions) are isolated in this module.
 from __future__ import annotations
 
 import logging
+import sqlite3
+import struct
 import threading
 import time
 import warnings
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import URL, Engine, ObjectKind
 from sqlalchemy.exc import SAWarning
 
-from .config import ENGINES, ConnectionConfig, Settings
+from .config import ConnectionConfig, Settings
+from .dberrors import describe_error  # noqa: F401  (kept importable from here)
+from .serialize import infinite
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +100,86 @@ def _session_statements(cfg: ConnectionConfig, settings: Settings, dbapi_connect
     return statements
 
 
+# SQLite runs inside the backend process: one value (randomblob(1e9), printf('%.*c', ...),
+# replace() growing a string) must not be able to take all of its memory.
+SQLITE_MAX_VALUE_BYTES = 100 * 1024 * 1024
+
+
+def _unicode_case(convert):
+    """SQLite's own lower()/upper() only know ASCII: 'Иван' would never match 'иван'."""
+
+    def fn(value: Any) -> Any:
+        if value is None or isinstance(value, str):
+            return value if value is None else convert(value)
+        if isinstance(value, bytes):
+            try:
+                return convert(value.decode("utf-8"))
+            except UnicodeDecodeError:
+                return value
+        return convert(str(value))
+
+    return fn
+
+
+def _setup_sqlite(dbapi_connection: Any) -> None:
+    """Unicode lower()/upper() (ILIKE compiles to lower(x) LIKE lower(y), so search, builder
+    filters and Browse use them too) and a cap on the size of one value."""
+    for name, convert in (("lower", str.lower), ("upper", str.upper)):
+        dbapi_connection.create_function(name, 1, _unicode_case(convert), deterministic=True)
+    if hasattr(dbapi_connection, "setlimit"):  # Python 3.11+
+        dbapi_connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, SQLITE_MAX_VALUE_BYTES)
+
+
+def _setup_postgresql(dbapi_connection: Any) -> None:
+    """Read 'infinity' / '-infinity' timestamps and dates instead of failing the whole query."""
+    adapters = getattr(dbapi_connection, "adapters", None)  # psycopg 3 only
+    if adapters is None:
+        return
+    from psycopg import DataError
+    from psycopg.types import datetime as pgdt
+
+    def tolerant(base: type, kind: type, binary_bound: bytes | None, fmt: str) -> type:
+        def load(self, data):
+            try:
+                return base.load(self, data)
+            except DataError:
+                raw = bytes(data)
+                if raw in (b"infinity", b"-infinity"):
+                    return infinite(kind, -1 if raw.startswith(b"-") else 1)
+                if binary_bound is not None and len(raw) == struct.calcsize(fmt):
+                    number = struct.unpack(fmt, raw)[0]
+                    top = struct.unpack(fmt, binary_bound)[0]
+                    if number in (top, -top - 1):
+                        return infinite(kind, 1 if number == top else -1)
+                raise
+
+        return type(f"Ncode{base.__name__}", (base,), {"load": load})
+
+    i64, i32 = b"\x7f" + b"\xff" * 7, b"\x7f" + b"\xff" * 3
+    for oid_name, text_loader, binary_loader, kind, bound, fmt in (
+        ("timestamp", pgdt.TimestampLoader, pgdt.TimestampBinaryLoader, datetime, i64, ">q"),
+        ("timestamptz", pgdt.TimestamptzLoader, pgdt.TimestamptzBinaryLoader, datetime, i64, ">q"),
+        ("date", pgdt.DateLoader, pgdt.DateBinaryLoader, date, i32, ">i"),
+    ):
+        adapters.register_loader(oid_name, tolerant(text_loader, kind, None, fmt))
+        adapters.register_loader(oid_name, tolerant(binary_loader, kind, bound, fmt))
+
+
 def _install_session_guards(engine: Engine, cfg: ConnectionConfig, settings: Settings) -> None:
-    """Best-effort extras that can only be set with SQL after connecting."""
-    if cfg.engine not in ("mysql", "mariadb", "sqlite"):
+    """Best-effort extras that can only be set after connecting."""
+    if cfg.engine not in ("mysql", "mariadb", "sqlite", "postgresql", "postgres"):
         return
 
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_connection, _record):
+        if cfg.engine == "sqlite":
+            _setup_sqlite(dbapi_connection)
+        elif cfg.engine in ("postgresql", "postgres"):
+            try:
+                _setup_postgresql(dbapi_connection)
+            except Exception as exc:  # another driver or psycopg version: values may still fail, queries work
+                logger.warning("[%s] infinity date loaders not installed: %s", cfg.key, exc)
+            return
         cursor = dbapi_connection.cursor()
         try:
             for statement in _session_statements(cfg, settings, dbapi_connection):
@@ -113,12 +191,17 @@ def _install_session_guards(engine: Engine, cfg: ConnectionConfig, settings: Set
             cursor.close()
 
 
+def default_pool_size(settings: Settings) -> int:
+    """Queries, search, combine and Browse share one pool per connection."""
+    return settings.db_pool_size or max(settings.search_workers, settings.query_workers)
+
+
 def build_engine(cfg: ConnectionConfig, settings: Settings, pool_size: int | None = None) -> Engine:
     engine = create_engine(
         _build_url(cfg),
         connect_args=_connect_args(cfg, settings),
-        pool_size=pool_size or settings.search_workers,
-        max_overflow=0,
+        pool_size=pool_size or default_pool_size(settings),
+        max_overflow=0 if pool_size else settings.db_pool_overflow,
         pool_pre_ping=True,
         pool_recycle=1800,
     )
@@ -135,31 +218,6 @@ def probe(cfg: ConnectionConfig, settings: Settings) -> int:
             return len(inspect(conn).get_table_names(schema=cfg.schema))
     finally:
         engine.dispose()
-
-
-def describe_error(exc: Exception, engine_name: str | None = None) -> str:
-    """Turn a driver exception into a short, actionable message (shown in the UI)."""
-    lines = str(getattr(exc, "orig", None) or exc).strip().splitlines()
-    raw = lines[0][:300] if lines else type(exc).__name__
-    low = raw.lower()
-    info = ENGINES.get(engine_name or "")
-
-    if isinstance(exc, ModuleNotFoundError) or "no module named" in low:
-        pip = f"pip install {info.pip}" if info and info.pip else "pip install <driver>"
-        return f"The database driver is not installed. Run on the server: {pip} — then restart the backend."
-    if any(t in low for t in ("access denied", "password authentication failed", "login failed", "authentication failed")):
-        return f"Wrong username or password. ({raw})"
-    if any(t in low for t in ("unknown database", "cannot open database", "does not exist", "unable to open database")):
-        return f"Database not found — check its name. ({raw})"
-    if any(
-        t in low
-        for t in (
-            "timed out", "timeout", "can't connect", "cannot connect", "could not connect", "connection refused",
-            "name or service not known", "getaddrinfo", "no route to host", "unreachable", "adaptive server connection failed",
-        )
-    ):
-        return f"Cannot reach the server. Check the host and port, whether the VPN is on, and whether access is allowed. ({raw})"
-    return raw
 
 
 class ConnectionRegistry:

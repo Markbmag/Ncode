@@ -7,7 +7,8 @@ import {
 } from '@chakra-ui/react';
 import { apiErrorMessage } from '../api';
 import { PlusIcon, XIcon } from '../icons';
-import { flattenTree, library, libraryKeys, useCollections, usePeople } from './api';
+import { flattenTree, library, libraryKeys, refreshLibrary, useCollections, usePeople } from './api';
+import { isEditConflict, withBase } from './conflict';
 import type { CollectionInfo, Grant } from './api';
 import { t } from '../i18n/index.ts';
 
@@ -67,7 +68,8 @@ interface ShellProps {
   title: string;
   children: ReactNode;
   submitLabel: string;
-  onSubmit: () => Promise<unknown>;
+  /** overwrite: "Save mine anyway" after an edit conflict - send the change without base_updated_at */
+  onSubmit: (overwrite: boolean) => Promise<unknown>;
   canSubmit?: boolean;
   danger?: boolean;
   size?: string;
@@ -76,14 +78,17 @@ interface ShellProps {
 export function DialogShell({ isOpen, onClose, title, children, submitLabel, onSubmit, canSubmit = true, danger, size = 'md' }: ShellProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submit = async () => {
+  const [conflict, setConflict] = useState(false);
+  const submit = async (overwrite = false) => {
     setBusy(true);
     setError(null);
+    setConflict(false);
     try {
-      await onSubmit();
+      await onSubmit(overwrite);
       onClose();
     } catch (e) {
-      setError(apiErrorMessage(e, t('That did not work')));
+      if (isEditConflict(e)) setConflict(true);
+      else setError(apiErrorMessage(e, t('That did not work')));
     } finally {
       setBusy(false);
     }
@@ -108,6 +113,27 @@ export function DialogShell({ isOpen, onClose, title, children, submitLabel, onS
               <Alert status="error" borderRadius="md" fontSize="sm">
                 <AlertIcon />
                 {error}
+              </Alert>
+            )}
+            {conflict && (
+              <Alert status="warning" borderRadius="md" fontSize="sm" flexDirection="column" alignItems="flex-start" gap={2} data-testid="edit-conflict">
+                <Text fontWeight={600}>{t('Someone else saved this meanwhile')}</Text>
+                <HStack spacing={2}>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => {
+                      void refreshLibrary();
+                      onClose();
+                    }}
+                    data-testid="conflict-reload"
+                  >
+                    {t('Reload their version')}
+                  </Button>
+                  <Button size="xs" colorScheme="red" isLoading={busy} onClick={() => void submit(true)} data-testid="conflict-overwrite">
+                    {t('Save mine anyway')}
+                  </Button>
+                </HStack>
               </Alert>
             )}
           </VStack>
@@ -188,7 +214,8 @@ interface MoveDialogProps {
   current: number | null;
   allowRoot?: boolean;
   exclude?: number | null;
-  onMove: (target: number | null) => Promise<unknown>;
+  /** overwrite: after an edit conflict, move without the version check */
+  onMove: (target: number | null, overwrite: boolean) => Promise<unknown>;
 }
 
 export function MoveDialog(props: MoveDialogProps) {
@@ -198,7 +225,7 @@ export function MoveDialog(props: MoveDialogProps) {
 function MoveForm({ isOpen, onClose, title, current, allowRoot = false, exclude = null, onMove }: MoveDialogProps) {
   const [target, setTarget] = useState<number | null>(current);
   return (
-    <DialogShell isOpen={isOpen} onClose={onClose} title={title} submitLabel={t('Move')} canSubmit={target !== current && (allowRoot || target !== null)} onSubmit={() => onMove(target)}>
+    <DialogShell isOpen={isOpen} onClose={onClose} title={title} submitLabel={t('Move')} canSubmit={target !== current && (allowRoot || target !== null)} onSubmit={(overwrite) => onMove(target, overwrite)}>
       <FormControl>
         <FormLabel fontSize="sm">{t('Move to')}</FormLabel>
         <CollectionPicker value={target} onChange={setTarget} allowRoot={allowRoot} exclude={exclude} />
@@ -225,9 +252,11 @@ function CollectionForm({ isOpen, onClose, collection, parentId, onDone }: Colle
   const [name, setName] = useState(collection?.name ?? '');
   const [description, setDescription] = useState(collection?.description ?? '');
   const [parent, setParent] = useState<number | null>(parentId ?? null);
-  const save = async () => {
+  const save = async (overwrite: boolean) => {
     const body = { name: name.trim(), description: description.trim() || null };
-    const saved = collection ? await library.updateCollection(collection.id, body) : await library.createCollection({ ...body, parent_id: parent });
+    const saved = collection
+      ? await library.updateCollection(collection.id, withBase(body, collection.updated_at, overwrite))
+      : await library.createCollection({ ...body, parent_id: parent });
     onDone?.(saved);
   };
   return (

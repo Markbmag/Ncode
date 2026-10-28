@@ -39,15 +39,19 @@ export interface UploadOptions {
   collection_id?: number | null;
   delimiter?: 'auto' | 'comma' | 'semicolon' | 'tab' | 'pipe';
   header?: boolean;
-  encoding?: 'utf-8' | 'latin-1' | 'utf-16';
+  encoding?: 'auto' | 'utf-8' | 'windows-1251' | 'windows-1252' | 'latin-1' | 'utf-16';
+  number_format?: 'auto' | 'point' | 'comma';
   sheet?: string;
 }
+
+/** An upload's answer: the dataset, and how a text file was read ("auto" resolved). */
+export type UploadedDataset = Dataset & { read_as?: { encoding?: string; number_format?: string } };
 
 export const datasets = {
   upload: async (file: File, options: UploadOptions, onProgress?: (share: number) => void) => {
     const params: Record<string, unknown> = { filename: file.name };
     for (const [k, v] of Object.entries(options)) if (v !== undefined && v !== null && v !== '') params[k] = v;
-    const res = await http.post<Dataset>('/api/datasets', file, {
+    const res = await http.post<UploadedDataset>('/api/datasets', file, {
       params,
       headers: { 'Content-Type': 'application/octet-stream' },
       timeout: 0, // big files take a while

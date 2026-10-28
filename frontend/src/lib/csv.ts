@@ -1,13 +1,17 @@
 export type CsvDelimiter = ';' | ',';
 
 /**
- * Spreadsheet formula injection guard: a text cell that starts with = @ or a
- * sign followed by something that is not a number would be executed by Excel.
- * Such cells get a leading apostrophe. Plain numbers and phone numbers
- * like "+7 (999) 123" are left alone.
+ * Spreadsheet formula injection guard (OWASP CSV injection advice, same rule as
+ * the backend's app/explore.py): text starting with = + - @ tab or CR gets a
+ * leading apostrophe so Excel shows it instead of running it - also
+ * "-2+3+cmd|' /C calc'!A0", which starts like a number. Plain numbers such as
+ * -12.5 or +1e3 stay numbers.
  */
-function neutralize(text: string): string {
-  return /^(?:[=@\t\r]|[+-](?=[^\d\s.()-]))/.test(text) ? `'${text}` : text;
+const FORMULA_START = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/;
+
+export function neutralize(text: string): string {
+  return FORMULA_START.test(text) && !PLAIN_NUMBER.test(text) ? `'${text}` : text;
 }
 
 export function cellToString(value: unknown): string {

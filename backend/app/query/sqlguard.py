@@ -19,6 +19,7 @@ SELECT. The guard is one layer, not the only one.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -101,12 +102,104 @@ class CheckedSQL:
     tables: list[str] = field(default_factory=list)
 
 
-def find_params(sql: str) -> list[str]:
+def find_params(sql: str, dialect: str | None = None) -> list[str]:
     seen: list[str] = []
-    for name in PARAM.findall(sql):
+    for name in _param_names(sql, dialect):
         if name not in seen:
             seen.append(name)
     return seen
+
+
+def _code_parts(sql: str, dialect: str | None) -> list[tuple[str, bool]]:
+    """`sql` cut into (text, is_code) pieces: string literals, quoted names and comments are not code.
+
+    A {{name}} inside '...' or a comment is text the user wrote, not a parameter. Dialect
+    quirks: MySQL reads a backslash in a string as an escape and '#' as a comment, '--'
+    only with a space after it; PostgreSQL has E'...' escapes, $tag$...$tag$ strings and
+    nested /* */; SQL Server and SQLite quote names with [...]. A doubled quote is a quote everywhere.
+    """
+    mysql = dialect in MYSQL_FAMILY
+    postgres = dialect == "postgresql"
+    parts: list[tuple[str, bool]] = []
+    i = code_start = 0
+    n = len(sql)
+
+    def skip_to(end: int) -> None:
+        nonlocal i, code_start
+        if code_start < i:
+            parts.append((sql[code_start:i], True))
+        parts.append((sql[i:end], False))
+        i = code_start = end
+
+    while i < n:
+        ch = sql[i]
+        if ch in ("'", '"') or (ch == "`" and mysql):
+            backslash = (mysql and ch != "`") or (
+                postgres and ch == "'" and i > 0 and sql[i - 1] in "eE" and (i < 2 or not (sql[i - 2].isalnum() or sql[i - 2] == "_"))
+            )
+            skip_to(_quoted_end(sql, i, ch, backslash))
+        elif ch == "[" and dialect in ("mssql", "sqlite"):
+            end = sql.find("]", i + 1)
+            while end >= 0 and sql.startswith("]]", end):
+                end = sql.find("]", end + 2)
+            skip_to(n if end < 0 else end + 1)
+        elif sql.startswith("/*", i):
+            skip_to(_block_comment_end(sql, i, nested=postgres))
+        elif (sql.startswith("--", i) and (not mysql or i + 2 >= n or sql[i + 2].isspace())) or (ch == "#" and mysql):
+            end = sql.find("\n", i)
+            skip_to(n if end < 0 else end + 1)
+        elif ch == "$" and postgres and (m := _DOLLAR_TAG.match(sql, i)) and (i == 0 or not (sql[i - 1].isalnum() or sql[i - 1] == "_")):
+            end = sql.find(m.group(0), m.end())
+            skip_to(n if end < 0 else end + len(m.group(0)))
+        else:
+            i += 1
+    if code_start < n:
+        parts.append((sql[code_start:], True))
+    return parts
+
+
+_DOLLAR_TAG = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
+
+
+def _quoted_end(sql: str, start: int, quote: str, backslash: bool) -> int:
+    i, n = start + 1, len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "\\" and backslash:
+            i += 2
+            continue
+        if ch == quote:
+            if i + 1 < n and sql[i + 1] == quote:
+                i += 2
+                continue
+            return i + 1
+        i += 1
+    return n  # not closed: the rest is the string (the parser reports it)
+
+
+def _block_comment_end(sql: str, start: int, nested: bool) -> int:
+    depth, i, n = 1, start + 2, len(sql)
+    while i < n:
+        if sql.startswith("*/", i):
+            depth -= 1
+            i += 2
+            if depth == 0 or not nested:
+                return i
+        elif nested and sql.startswith("/*", i):
+            depth += 1
+            i += 2
+        else:
+            i += 1
+    return n
+
+
+def _param_names(sql: str, dialect: str | None) -> list[str]:
+    return [name for text, code in _code_parts(sql, dialect) if code for name in PARAM.findall(text)]
+
+
+def _sub_params(sql: str, repl: Any, dialect: str | None) -> str:
+    """PARAM.sub on the code parts only."""
+    return "".join(PARAM.sub(repl, text) if code else text for text, code in _code_parts(sql, dialect))
 
 
 def check_sql(sql: str, dialect: str, *, allow_system: bool = False) -> CheckedSQL:
@@ -120,9 +213,9 @@ def check_sql(sql: str, dialect: str, *, allow_system: bool = False) -> CheckedS
     if dialect in MYSQL_FAMILY:
         _check_mysql_comments(sql)
 
-    params = find_params(sql)
+    params = find_params(sql, dialect)
     # Placeholders are checked as NULL; at run time they become driver parameters.
-    parse_text = PARAM.sub("NULL", sql)
+    parse_text = _sub_params(sql, "NULL", dialect)
     read = SQLGLOT_DIALECT.get(dialect)
     if read is None:
         raise GuardError(f"SQL mode is not available for {dialect}")
@@ -256,13 +349,18 @@ def _skip_quoted(sql: str, start: int, quote: str) -> int:
 
 # ---------------------------------------------------------------------- parameters
 
-def bind_params(sql: str, values: dict[str, Any], paramstyle: str) -> tuple[str, Any]:
+# Numbers a driver can bind: 64-bit integers (BIGINT) and finite floats.
+MIN_INT_PARAM, MAX_INT_PARAM = -(2**63), 2**63 - 1
+
+
+def bind_params(sql: str, values: dict[str, Any], paramstyle: str, dialect: str | None = None) -> tuple[str, Any]:
     """Replace {{name}} with the driver's placeholders. Returns (sql, parameters).
 
     With format/pyformat drivers (psycopg, pymysql, pymssql) every literal % must be
-    doubled once parameters are passed.
+    doubled once parameters are passed. `dialect` decides how strings and comments are
+    read ({{name}} inside them stays text); it must match the one given to check_sql.
     """
-    names = PARAM.findall(sql)
+    names = _param_names(sql, dialect)
     missing = sorted({n for n in names if n not in values})
     if missing:
         raise GuardError(f"Give a value for {', '.join('{{' + m + '}}' for m in missing)}")
@@ -271,6 +369,10 @@ def bind_params(sql: str, values: dict[str, Any], paramstyle: str) -> tuple[str,
         # dates come from typed parameters of saved questions (app/content/params.py)
         if value is not None and not isinstance(value, (str, int, float, bool, date)):
             raise GuardError(f"{{{{{name}}}}} must be text, a number, a date, true/false or null")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise GuardError(f"{{{{{name}}}}} must be a finite number")
+        if isinstance(value, int) and not isinstance(value, bool) and not MIN_INT_PARAM <= value <= MAX_INT_PARAM:
+            raise GuardError(f"{{{{{name}}}}} is too large: whole numbers must be between {MIN_INT_PARAM:,} and {MAX_INT_PARAM:,}")
 
     if paramstyle in ("pyformat", "format"):
         sql = sql.replace("%", "%%")
@@ -289,7 +391,7 @@ def bind_params(sql: str, values: dict[str, Any], paramstyle: str) -> tuple[str,
             return f":{len(positional)}"
         return "?"  # qmark
 
-    text = PARAM.sub(placeholder, sql)
+    text = _sub_params(sql, placeholder, dialect)
     if paramstyle in ("pyformat", "named"):
         return text, {f"p_{n}": values[n] for n in set(names)}
     return text, tuple(positional)

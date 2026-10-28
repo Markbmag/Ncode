@@ -6,7 +6,8 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { locale, t, tn } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tn } from '../i18n/index.ts';
 import type { TargetType } from '../automation/types';
 import { CopyIcon, GlobeIcon, LockIcon, TrashIcon } from '../icons';
 import { absolute, embedSnippet, sharing, useItemSharing } from './api';
@@ -148,7 +149,7 @@ function PublicLinks({ target, links, enabled, siteUrl }: { target: Props['targe
                 </Badge>
               )}
               {l.allow_download && <Badge>{t('downloads')}</Badge>}
-              <Text>{l.expires_at ? t('expires {date}', { date: new Date(l.expires_at * 1000).toLocaleString(locale()) }) : t('never expires')}</Text>
+              <Text>{l.expires_at ? t('expires {date}', { date: localDateText(l.expires_at * 1000, true) }) : t('never expires')}</Text>
               <Text>· {tn(l.views, '{n} view', '{n} views')}</Text>
               <Text>· {t('by {owner}', { owner: l.created_by })}</Text>
             </HStack>

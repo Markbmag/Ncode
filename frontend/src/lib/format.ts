@@ -3,27 +3,43 @@
  * only the display is.
  */
 import type { ColumnType } from '../api';
+import { dateStyleFromName, formatDate } from '../viz/format.ts';
 
 const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const PLAIN_NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4, useGrouping: false });
 
 export interface FormatOptions {
   smartDates?: boolean; // recognise dates stored as text or unix time (MES/LES data)
+  name?: string;        // the column name: unix times are only recognised in a column named like a time
 }
+
+/** Results show dates stored as text or unix time as dates; on unless the person switches it off (M10). */
+export const SMART_DATES_DEFAULT = true;
+// the switch is remembered per browser (a new key: the old one held "off" for everybody who opened a page)
+export const SMART_DATES_KEY = 'ncode_smart_dates_v2';
+
+// Smart dates are on by default, so a plain 10-digit number (an amount, a phone or order number) must
+// not turn into a date: unix times only in a column whose name says time, and never in a measure.
+const TIME_NAME = /(time|date|stamp|_at$|_ts$|^ts$|created|updated|modified|дата|время)/i;
+const looksUnix = (value: unknown) => typeof value === 'number' || (typeof value === 'string' && /^\d{10}(\d{3})?$/.test(value.trim()));
 
 export function formatValue(value: unknown, type: ColumnType, role: 'dimension' | 'measure' = 'dimension', opts: FormatOptions = {}): string {
   if (value === null || value === undefined) return '';
-  if (opts.smartDates && (type === 'string' || type === 'number' || type === 'unknown')) {
+  if (opts.smartDates && (type === 'string' || type === 'number' || type === 'unknown')
+      && !(looksUnix(value) && (role === 'measure' || !TIME_NAME.test(opts.name ?? '')))) {
     const date = normalizeDate(value);
-    if (date) return date;
+    if (date) return formatDate(date, 'auto');
   }
   switch (type) {
     case 'number':
       if (typeof value !== 'number') return String(value);
       // ids, codes, years: no thousands separators
       return role === 'measure' ? NUMBER.format(value) : PLAIN_NUMBER.format(value);
+    case 'date':
     case 'datetime':
-      return typeof value === 'string' ? value.replace('T', ' ').replace(/\.\d+$/, '').replace(/ 00:00:00$/, '') : String(value);
+      // in the language's date style (12 Oct 2026 / 12.10.2026); copy and CSV keep the ISO value
+      // a builder bucket (created_at_month) reads like the chart axis: "Jan 2026" rather than its first day
+      return typeof value === 'string' ? formatDate(value.replace(/\.\d+(?=Z|[+-]\d|$)/, ''), dateStyleFromName(opts.name ?? '')) : String(value);
     case 'boolean':
       return value === true || value === 1 ? 'true' : value === false || value === 0 ? 'false' : String(value);
     case 'json':

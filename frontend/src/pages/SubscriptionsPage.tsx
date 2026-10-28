@@ -12,6 +12,7 @@ import type { Subscription } from '../automation/types';
 import { PageHeader } from '../components/PageHeader';
 import { BellIcon, LayoutIcon, ChartIcon, MailIcon, SendIcon, TrashIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { LoadError } from '../components/LoadError';
 
 /** /subscriptions: everything that is sent on a schedule - yours, the ones you receive, and (admins) everyone's. */
 export default function SubscriptionsPage() {
@@ -36,7 +37,8 @@ export default function SubscriptionsPage() {
         }
       />
       {list.isPending && <Skeleton h="120px" borderRadius="xl" />}
-      {!list.isPending && subs.length === 0 && (
+      {list.isError && <LoadError error={list.error} title={t('Could not load the subscriptions')} onRetry={() => void list.refetch()} />}
+      {list.isSuccess && subs.length === 0 && (
         <Flex direction="column" align="center" gap={3} py={14} border="1px dashed" borderColor="lineColor" borderRadius="2xl" color="mutedText" textAlign="center">
           <BellIcon boxSize={8} />
           <Text fontSize="sm" maxW="460px">

@@ -481,3 +481,36 @@ def test_csv_headers_cannot_be_formulas():
     from app.results import build_envelope
     out = csv_bytes(build_envelope(["=HYPERLINK(1)", "n"], [["=1+1", 2]])).decode("utf-8-sig")
     assert out.splitlines() == ["'=HYPERLINK(1);n", "'=1+1;2"]
+
+
+def test_a_deleted_user_is_taken_off_subscriptions(env):
+    """Recipients are kept by name: a new user with the same name must not inherit them (M10)."""
+    q = save_sql(env, "alice", "SELECT 1 AS one")
+    sub = subscription(env, "alice", "question", q["id"], recipients={"users": ["alice", "carol"], "emails": ["boss@example.com"]})
+    call(env, "admin", "DELETE", "/api/admin/users/carol")
+    left = call(env, "alice", "GET", f"/api/subscriptions/{sub['id']}")
+    assert left["recipients"]["users"] == ["alice"] and left["recipients"]["emails"] == ["boss@example.com"]
+    env["db"].create_user("carol", hash_password("carol-pass-2"))
+    carol = auth(env["client"], "carol", "carol-pass-2")
+    res = env["client"].get("/api/subscriptions", headers=carol)
+    assert res.status_code == 200 and res.json()["subscriptions"] == []
+
+
+def test_dashboard_filter_values_apply_to_the_preview_and_the_email(env):
+    # M10: a subscription made from a filtered dashboard keeps those values in the preview and the send.
+    setup_email(env)
+    by_status = save_builder(env, "alice", spec=BY_STATUS, name="Orders by status")
+    d = new_dashboard(env, "alice", "Filtered")
+    put(env, "alice", d["id"], {
+        "filters": [{"id": "status", "label": "Status", "type": "category"}],
+        "cards": [card("b", by_status["id"], mappings={"status": {"field": "q_orders.status"}})],
+    })
+    body = {"target_type": "dashboard", "target_id": d["id"], "schedule": DAILY, "recipients": {"users": ["alice"]},
+            "options": {"filters": {"status": ["paid"]}}}
+    out = call(env, "alice", "POST", "/api/subscriptions/preview", json=body)
+    assert "paid" in out["text"] and "refunded" not in out["text"]
+    sub = call(env, "alice", "POST", "/api/subscriptions", json={"name": "", **body})
+    assert sub["options"]["filters"] == {"status": ["paid"]}
+    assert send_now(env, "alice", sub["id"])["status"] == "sent"
+    text = text_of(FakeSMTP.sent[0])
+    assert "paid" in text and "refunded" not in text

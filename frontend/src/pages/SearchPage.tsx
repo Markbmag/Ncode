@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Skeleton, VStack, useDisclosure } from '@chakra-ui/react';
 import { ConnectionHeader } from '../components/ConnectionHeader';
-import { NoConnectionsState, NoResultsState, ReadyState } from '../components/EmptyStates';
+import { NoResultsState, ReadyState } from '../components/EmptyStates';
+import { NoConnections } from '../components/LoadError';
 import { ResultsPanel } from '../components/ResultsPanel';
 import { ScopeModal } from '../components/ScopeModal';
 import { SearchBar } from '../components/SearchBar';
@@ -49,7 +50,7 @@ export default function SearchPage() {
       </VStack>
     );
   } else if (ws.connections.length === 0) {
-    content = <NoConnectionsState isAdmin={ws.isAdmin} onAdd={ws.openAddConnection} />;
+    content = <NoConnections />;
   } else if (running) {
     content = (
       <SearchProgress

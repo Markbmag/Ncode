@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from ..dberrors import explain
 from ..query.compiler import CompileError, compile_spec, render_sql
 from ..query.runner import QueryCancelled, QueryTask
 from ..query.sqlguard import GuardError, bind_params, check_sql
@@ -138,7 +139,9 @@ class FederatedRun:
             finally:
                 ws.close()
         except (CombineError, CompileError, FederationError) as exc:
-            raise FederationError(str(exc)) from None
+            error = FederationError(str(exc))
+            error.details = getattr(exc, "details", None)  # type: ignore[attr-defined]
+            raise error from None
 
     # ------------------------------------------------------------------ sources
     def _read_sources(self, task: QueryTask) -> dict[str, tuple[SourceStats, Any]]:
@@ -157,8 +160,12 @@ class FederatedRun:
             except Exception as exc:
                 if task.cancel_event.is_set():
                     raise QueryCancelled() from None
-                detail = str(getattr(exc, "orig", None) or exc).strip().splitlines()
-                raise FederationError(f"{src.label}: {detail[0] if detail else type(exc).__name__}") from None
+                info = explain(exc)
+                error = FederationError(f"{src.label}: {info.message}")
+                error.details = info.details  # type: ignore[attr-defined]  # the database's own text
+                raise error from None
+            finally:
+                child.finish(child.status if child.is_final else "completed")  # a later Stop leaves it alone
             stats = SourceStats(
                 src.alias, src.label, src.kind, src.connection, len(rows), truncated, round((time.perf_counter() - t0) * 1000)
             )

@@ -7,7 +7,8 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { locale, t, tn, tc } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tn, tc } from '../i18n/index.ts';
 import { BellIcon, MailIcon, PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../icons';
 import { FilterBar } from '../dashboards/FilterBar';
 import { runValues } from '../dashboards/logic';
@@ -28,6 +29,7 @@ export interface SubscriptionTarget {
   id: number;
   name: string;
   filters?: DashFilter[];          // dashboards
+  values?: FilterValues;           // dashboards: the filter values shown now; a new subscription starts from them
   parameters?: ParameterDef[];     // questions
 }
 
@@ -59,11 +61,24 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
   const ws = useWorkspace();
   const list = useSubscriptions({ target_type: target.type, target_id: target.id });
   const options = useSubscriptionOptions();
-  const [editing, setEditing] = useState<{ id: number | null; body: SubscriptionBody } | null>(() =>
-    startWith ? { id: null, body: newSubscription(target.type, target.id, ws.user.username, startWith === 'alert') } : null,
+  // a new one needs the options (is email set up?): until they are loaded it is only 'subscription' / 'alert'
+  const [state, setEditing] = useState<{ id: number | null; body: SubscriptionBody } | 'subscription' | 'alert' | null>(startWith ?? null);
+  const fresh = typeof state === 'string' ? state : null;
+  const made = useMemo(
+    () =>
+      fresh && options.data
+        ? {
+            id: null,
+            body: newSubscription(target.type, target.id, ws.user.username, fresh === 'alert', {
+              emailReady: options.data.email_configured,
+              filters: target.type === 'dashboard' ? { ...(target.values ?? {}) } : {},
+            }),
+          }
+        : null,
+    [fresh, options.data, target, ws.user.username],
   );
-
-  const startNew = (alert: boolean) => setEditing({ id: null, body: newSubscription(target.type, target.id, ws.user.username, alert) });
+  const editing = typeof state === 'string' ? made : state;
+  const startNew = (alert: boolean) => setEditing(alert ? 'alert' : 'subscription');
   const edit = (s: Subscription) =>
     setEditing({ id: s.id, body: { name: s.name, target_type: s.target_type, target_id: s.target_id, schedule: s.schedule, recipients: s.recipients, options: s.options, alert: s.alert, enabled: s.enabled } });
 
@@ -209,7 +224,7 @@ function Editor({ id, initial, target, options, onDone }: { id: number | null; i
   const set = (patch: Partial<SubscriptionBody>) => setBody((b) => ({ ...b, ...patch }));
   const s = body.schedule;
   const setSchedule = (patch: Partial<SubscriptionBody['schedule']>) => set({ schedule: { ...s, ...patch } });
-  const issue = problem(body);
+  const issue = problem(body, options.email_configured);
 
   // filter values: dashboards keep them as the run sends them, the bar edits FilterValues
   const [filterValues, setFilterValues] = useState<FilterValues>(() => (target.type === 'dashboard' ? (initial.options.filters as FilterValues) : {}));
@@ -466,6 +481,9 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
   const [error, setError] = useState<string | null>(null);
   const people = options.people;
   const noEmail = new Set(people.filter((p) => !p.has_email).map((p) => p.username));
+  const emailReady = options.email_configured;
+  // the creator is a recipient but has no address yet: ask for it right here
+  const askMyEmail = emailReady && r.users.includes(me) && !options.my_email;
   const addTyped = () => {
     const { valid, invalid } = parseEmails(typed);
     const blocked = isAdmin ? [] : valid.filter((e) => !domainAllowed(e.toLowerCase(), options.allowed_domains));
@@ -496,11 +514,28 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
           </WrapItem>
         ))}
       </Wrap>
-      {r.users.some((u) => noEmail.has(u)) && (
+      {!emailReady && (
+        <Alert status="info" borderRadius="md" fontSize="sm" py={2} data-testid="email-not-set-up">
+          <ChakraAlertIcon />
+          <Box>
+            {t('Email is not set up on this server, so people and addresses cannot receive it yet.')}{' '}
+            {isAdmin ? (
+              <Link as={RouterLink} to="/admin?tab=delivery" textDecoration="underline">
+                {t('Set up email in Admin → Delivery')}
+              </Link>
+            ) : (
+              t('Ask an admin to set it up, or send it to a chat below.')
+            )}
+          </Box>
+        </Alert>
+      )}
+      {askMyEmail && <MyEmail />}
+      {emailReady && r.users.some((u) => noEmail.has(u) && !(u === me && askMyEmail)) && (
         <Text fontSize="xs" color="orange.400">
           {t('Orange names have no email address yet: they can add it with the envelope button next to their name (bottom left).')}
         </Text>
       )}
+      {emailReady && (<>
       <HStack>
         <Select
           size="sm"
@@ -546,6 +581,7 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
           {t('Addresses must end with {domains}.', { domains: options.allowed_domains.map((d) => `@${d}`).join(', ') })}
         </Text>
       )}
+      </>)}
       {options.destinations.length > 0 && (
         <VStack align="stretch" spacing={1} pt={1}>
           {options.destinations.map((d) => (
@@ -576,6 +612,39 @@ function Recipients({ body, set, options, isAdmin, me }: { body: SubscriptionBod
   );
 }
 
+/** Your own address, asked for where it is needed (you are a recipient and have none yet). */
+function MyEmail() {
+  const toast = useToast();
+  const [address, setAddress] = useState('');
+  const [busy, setBusy] = useState(false);
+  const valid = parseEmails(address).valid.length === 1 && parseEmails(address).invalid.length === 0;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await subscriptions.setMyEmail(address.trim());
+      toast({ status: 'success', title: t('Email address saved'), duration: 1500 });
+    } catch (e) {
+      toast({ status: 'error', title: t('Could not save'), description: apiErrorMessage(e, t('Please try again')) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Box border="1px solid" borderColor="orange.400" borderRadius="md" p={2} data-testid="my-email">
+      <Text fontSize="xs" mb={1}>
+        {t('You have no email address yet. Where should it go?')}
+      </Text>
+      <HStack>
+        <Input size="sm" type="email" placeholder="you@company.com" value={address} onChange={(e) => setAddress(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && valid) { e.preventDefault(); void save(); } }} aria-label={t('Your email address')} />
+        <Button size="sm" variant="brand" onClick={() => void save()} isDisabled={!valid} isLoading={busy}>
+          {t('Save')}
+        </Button>
+      </HStack>
+    </Box>
+  );
+}
+
 function RunLine({ run }: { run: SubscriptionRun }) {
   const problems = run.detail?.channels?.filter((c) => c.status !== 'sent') ?? [];
   const sent = run.detail?.channels?.filter((c) => c.status === 'sent').length ?? 0;
@@ -583,7 +652,7 @@ function RunLine({ run }: { run: SubscriptionRun }) {
     <Box fontSize="xs" borderBottom="1px solid" borderColor="lineColor" pb={1}>
       <HStack>
         <StatusBadge status={run.status} />
-        <Text color="mutedText">{new Date(run.started_at * 1000).toLocaleString(locale())}</Text>
+        <Text color="mutedText">{localDateText(run.started_at * 1000, true)}</Text>
         <Text color="faintText">{run.trigger === 'manual' ? t('sent by hand') : t('on schedule')}</Text>
         {sent > 0 && <Text color="faintText">{t('· to {n}', { n: sent })}</Text>}
       </HStack>

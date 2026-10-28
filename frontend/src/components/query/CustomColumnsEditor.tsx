@@ -7,6 +7,7 @@ import { FormulaError, FUNCTIONS, formatFormula, parseFormula } from '../../quer
 import type { CustomColumn } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { validCustomColumnName } from './names';
 import { t } from '../../i18n/index.ts';
 
 interface CustomColumnsEditorProps {
@@ -14,8 +15,6 @@ interface CustomColumnsEditorProps {
   onChange: (columns: CustomColumn[]) => void;
   options: PickOption[]; // columns usable in formulas
 }
-
-const NAME = /^[A-Za-z_][A-Za-z0-9_ ]{0,63}$/;
 
 export function CustomColumnsEditor({ columns, onChange, options }: CustomColumnsEditorProps) {
   return (
@@ -67,7 +66,7 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
       error = e instanceof FormulaError ? e.message : t('Invalid formula');
     }
   }
-  const nameError = !name.trim() ? (text.trim() ? t('Give it a name') : null) : !NAME.test(name.trim()) ? t('Letters, digits, spaces, _') : taken.includes(name.trim()) ? t('Name already used') : null;
+  const nameError = !name.trim() ? (text.trim() ? t('Give it a name') : null) : !validCustomColumnName(name) ? t('Letters, digits, spaces, _') : taken.includes(name.trim()) ? t('Name already used') : null;
   const valid = expr !== null && !nameError && name.trim() !== '';
   const changed = name !== initialName || text !== initialText;
 
@@ -77,8 +76,9 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
 
   return (
     <Box data-testid={isNew ? 'new-custom-column' : 'custom-column'}>
-      <Flex gap={2} align="center">
-        <Input size="sm" maxW="160px" placeholder={t('name')} value={name} onChange={(e) => setName(e.target.value)} aria-label={t('Column name')} />
+      {/* wraps instead of pushing the buttons out of the card (longer Russian labels, narrow screens) */}
+      <Flex gap={2} align="center" wrap="wrap">
+        <Input size="sm" flex="0 1 160px" minW="100px" placeholder={t('name')} value={name} onChange={(e) => setName(e.target.value)} aria-label={t('Column name')} />
         <Text fontSize="sm" color="mutedText">
           =
         </Text>
@@ -86,6 +86,8 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
           size="sm"
           fontFamily="mono"
           placeholder="[total] - [discount]"
+          flex="1 1 140px"
+          minW="120px"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && save()}
@@ -94,7 +96,7 @@ function FormulaRow({ initialName, initialText, options, taken, isNew, onSave, o
         />
         <InsertColumn options={options} onPick={(ref) => setText((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}[${ref}]`)} />
         {(isNew || changed) && (
-          <Button size="sm" onClick={save} isDisabled={!valid}>
+          <Button size="sm" flexShrink={0} onClick={save} isDisabled={!valid}>
             {isNew ? t('Add') : t('Save')}
           </Button>
         )}

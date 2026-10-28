@@ -5,9 +5,26 @@
 import type { ColumnType } from '../api';
 import type { ColumnFormat, DateStyle } from './types.ts';
 
-import { t } from '../i18n/index.ts';
+import { lang, t } from '../i18n/index.ts';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m) => t(m));
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthName = (mo: string | number) => (MONTHS[Number(mo) - 1] ? t(MONTHS[Number(mo) - 1]) : String(mo));
+const pad2 = (n: string | number) => String(n).padStart(2, '0');
+
+/**
+ * A day in the one date style of the language (M10): English "12 Oct 2026", Russian "12.10.2026".
+ * Results, tables, charts and admin lists all use it.
+ */
+export function dayText(y: string | number, mo: string | number, d: string | number): string {
+  return lang() === 'ru' ? `${pad2(d)}.${pad2(mo)}.${y}` : `${Number(d)} ${monthName(mo)} ${y}`;
+}
+
+/** A moment (a Date or epoch milliseconds) in local time: the day, with the time when asked for. */
+export function localDateText(when: Date | number, withTime = false): string {
+  const d = typeof when === 'number' ? new Date(when) : when;
+  const day = dayText(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  return withTime ? `${day} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : day;
+}
 
 export function formatNumber(value: number, fmt: ColumnFormat = {}, locale?: string): string {
   if (!Number.isFinite(value)) return String(value);
@@ -58,23 +75,25 @@ export function dateStyleFromName(name: string): DateStyle {
 export function formatDate(value: string, style: DateStyle): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value);
   if (!m) return value;
-  const [, y, mo, d, h, mi] = m;
-  const month = MONTHS[Number(mo) - 1] ?? mo;
+  const [, y, mo, d, h, mi, sec] = m;
+  const day = dayText(y, mo, d);
   switch (style) {
     case 'year':
       return y;
     case 'quarter':
       return t('Q{q} {year}', { q: Math.floor((Number(mo) - 1) / 3) + 1, year: y });
     case 'month':
-      return `${month} ${y}`;
+      return `${monthName(mo)} ${y}`;
     case 'week':
-      return t('Week of {date}', { date: `${Number(d)} ${month} ${y}` });
+      return t('Week of {date}', { date: day });
     case 'day':
-      return `${Number(d)} ${month} ${y}`;
+      return day;
     case 'datetime':
-      return h !== undefined ? `${Number(d)} ${month} ${y} ${h}:${mi}` : `${Number(d)} ${month} ${y}`;
+      return h !== undefined ? `${day} ${h}:${mi}` : day;
     default:
-      return h !== undefined && !(h === '00' && mi === '00') ? `${y}-${mo}-${d} ${h}:${mi}` : `${y}-${mo}-${d}`;
+      // a plain date or timestamp: the time only when there is one (seconds only when not :00)
+      if (h === undefined || (h === '00' && mi === '00' && (sec ?? '00') === '00')) return day;
+      return `${day} ${h}:${mi}${sec && sec !== '00' ? `:${sec}` : ''}`;
   }
 }
 

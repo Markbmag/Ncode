@@ -1,20 +1,22 @@
 import { Box, Button, Flex, HStack, Input, Text, Tooltip } from '@chakra-ui/react';
 import { XIcon } from '../icons';
 import { shownValue } from './logic';
-import type { FilterValue, FilterValues } from './logic';
+import type { FilterValues } from './logic';
+import { setFilterValue, setRangeEnd } from './filterValues';
+import type { FilterUpdate } from './filterValues';
 import type { DashFilter } from './types';
 import { t } from '../i18n/index.ts';
 
 interface Props {
   filters: DashFilter[];
   values: FilterValues;
-  onChange: (values: FilterValues) => void;
+  // an update of the current values (two quick changes must not overwrite each other), or {} to reset
+  onChange: (update: FilterUpdate | FilterValues) => void;
 }
 
 /** The dashboard's filters; changing one re-runs the cards it is mapped to. Values live in the URL. */
 export function FilterBar({ filters, values, onChange }: Props) {
   if (filters.length === 0) return null;
-  const set = (id: string, value: FilterValue) => onChange({ ...values, [id]: value });
   const changed = filters.some((f) => values[f.id] !== undefined);
   return (
     <Flex gap={4} wrap="wrap" align="flex-end" bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" px={4} py={3} data-testid="filter-bar">
@@ -37,7 +39,7 @@ export function FilterBar({ filters, values, onChange }: Props) {
                       type="date"
                       w="150px"
                       value={pair[i] ?? ''}
-                      onChange={(e) => set(f.id, i === 0 ? [e.target.value, pair[1] ?? ''] : [pair[0] ?? '', e.target.value])}
+                      onChange={(e) => onChange(setRangeEnd(f, i as 0 | 1, e.target.value))}
                       aria-label={i === 0 ? t('{label} from', { label: f.label }) : t('{label} to', { label: f.label })}
                       data-testid={`filter-${f.id}-${i === 0 ? 'from' : 'to'}`}
                     />
@@ -51,7 +53,7 @@ export function FilterBar({ filters, values, onChange }: Props) {
                 type={f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'}
                 placeholder={f.type === 'category' ? 'a, b, c' : t('any')}
                 value={Array.isArray(shown) ? shown.join(', ') : shown}
-                onChange={(e) => set(f.id, e.target.value)}
+                onChange={(e) => onChange(setFilterValue(f.id, e.target.value))}
                 aria-label={f.label}
                 data-testid={`filter-${f.id}`}
               />

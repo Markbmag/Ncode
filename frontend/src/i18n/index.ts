@@ -11,7 +11,7 @@
  * "one|other" and holds three forms "одна|две|пять".
  *
  * The language is read once when the app starts (localStorage "ncode_lang"); switching
- * reloads the page. Messages from the server stay English.
+ * reloads the page. The server answers its messages in the same language (Accept-Language).
  */
 import { RU } from './ru/index.ts';
 

@@ -22,6 +22,12 @@
 
 A question is {"kind": "builder", "spec": QuerySpec}, {"kind": "sql", "spec": {"sql", "limit"}}
 or {"kind": "federated", "spec": FederatedSpec} (several sources combined, app/federation).
+
+Edit conflicts (M10): a PATCH of a question or collection - like a dashboard PUT/PATCH -
+may carry "base_updated_at", the updated_at the editor loaded. If the item was saved
+since, the answer is 409 with the header X-Edit-Conflict: 1 and nothing changes;
+without the field (old clients, "save mine anyway") the change simply wins.
+New items cannot go into an archived collection (409): they would vanish from view.
 """
 
 from __future__ import annotations
@@ -43,7 +49,7 @@ from .dashboards import DashboardStore, add_conditions
 from .params import (
     ParameterDef, bind_spec, check_builder_params, check_sql_params, resolve, sample_values, sql_bind_values,
 )
-from .store import ROLES, ContentError, ContentStore, Question
+from .store import ROLES, ContentError, ContentStore, EditConflict, Question, check_base
 
 MAX_VIZ_BYTES = 100_000
 
@@ -67,6 +73,7 @@ class CollectionPatch(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     parent_id: int | None = None
     archived: bool | None = None
+    base_updated_at: float | None = Field(default=None, description="updated_at as loaded: 409 if it changed meanwhile")
 
 
 class GrantIn(BaseModel):
@@ -102,6 +109,7 @@ class QuestionPatch(BaseModel):
     parameters: list[ParameterDef] | None = Field(default=None, max_length=50)
     archived: bool | None = None
     model: bool | None = None  # usable as a source in Combine / New question (M7)
+    base_updated_at: float | None = Field(default=None, description="updated_at as loaded: 409 if it changed meanwhile")
 
 
 class DuplicateIn(BaseModel):
@@ -167,7 +175,9 @@ def register_content_routes(
     router = APIRouter(tags=["library"])
 
     def fail(exc: ContentError) -> HTTPException:
-        return HTTPException(status_code=exc.status, detail=str(exc))
+        # the header tells an edit conflict apart from other 409s ("archive it first")
+        headers = {"X-Edit-Conflict": "1"} if isinstance(exc, EditConflict) else None
+        return HTTPException(status_code=exc.status, detail=str(exc), headers=headers)
 
     federation, dataset_store = register_federation_routes(
         app, content=store, app_db=app_db, settings=settings, queries=queries, current_user=current_user,
@@ -339,6 +349,8 @@ def register_content_routes(
         changes = body.model_dump(exclude_unset=True)
         try:
             current = store.get_question(user, qid, "edit")
+            # checked before validating: a conflict is the answer even if the spec is also invalid
+            check_base("question", current.updated_at, current.updated_by, changes.get("base_updated_at"))
         except ContentError as exc:
             raise fail(exc) from exc
         if {"spec", "kind", "connection", "parameters"} & changes.keys():
@@ -370,7 +382,8 @@ def register_content_routes(
             src = store.get_question(user, qid)
             target = body.collection_id
             if target is None:
-                target = src.collection_id if src.access == "edit" else store.personal_collection(user).id
+                open_here = src.access == "edit" and not store.snapshot().hidden(src.collection_id)
+                target = src.collection_id if open_here else store.personal_collection(user).id
             q = store.create_question(
                 user, name=body.name or f"{src.name} (copy)"[:200], description=src.description,
                 collection_id=target, connection=src.connection, kind=src.kind, spec=src.spec,

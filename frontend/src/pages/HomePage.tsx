@@ -4,6 +4,7 @@ import { PageHeader } from '../components/PageHeader';
 import { NAV_ITEMS } from '../shell/nav';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { t, tn } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 const BLURBS: Record<string, string> = {
   '/search': t('Find a value in every table of a database at once.'),
@@ -19,14 +20,15 @@ const BLURBS: Record<string, string> = {
 };
 
 export default function HomePage() {
-  const { user, isAdmin, connections, loaded } = useWorkspace();
+  const { user, isAdmin, connections, loaded, connectionsError, reloadConnections } = useWorkspace();
   const items = NAV_ITEMS.filter((item) => item.to !== '/' && (isAdmin || !item.adminOnly));
   return (
     <VStack align="stretch" spacing={6}>
       <PageHeader
         title={t('Hello, {name}', { name: user.username })}
-        subtitle={loaded ? tn(connections.length, '{n} database available to you', '{n} databases available to you') : ' '}
+        subtitle={loaded && !connectionsError ? tn(connections.length, '{n} database available to you', '{n} databases available to you') : ' '}
       />
+      {connectionsError !== null && <LoadError error={connectionsError} title={t('Could not load your databases')} onRetry={reloadConnections} />}
       <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={4}>
         {items.map((item) => (
           <Box

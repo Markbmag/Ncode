@@ -7,7 +7,10 @@ import { FormulaError, formatFormula, formulaRefs, parseFormula } from '../src/q
 import { findJoinPath, joinSuggestions } from '../src/query/joins.ts';
 import { operatorsFor, valueComplete } from '../src/query/operators.ts';
 import type { QuerySpec } from '../src/query/types.ts';
-import { formatValue, normalizeDate } from '../src/lib/format.ts';
+import { SMART_DATES_DEFAULT, formatValue, normalizeDate } from '../src/lib/format.ts';
+import { localDateText } from '../src/viz/format.ts';
+import { setLangForTests } from '../src/i18n/index.ts';
+import { cleanResultName, validCustomColumnName } from '../src/components/query/names.ts';
 
 const col = (name: string, type: SchemaTable['columns'][number]['type'], pk = false) => ({
   name, type, db_type: type, nullable: true, primary_key: pk, foreign_key: null,
@@ -161,8 +164,11 @@ describe('formatting', () => {
     assert.equal(formatValue(null, 'number'), '');
     assert.equal(formatValue(2024, 'number', 'dimension'), '2024');
     assert.equal(formatValue(1234.5, 'number', 'measure').replace(/\s|,/g, ''), '1234.5');
-    assert.equal(formatValue('2026-01-05T10:00:00', 'datetime'), '2026-01-05 10:00:00');
-    assert.equal(formatValue('2026-01-05T00:00:00', 'datetime'), '2026-01-05');
+    assert.equal(formatValue('2026-01-05T10:00:00', 'datetime'), '5 Jan 2026 10:00');
+    assert.equal(formatValue('2026-01-05T10:00:07.250', 'datetime'), '5 Jan 2026 10:00:07');
+    assert.equal(formatValue('2026-01-05T00:00:00', 'datetime'), '5 Jan 2026');
+    assert.equal(formatValue('2026-01-05', 'date'), '5 Jan 2026');
+    assert.equal(formatValue('2026-01-01', 'date', 'dimension', { name: 'created_at_month' }), 'Jan 2026');
     assert.equal(formatValue(1, 'boolean'), 'true');
   });
 
@@ -175,6 +181,48 @@ describe('formatting', () => {
     assert.equal(normalizeDate(42), null);
     assert.equal(normalizeDate('31.13.2026'), null);
     assert.equal(normalizeDate('hello'), null);
-    assert.equal(formatValue('31.01.2026', 'string', 'dimension', { smartDates: true }), '2026-01-31');
+    assert.equal(formatValue('31.01.2026', 'string', 'dimension', { smartDates: true }), '31 Jan 2026');
+  });
+
+  test('one date style per language (M10): 12 Oct 2026 / 12.10.2026', () => {
+    try {
+      setLangForTests('ru');
+      assert.equal(formatValue('2026-10-12', 'date'), '12.10.2026');
+      assert.equal(formatValue('2026-10-12T08:05:00', 'datetime'), '12.10.2026 08:05');
+      assert.equal(formatValue('2026-10-12', 'string', 'dimension', { smartDates: true }), '12.10.2026');
+      assert.equal(localDateText(new Date(2026, 9, 12, 9, 30), true), '12.10.2026 09:30');
+    } finally {
+      setLangForTests('en');
+    }
+    assert.equal(localDateText(new Date(2026, 9, 12, 9, 30)), '12 Oct 2026');
+  });
+
+  test('smart dates are on by default but leave plain big numbers alone', () => {
+    assert.equal(SMART_DATES_DEFAULT, true);
+    const on = { smartDates: true };
+    assert.equal(formatValue(1767225600, 'number', 'measure', { ...on, name: 'created_at' }).replace(/\s|,/g, ''), '1767225600');
+    assert.equal(formatValue(1767225600, 'number', 'dimension', { ...on, name: 'phone' }), '1767225600');
+    assert.equal(formatValue(1767225600, 'number', 'dimension', { ...on, name: 'created_at' }), '1 Jan 2026');
+    assert.equal(formatValue('1767225600', 'string', 'dimension', { ...on, name: 'order_no' }), '1767225600');
+  });
+});
+
+describe('names in any language (M10)', () => {
+  test('custom column names may use Cyrillic letters and spaces', () => {
+    assert.ok(validCustomColumnName('Размер заказа'));
+    assert.ok(validCustomColumnName('net_2'));
+    assert.ok(!validCustomColumnName('2 net'));
+    assert.ok(!validCustomColumnName('a-b'));
+    assert.ok(!validCustomColumnName('я'.repeat(65)));
+  });
+  test('result names keep letters of any language instead of dropping them', () => {
+    assert.equal(cleanResultName('Выручка'), 'Выручка');
+    assert.equal(cleanResultName('Число заказов'), 'Число заказов');
+    assert.equal(cleanResultName('rev-€%'), 'rev');
+    assert.equal(cleanResultName(' '), undefined);
+    assert.equal(cleanResultName(''), undefined);
+  });
+  test('a formula may name a Cyrillic column without brackets', () => {
+    assert.deepEqual(parseFormula('сумма * 2'), { op: '*', args: [{ ref: 'сумма' }, { value: 2 }] });
   });
 });

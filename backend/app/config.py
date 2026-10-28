@@ -127,6 +127,8 @@ class Settings:
     query_cache_ttl_sec: int = 60        # identical questions within this time reuse the result; 0 = off
     max_concurrent_queries: int = 3      # running questions per user
     query_workers: int = 8               # questions running at once on this server
+    db_pool_size: int = 0                # connections kept open per database; 0 = max(search, query workers)
+    db_pool_overflow: int = 4            # extra connections opened for a burst, closed again afterwards
     # --- federation and uploaded datasets (M6) ---
     federation_source_rows: int = 100_000  # rows read from each source of a multi-source question
     federation_memory_mb: int = 512      # DuckDB memory per multi-source run
@@ -144,6 +146,7 @@ class Settings:
     # --- operations (M9) ---
     backup_hour: int = 2                 # automatic daily backup at this hour (server time); -1 = off
     backup_keep: int = 7                 # automatic backups kept
+    audit_keep_days: int = 365           # audit log entries older than this are removed daily; 0 = keep forever
     metrics_token: str = field(default="", repr=False)  # lets Prometheus read /metrics without signing in
     # Encrypts passwords of connections created in the UI. Empty = auto-generated key file.
     secret_key: str = field(default="", repr=False)
@@ -196,6 +199,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         query_cache_ttl_sec=max(0, _int(env, "NCODE_QUERY_CACHE_TTL_SEC", defaults.query_cache_ttl_sec)),
         max_concurrent_queries=max(1, _int(env, "NCODE_MAX_CONCURRENT_QUERIES", defaults.max_concurrent_queries)),
         query_workers=max(1, _int(env, "NCODE_QUERY_WORKERS", defaults.query_workers)),
+        db_pool_size=max(0, _int(env, "NCODE_DB_POOL_SIZE", defaults.db_pool_size)),
+        db_pool_overflow=max(0, _int(env, "NCODE_DB_POOL_OVERFLOW", defaults.db_pool_overflow)),
         federation_source_rows=max(1, _int(env, "NCODE_FEDERATION_SOURCE_ROWS", defaults.federation_source_rows)),
         federation_memory_mb=max(64, _int(env, "NCODE_FEDERATION_MEMORY_MB", defaults.federation_memory_mb)),
         federation_threads=max(1, _int(env, "NCODE_FEDERATION_THREADS", defaults.federation_threads)),
@@ -210,6 +215,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         public_rate_per_min=max(10, _int(env, "NCODE_PUBLIC_RATE_PER_MIN", defaults.public_rate_per_min)),
         backup_hour=min(23, max(-1, _int(env, "NCODE_BACKUP_HOUR", defaults.backup_hour))),
         backup_keep=max(1, _int(env, "NCODE_BACKUP_KEEP", defaults.backup_keep)),
+        audit_keep_days=max(0, _int(env, "NCODE_AUDIT_KEEP_DAYS", defaults.audit_keep_days)),
         metrics_token=(env.get("NCODE_METRICS_TOKEN") or "").strip(),
     )
 

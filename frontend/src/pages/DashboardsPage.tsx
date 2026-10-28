@@ -11,7 +11,9 @@ import { useCollections } from '../library/api';
 import { CollectionPicker, DialogShell, MoveDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
 import type { DashboardSummary } from '../dashboards/types';
-import { locale, t } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -19,7 +21,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString(locale());
+  return localDateText(ts * 1000);
 }
 
 /** /dashboards: favourites, search and every dashboard the user can see. */
@@ -55,7 +57,11 @@ export default function DashboardsPage() {
       )}
       <Panel title={query ? t('Dashboards matching “{query}”', { query }) : t('All dashboards')}>
         {all.isPending && <Skeleton h="100px" />}
-        {all.isError && <Empty>{apiErrorMessage(all.error, t('Could not load the dashboards'))}</Empty>}
+        {all.isError && (
+          <Box p={2}>
+            <LoadError compact error={all.error} title={t('Could not load the dashboards')} onRetry={() => void all.refetch()} />
+          </Box>
+        )}
         {all.data?.length === 0 && <Empty>{query ? t('Nothing found.') : t('No dashboards yet. Create one, then add saved questions to it.')}</Empty>}
         {all.data?.map((d) => (
           <DashboardRow key={d.id} d={d} showCollection />

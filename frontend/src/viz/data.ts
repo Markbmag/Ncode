@@ -19,7 +19,8 @@ export const colIndex = (t: Table, name: string | undefined): number => (name ? 
 export const toNumber = (v: unknown): number | null => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v === 'boolean') return v ? 1 : 0;
-  if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
+  // big integers and long decimals arrive as text (the backend keeps them exact); "1E+400" is not a chart value
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
   return null;
 };
 

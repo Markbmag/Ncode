@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Alert, AlertIcon, Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
+  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
   MenuItem, MenuList, Skeleton, Stack, Text, Tooltip, VStack, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { Link as RouterLink, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
+import { LoadError } from '../components/LoadError';
 import {
   ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LayoutIcon, MergeIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
   SearchIcon, StarIcon, TrashIcon, UploadIcon, UsersIcon,
 } from '../icons';
 import { flattenTree, library, useArchive, useCollection, useCollections, useQuestions } from '../library/api';
+import { withBase } from '../library/conflict';
 import type { CollectionInfo, QuestionKind, QuestionSummary } from '../library/api';
 import { CollectionDialog, ConfirmDialog, MoveDialog, ShareDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
@@ -19,7 +21,8 @@ import { DashboardRow, NewDashboardDialog } from './DashboardsPage';
 import { DatasetRow } from './DatasetsPage';
 import { datasets } from '../federation/api';
 import { UploadDialog } from '../federation/UploadDialog';
-import { locale, t, tc } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tc } from '../i18n/index.ts';
 
 const KIND_ICON: Record<QuestionKind, typeof ChartIcon> = { builder: ChartIcon, sql: CodeIcon, federated: MergeIcon };
 
@@ -29,7 +32,7 @@ function ago(ts: number): string {
   if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
   if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
   if (s < 86400 * 30) return t('{n} d ago', { n: Math.floor(s / 86400) });
-  return new Date(ts * 1000).toLocaleDateString(locale());
+  return localDateText(ts * 1000);
 }
 
 /** /library, /library/c/:id and /library/archive. */
@@ -78,7 +81,7 @@ function TreeLink({ to, active, depth = 0, icon, children, testId }: { to: strin
 }
 
 function CollectionTree({ activeId, archive }: { activeId: number | null; archive: boolean }) {
-  const { data, isPending, isError, error } = useCollections();
+  const { data, isPending, isError, error, refetch } = useCollections();
   const create = useDisclosure();
   const navigate = useNavigate();
   const nodes = useMemo(() => flattenTree(data?.collections ?? []), [data]);
@@ -98,7 +101,7 @@ function CollectionTree({ activeId, archive }: { activeId: number | null; archiv
         </Tooltip>
       </Flex>
       {isPending && <Skeleton h="120px" borderRadius="md" />}
-      {isError && <Text fontSize="xs" color="red.400">{apiErrorMessage(error, t('Could not load collections'))}</Text>}
+      {isError && <LoadError compact error={error} title={t('Could not load collections')} onRetry={() => void refetch()} />}
       {own.map((n) => (
         <TreeLink key={n.id} to={`/library/c/${n.id}`} active={n.id === activeId} depth={n.depth} icon={<FolderIcon boxSize={4} />} testId={`tree-${n.id}`}>
           {n.mine ? t('My collection') : n.name}
@@ -225,9 +228,15 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
-function QuestionList({ items, loading, error, empty, showCollection }: { items?: QuestionSummary[]; loading: boolean; error: unknown; empty: string; showCollection?: boolean }) {
+function QuestionList({ items, loading, error, empty, showCollection, onRetry }: { items?: QuestionSummary[]; loading: boolean; error: unknown; empty: string; showCollection?: boolean; onRetry?: () => void }) {
   if (loading) return <Skeleton h="100px" />;
-  if (error) return <Empty>{apiErrorMessage(error, t('Could not load the questions'))}</Empty>;
+  if (error) {
+    return (
+      <Box p={2}>
+        <LoadError compact error={error} title={t('Could not load the questions')} onRetry={onRetry ?? (() => window.location.reload())} />
+      </Box>
+    );
+  }
   if (!items?.length) return empty ? <Empty>{empty}</Empty> : null;
   return (
     <Box>
@@ -241,7 +250,8 @@ function QuestionList({ items, loading, error, empty, showCollection }: { items?
 function NewButtons({ collection }: { collection?: number }) {
   const into = collection ? `?collection=${collection}` : ''; // saving then defaults to this collection
   return (
-    <HStack>
+    // wraps at phone width instead of scrolling the page sideways (longer Russian labels too)
+    <Flex gap={2} wrap="wrap">
       <Button as={RouterLink} to={`/questions${into}`} size="sm" variant="brand" leftIcon={<ChartIcon boxSize={4} />}>
         {t('New question')}
       </Button>
@@ -251,7 +261,7 @@ function NewButtons({ collection }: { collection?: number }) {
       <Button as={RouterLink} to={`/combine${into}`} size="sm" variant="subtle" leftIcon={<MergeIcon boxSize={4} />}>
         {t('Combine sources')}
       </Button>
-    </HStack>
+    </Flex>
   );
 }
 
@@ -284,7 +294,7 @@ function LibraryHome() {
             </Panel>
           )}
           <Panel title={t('Questions matching “{query}”', { query })}>
-            <QuestionList items={found.data} loading={found.isPending} error={found.error} empty={t('Nothing found.')} showCollection />
+            <QuestionList items={found.data} loading={found.isPending} error={found.error} onRetry={() => void found.refetch()} empty={t('Nothing found.')} showCollection />
           </Panel>
         </>
       ) : (
@@ -297,12 +307,13 @@ function LibraryHome() {
               items={favorites.data}
               loading={favorites.isPending}
               error={favorites.error}
+              onRetry={() => void favorites.refetch()}
               empty={favoriteBoards.data?.length ? '' : t('Star a question or a dashboard to keep it here.')}
               showCollection
             />
           </Panel>
           <Panel title={t('Recently changed')}>
-            <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} empty={t('No saved questions yet. Build one and press Save.')} showCollection />
+            <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} onRetry={() => void recent.refetch()} empty={t('No saved questions yet. Build one and press Save.')} showCollection />
           </Panel>
         </>
       )}
@@ -313,7 +324,7 @@ function LibraryHome() {
 // ---------------------------------------------------------------- one collection
 
 function CollectionView({ id }: { id: number }) {
-  const { data, isPending, isError, error } = useCollection(id);
+  const { data, isPending, isError, error, refetch } = useCollection(id);
   const navigate = useNavigate();
   const toast = useToast();
   const share = useDisclosure();
@@ -326,10 +337,7 @@ function CollectionView({ id }: { id: number }) {
   if (isPending) return <Skeleton h="300px" borderRadius="xl" />;
   if (isError || !data)
     return (
-      <Alert status="error" borderRadius="xl">
-        <AlertIcon />
-        {apiErrorMessage(error, t('This collection could not be opened.'))}
-      </Alert>
+      <LoadError error={error} title={t('This collection could not be opened.')} onRetry={() => void refetch()} />
     );
   const c = data.collection;
   const archive = async () => {
@@ -367,7 +375,7 @@ function CollectionView({ id }: { id: number }) {
           </>
         }
         actions={
-          <HStack>
+          <Flex gap={2} wrap="wrap" align="center">
             {c.can_manage && !c.personal && (
               <Button size="sm" variant="subtle" leftIcon={<UsersIcon boxSize={4} />} onClick={share.onOpen} data-testid="share-collection">
                 {t('Share')}
@@ -403,7 +411,7 @@ function CollectionView({ id }: { id: number }) {
                 </MenuList>
               </Menu>
             )}
-          </HStack>
+          </Flex>
         }
       />
       {data.collections.length > 0 && (
@@ -467,7 +475,7 @@ function CollectionView({ id }: { id: number }) {
         current={c.parent_id}
         allowRoot
         exclude={c.id}
-        onMove={(target) => library.updateCollection(c.id, { parent_id: target })}
+        onMove={(target, overwrite) => library.updateCollection(c.id, withBase({ parent_id: target }, c.updated_at, overwrite))}
       />
     </VStack>
   );
@@ -476,7 +484,7 @@ function CollectionView({ id }: { id: number }) {
 // ---------------------------------------------------------------- archive
 
 function ArchiveView() {
-  const { data, isPending, error } = useArchive();
+  const { data, isPending, error, refetch } = useArchive();
   const toast = useToast();
   const [deleting, setDeleting] = useState<{ kind: 'question' | 'collection' | 'dashboard' | 'dataset'; id: number; name: string } | null>(null);
   const restore = async (fn: () => Promise<unknown>) => {
@@ -490,12 +498,7 @@ function ArchiveView() {
     <VStack align="stretch" spacing={4}>
       <PageHeader title={tc('noun', 'Archive')} subtitle={t('Archived questions, dashboards and collections. Restore them, or delete them for good.')} />
       {isPending && <Skeleton h="160px" borderRadius="xl" />}
-      {error && (
-        <Alert status="error" borderRadius="xl">
-          <AlertIcon />
-          {apiErrorMessage(error, t('Could not load the archive'))}
-        </Alert>
-      )}
+      {error && <LoadError error={error} title={t('Could not load the archive')} onRetry={() => void refetch()} />}
       {data && (
         <>
           <Panel title={t('Collections')}>

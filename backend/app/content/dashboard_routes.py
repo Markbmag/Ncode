@@ -3,7 +3,7 @@
     GET    /api/dashboards?q=&favorites=&collection=   dashboards the caller can see
     POST   /api/dashboards                             {"name", "description", "collection_id"}
     GET    /api/dashboards/{id}                        definition + the questions on it (as far as the caller may see them)
-    PUT    /api/dashboards/{id}                        {"filters", "tabs", "cards", "settings"}: save the whole layout
+    PUT    /api/dashboards/{id}                        {"filters", "tabs", "cards", "settings", "base_updated_at"}: save the whole layout
     PATCH  /api/dashboards/{id}                        rename / move ("collection_id") / archive ("archived")
     DELETE /api/dashboards/{id}                        an archived dashboard
     POST   /api/dashboards/{id}/duplicate
@@ -40,6 +40,7 @@ class DashboardPatch(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     collection_id: int | None = None
     archived: bool | None = None
+    base_updated_at: float | None = Field(default=None, description="updated_at as loaded: 409 if it changed meanwhile")
 
 
 class DuplicateIn(BaseModel):
@@ -162,6 +163,10 @@ def register_dashboard_routes(
 
     @router.put("/api/dashboards/{did}")
     def save(did: int, body: dict[str, Any], user: User = Depends(current_user)):
+        body = dict(body)
+        base = body.pop("base_updated_at", None)  # updated_at as loaded: 409 if it changed meanwhile
+        if base is not None and (isinstance(base, bool) or not isinstance(base, (int, float))):
+            raise HTTPException(status_code=400, detail="Invalid dashboard: base_updated_at must be a number")
         try:
             definition = Definition.model_validate(body)
         except ValidationError as exc:
@@ -169,7 +174,7 @@ def register_dashboard_routes(
             where = ".".join(str(p) for p in err.get("loc", ()))
             raise HTTPException(status_code=400, detail=f"Invalid dashboard: {err['msg']}" + (f" ({where})" if where else "")) from exc
         try:
-            return full(user, store.save_definition(user, did, definition))
+            return full(user, store.save_definition(user, did, definition, base))
         except ContentError as exc:
             raise fail(exc) from exc
 

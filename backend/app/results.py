@@ -11,6 +11,7 @@ type and role, so every column always has both.
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from typing import Any, Iterable, Literal, Sequence
 
 from pydantic import BaseModel
@@ -59,11 +60,41 @@ def column_role(name: str, type_: str) -> ColumnRole:
 
 
 def infer_type(values: Iterable[Any]) -> str:
-    """Type of a result column from its (raw, not yet serialised) values; first non-null wins."""
+    """Type of a result column from its (raw, not yet serialised) values; first non-null wins.
+
+    Text that is all ISO dates or date-times is a date / datetime column: SQLite has no
+    date type, so its dates arrive as text, and "vs. previous period" needs to know.
+    """
+    values = list(values)
     for value in values:
         if value is not None:
-            return python_type_name(type(value))
+            found = python_type_name(type(value))
+            return _text_date_type(values) if found == "string" else found
     return "unknown"
+
+
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_DATETIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}(:?\d{2})?)?")
+
+
+def _text_date_type(values: list[Any]) -> str:
+    kind = "date"
+    for value in values:
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            return "string"
+        try:
+            if _ISO_DATE.fullmatch(value):
+                date.fromisoformat(value)
+            elif _ISO_DATETIME.fullmatch(value):
+                datetime.fromisoformat(value)
+                kind = "datetime"
+            else:
+                return "string"
+        except ValueError:
+            return "string"
+    return kind
 
 
 def build_envelope(

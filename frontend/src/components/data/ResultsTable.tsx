@@ -3,7 +3,7 @@ import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Box, Flex, Text, Tooltip, useToast } from '@chakra-ui/react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ColumnType, ResultColumn } from '../../api';
-import { formatValue } from '../../lib/format';
+import { SMART_DATES_DEFAULT, formatValue } from '../../lib/format';
 import { formatNumber } from '../../viz/format';
 import type { ColumnFormat } from '../../viz/types';
 import { cellToString } from '../../lib/csv';
@@ -33,7 +33,7 @@ interface ResultsTableProps {
  * scroll smoothly. Drag a header edge to resize; click a cell to select it,
  * Ctrl/Cmd+C or double-click copies the raw value; arrow keys move.
  */
-export function ResultsTable({ columns, rows, smartDates = false, height = '100%' }: ResultsTableProps) {
+export function ResultsTable({ columns, rows, smartDates = SMART_DATES_DEFAULT, height = '100%' }: ResultsTableProps) {
   const toast = useToast();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [widths, setWidths] = useState<Record<number, number>>({});
@@ -204,7 +204,7 @@ export function ResultsTable({ columns, rows, smartDates = false, height = '100%
                       ) : (
                         typeof value === 'number' && col.format
                           ? formatNumber(value, col.format as ColumnFormat)
-                          : formatValue(value, col.type, col.role, { smartDates })
+                          : formatValue(value, col.type, col.role, { smartDates, name: col.name })
                       )}
                     </Box>
                   );

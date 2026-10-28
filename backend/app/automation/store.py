@@ -290,3 +290,25 @@ class SubscriptionStore:
             return conn.execute(select(func.count()).select_from(subscriptions_table).where(
                 subscriptions_table.c.target_type == target_type, subscriptions_table.c.target_id == target_id,
             )).scalar_one()
+
+
+def forget_recipient(conn: Any, username: str) -> None:
+    """Inside the transaction that deletes a user: take them off every subscription they receive.
+
+    Recipients are kept by name, so a later user with the same name would otherwise
+    start receiving what was meant for the deleted one (M10)."""
+    name = username.strip().lower()
+    rows = conn.execute(
+        select(subscriptions_table.c.id, subscriptions_table.c.recipients).where(subscriptions_table.c.recipients.like(f'%"{name}"%'))
+    ).all()
+    for row in rows:
+        try:
+            recipients = Recipients.model_validate(json.loads(row.recipients))
+        except ValueError:  # unreadable: leave it to the owner
+            continue
+        if name not in recipients.users:
+            continue
+        recipients = recipients.model_copy(update={"users": [u for u in recipients.users if u != name]})
+        conn.execute(update(subscriptions_table).where(subscriptions_table.c.id == row.id).values(
+            recipients=recipients.model_dump_json(), updated_at=time.time(),
+        ))

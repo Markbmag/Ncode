@@ -47,6 +47,19 @@ def datasets_dir(app_db_path: Path) -> Path:
     return app_db_path.parent / "datasets"
 
 
+def _side_files(db: Path) -> list[Path]:
+    return [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm", "-journal")]
+
+
+def _merge_wal(db: Path) -> None:
+    """Writes the write-ahead log of a (stopped) database back into the file itself."""
+    con = sqlite3.connect(db)
+    try:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        con.close()
+
+
 def make_backup(app_db_path: Path, *, auto: bool = False, out_dir: Path | None = None) -> Path:
     out_dir = out_dir or backups_dir(app_db_path)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +162,10 @@ def restore(zip_path: Path, app_db_path: Path) -> dict[str, Any]:
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             app_db_path.parent.mkdir(parents=True, exist_ok=True)
             if app_db_path.exists():
+                _merge_wal(app_db_path)  # the kept copy is complete, and no old log is applied to the new file
                 shutil.move(str(app_db_path), f"{app_db_path}.before-restore-{stamp}")
+            for side in _side_files(app_db_path):
+                side.unlink(missing_ok=True)
             shutil.copy2(restored_db, app_db_path)
             data = datasets_dir(app_db_path)
             if data.exists():

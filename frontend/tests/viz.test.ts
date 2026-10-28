@@ -3,6 +3,9 @@ import { describe, test } from 'node:test';
 import { suggestViz, vizFits } from '../src/viz/autoViz.ts';
 import { histogram, kpiValues, pieSlices, pivot, seriesData, topCategories } from '../src/viz/data.ts';
 import { FIXTURES, ordersByStatus, revenueByMonth, revenueByMonthRegion, sizes, oneNumber, weekdayHour } from '../src/viz/fixtures.ts';
+import { effectiveViz, shownMode, startingChart } from '../src/viz/state.ts';
+import type { VizState } from '../src/viz/state.ts';
+import type { Table } from '../src/viz/data.ts';
 import { formatCell, formatDate, formatNumber } from '../src/viz/format.ts';
 import { buildOption, scaleWarning } from '../src/viz/options.ts';
 import { assignColors, chartTheme, CATEGORICAL, MAX_SERIES, OTHER } from '../src/viz/palette.ts';
@@ -172,5 +175,23 @@ describe('one axis only', () => {
     const spec: VizSpec = { version: 1, type: 'combo', x: 'created_at_month', series: [{ y: 'revenue' }, { y: 'orders' }] };
     assert.match(scaleWarning(revenueByMonth, spec) ?? '', /share one axis/);
     assert.equal(scaleWarning(revenueByMonth, { ...spec, series: [{ y: 'revenue' }, { y: 'target' }] }), null);
+  });
+});
+
+describe('table/chart switch matches what is shown (M10)', () => {
+  const people = { columns: [{ name: 'id', type: 'number' }, { name: 'name', type: 'string' }, { name: 'email', type: 'string' }, { name: 'region', type: 'string' }], rows: [[1, 'A', 'a@x', 'EU'], [2, 'B', 'b@x', 'US']] } as Table;
+  const words = { columns: [{ name: 'name', type: 'string' }], rows: [['A']] } as Table;
+  test('a saved chart whose table changed shows as the table, not as "Chart"', () => {
+    const state: VizState = { mode: 'chart', spec: { version: 1, type: 'line', x: 'month', series: [{ y: 'revenue' }] } };
+    const eff = effectiveViz(state, words);
+    assert.equal(eff.spec.type, 'table');
+    assert.equal(shownMode(state, eff), 'table');
+    assert.equal(shownMode(state, effectiveViz(state, revenueByMonth)), 'chart');
+  });
+  test('asking for a chart of raw rows starts from bars; no numbers, no chart', () => {
+    assert.deepEqual(startingChart(people), { version: 1, type: 'bar', x: 'name', series: [{ y: 'id' }] });
+    assert.equal(startingChart(words), null);
+    const chosen: VizState = { mode: 'chart', spec: startingChart(people) };
+    assert.equal(shownMode(chosen, effectiveViz(chosen, people)), 'chart');
   });
 });

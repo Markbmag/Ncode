@@ -229,5 +229,13 @@ export const AUTOMATION: Record<string, string> = {
   'Open': 'Открыть',
   'Download CSV': 'Скачать CSV',
   'Download Excel': 'Скачать Excel',
+  'Email is not set up: choose a chat or webhook destination': 'Почта не настроена: выберите чат или вебхук',
+  'Email is not set up on this server, so people and addresses cannot receive it yet.': 'Почта на этом сервере не настроена, поэтому люди и адреса пока не могут это получить.',
+  'Set up email in Admin → Delivery': 'Настроить почту в разделе Администрирование → Доставка',
+  'Ask an admin to set it up, or send it to a chat below.': 'Попросите администратора настроить её или отправляйте в чат ниже.',
+  'You have no email address yet. Where should it go?': 'У вас ещё не указан адрес почты. Куда отправлять?',
+  'Your email address': 'Ваш адрес почты',
+  'Email address saved': 'Адрес почты сохранён',
   'recipients::To': 'Кому',
+  'Could not load the subscriptions': 'Не удалось загрузить подписки',
 };

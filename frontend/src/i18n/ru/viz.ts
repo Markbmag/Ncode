@@ -49,6 +49,7 @@ export const VIZ: Record<string, string> = {
   "Profile": "Профиль данных",
   "Show dates stored as text (31.01.2026) or unix time as dates": "Показывать даты, хранящиеся как текст (31.01.2026) или unix-время, как даты",
   "Smart dates": "Умные даты",
+  "Nothing to draw: the result has no numbers. Summarise it first, for example a count per month": "Рисовать нечего: в результате нет чисел. Сначала сведите данные, например количество по месяцам",
   "Download": "Скачать",
   "CSV for Excel (semicolon)": "CSV для Excel (точка с запятой)",
   "CSV standard (comma)": "CSV стандартный (запятая)",

@@ -6,6 +6,7 @@ import {
   runValues, shownValue, suggestMapping, toDefinition, valuesFromSearch, valuesToSearch,
 } from '../src/dashboards/logic.ts';
 import type { CardQuestion, DashCard, DashFilter, Definition } from '../src/dashboards/types.ts';
+import { applyToSearch, setFilterValue, setRangeEnd } from '../src/dashboards/filterValues.ts';
 
 const FILTERS: DashFilter[] = [
   { id: 'period', label: 'Period', type: 'date_range', default: ['2026-01-01', '2026-12-31'] },
@@ -158,4 +159,32 @@ describe('run queue', () => {
     assert.equal(queue.active, 0);
     assert.equal(queue.queued, 0);
   });
+});
+
+describe('date range from the filter bar (M10)', () => {
+  const range: DashFilter = { id: 'when', label: 'When', type: 'date_range' } as DashFilter;
+  test('setting both ends quickly keeps the start', () => {
+    // Both changes are made from the same render: the second must not drop the first.
+    const start = setRangeEnd(range, 0, '2026-01-01');
+    const end = setRangeEnd(range, 1, '2026-03-31');
+    let search = new URLSearchParams('tab=t1');
+    search = applyToSearch(start, search);
+    search = applyToSearch(end, search);
+    assert.deepEqual(search.getAll('f.when'), ['2026-01-01', '2026-03-31']);
+    assert.equal(search.get('tab'), 't1');
+  });
+  test('an end changed alone keeps the default start; reset clears all', () => {
+    const withDefault = { ...range, default: ['2025-01-01', '2025-12-31'] } as DashFilter;
+    assert.deepEqual(setRangeEnd(withDefault, 1, '2025-06-30')({}), { when: ['2025-01-01', '2025-06-30'] });
+    assert.deepEqual(setFilterValue('region', 'EU')({ when: ['a', 'b'] }), { when: ['a', 'b'], region: 'EU' });
+    assert.equal(applyToSearch({}, new URLSearchParams('f.when=a&f.when=b&tab=x')).toString(), 'tab=x');
+  });
+});
+
+test('a card whose question was deleted is saved as it came (the server keeps it as "deleted question")', () => {
+  const def: Definition = {
+    filters: [], tabs: [], settings: {},
+    cards: [{ key: 'a', kind: 'question', question_id: null, layout: { x: 0, y: 0, w: 6, h: 4 }, question: { state: 'deleted' } }],
+  };
+  assert.deepEqual(toDefinition(def).cards, [{ key: 'a', kind: 'question', question_id: null, layout: { x: 0, y: 0, w: 6, h: 4 }, tab: null }]);
 });

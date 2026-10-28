@@ -330,3 +330,51 @@ def test_deleting_a_user_keeps_content_but_not_access(env):
 
 def test_requires_login(env):
     assert TestClient(env["client"].app).get("/api/collections").status_code == 401
+
+
+# ---------------------------------------------------------------- M10: archived collections, edit conflicts
+
+def test_nothing_new_goes_into_an_archived_collection(env):
+    """Least surprising: refuse (409, saying why) rather than create something nobody can see.
+    Restoring the collection makes it usable again; duplicates of what is inside go to the caller's collection."""
+    team = new_collection(env, "alice", "Team")
+    sub = new_collection(env, "alice", "Sub", parent=team["id"])
+    q = save_builder(env, "alice", collection=sub["id"])
+    call(env, "alice", "PATCH", f"/api/collections/{team['id']}", json={"archived": True})
+    for parent in (team["id"], sub["id"]):  # archived itself, or inside an archived one
+        res = call(env, "alice", "POST", "/api/collections", 409, json={"name": "New", "parent_id": parent})
+        assert "is archived. Restore it first" in res["detail"]
+        assert "archived" in save_builder(env, "alice", collection=parent, status=409)["detail"]
+    # moving something in would hide it just the same
+    other = save_builder(env, "alice", name="Elsewhere")
+    call(env, "alice", "PATCH", f"/api/questions/{other['id']}", 409, json={"collection_id": sub["id"]})
+    loose = new_collection(env, "alice", "Loose")
+    call(env, "alice", "PATCH", f"/api/collections/{loose['id']}", 409, json={"parent_id": team["id"]})
+    copy = call(env, "alice", "POST", f"/api/questions/{q['id']}/duplicate", json={})
+    assert copy["collection"]["name"] == "alice's collection"
+    call(env, "alice", "PATCH", f"/api/collections/{team['id']}", json={"archived": False})
+    assert save_builder(env, "alice", collection=sub["id"])["collection_id"] == sub["id"]
+
+
+def test_question_and_collection_edit_conflicts(env):
+    team = new_collection(env, "alice", "Team")
+    share(env, "alice", team["id"], [{"user": "carol", "level": "edit"}])
+    q = save_builder(env, "alice", collection=team["id"])
+    base = q["updated_at"]
+    call(env, "carol", "PATCH", f"/api/questions/{q['id']}", json={"name": "Carol's", "base_updated_at": base})
+    res = env["client"].patch(f"/api/questions/{q['id']}", headers=env["alice"], json={"name": "Alice's", "base_updated_at": base})
+    assert res.status_code == 409 and res.headers["X-Edit-Conflict"] == "1"
+    assert "Someone else (carol) saved this question" in res.json()["detail"]
+    # the conflict wins over a spec that would be refused anyway; nothing changed
+    call(env, "alice", "PATCH", f"/api/questions/{q['id']}", 409, json={"spec": {"bad": 1}, "base_updated_at": base})
+    assert call(env, "alice", "GET", f"/api/questions/{q['id']}")["name"] == "Carol's"
+    assert call(env, "alice", "PATCH", f"/api/questions/{q['id']}", json={"name": "Alice's"})["name"] == "Alice's"  # overwrite
+    # collections: rename / move with the version loaded
+    col_base = call(env, "alice", "GET", f"/api/collections/{team['id']}")["collection"]["updated_at"]  # sharing changed it
+    call(env, "alice", "PATCH", f"/api/collections/{team['id']}", json={"name": "Team A", "base_updated_at": col_base})
+    res = call(env, "alice", "PATCH", f"/api/collections/{team['id']}", 409, json={"name": "Team B", "base_updated_at": col_base})
+    assert "Someone else saved this collection" in res["detail"]
+    # no base: no check (old clients)
+    assert call(env, "alice", "PATCH", f"/api/collections/{team['id']}", json={"name": "Team B"})["name"] == "Team B"
+    # without access the check does not reveal anything: still a 404
+    call(env, "bob", "PATCH", f"/api/collections/{team['id']}", 404, json={"name": "x", "base_updated_at": 1.0})

@@ -285,4 +285,5 @@ export const QUERY: Record<string, string> = {
   "Every {{parameter}} in SQL needs a value or a default.": "Каждому {{parameter}} в SQL нужно значение или значение по умолчанию.",
   "Without a value (and no default) this filter is left out.": "Без значения (и значения по умолчанию) этот фильтр не применяется.",
   "The query could not be started": "Не удалось запустить запрос",
+  "Details from the database": "Подробности от базы данных",
 };

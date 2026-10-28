@@ -96,7 +96,10 @@ export const useReady = () =>
   useQuery({
     queryKey: peopleKeys.ready,
     refetchInterval: 30_000,
-    queryFn: async () => (await http.get<{ status: string; checks: Record<string, unknown>; uptime_sec: number }>('/api/health/ready', { validateStatus: () => true })).data,
+    queryFn: async () => (await http.get<{ status: string; checks: Record<string, unknown>; uptime_sec: number }>('/api/health/ready', {
+      // "not ready" (503) is an answer to show; anything else is a failed request
+      validateStatus: (status) => status === 200 || status === 503,
+    })).data,
   });
 
 const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin'] });

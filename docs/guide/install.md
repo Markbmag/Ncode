@@ -41,7 +41,7 @@ ports 80/443 open, `NCODE_TLS=you@example.com` gets a Let's Encrypt certificate 
 **SQLite files** you want to connect to must be mounted into the backend container (see the
 comment in `docker-compose.yml`) and added with their path inside the container.
 
-**Updating:** `git pull`, then `docker compose up -d --build`. The app database is migrated on start.
+**Updating:** see [Upgrading](#upgrading) (back up, `git pull`, `docker compose build`, check, start).
 
 **Backups in Docker:** Admin → System → *Back up now* (and the automatic nightly backup) writes to
 the volume; *Download* to keep a copy elsewhere. Restore:
@@ -87,9 +87,8 @@ server, send unknown paths to `index.html` (for nginx: `try_files $uri /index.ht
 Users, sessions, UI-added connections and the audit log live in `backend/data/ncode.sqlite`.
 Its tables are created and upgraded automatically (Alembic migrations in
 `backend/app/migrations`) every time the backend starts; an existing file keeps its data.
-**Back the file up before upgrading Ncode** (and `backend/data/datasets/`, the uploaded files).
-To migrate by hand: `cd backend && alembic upgrade head`. After pulling a new version, run
-`pip install -r requirements.txt` (backend) and `npm install` (frontend) again: new milestones can add packages.
+**Back the file up before upgrading Ncode** (and `backend/data/datasets/`, the uploaded files) -
+the steps are in [Upgrading](#upgrading). To migrate by hand: `cd backend && alembic upgrade head`.
 
 #### Tests
 
@@ -126,6 +125,80 @@ be read after a restore.
 - **Restore** (stop the server first): `python -m app.manage restore ncode-backup-....zip`. The
   current database and uploads are kept as `*.before-restore-<time>`; the restored database is
   brought up to date when the server starts.
+
+## Upgrading
+
+Every upgrade is the same five steps: **back up, get the new version, install, check, start**. The
+app database is upgraded (migrated) automatically when the new version starts; an upgraded database
+cannot be opened by the older version again, which is why the backup comes first.
+
+### Windows (or Linux) without Docker
+
+In PowerShell (on Linux: `source .venv/bin/activate` instead of the `Activate.ps1` line):
+
+    # 1. stop the server (close its window, or stop the Windows service / scheduled task), then back up
+    cd C:\Ncode\backend
+    .venv\Scripts\Activate.ps1
+    python -m app.manage backup                  # -> backend\data\backups\ncode-backup-<time>.zip
+    # also keep a copy of backend\data\secret.key (or NCODE_SECRET_KEY) - it is not in the backup
+
+    # 2. get the new version
+    cd C:\Ncode
+    git pull                                     # or unpack the new release over the old folder
+
+    # 3. install what the new version needs
+    cd backend
+    pip install -r requirements.txt
+    cd ..\frontend
+    npm install
+    npm run build                                # the built app in frontend\dist
+
+    # 4. check
+    cd ..\backend
+    python -m app.manage check
+
+    # 5. start the server as before (e.g. uvicorn app.main:app --host 0.0.0.0 --port 8000)
+
+### Docker
+
+    docker compose exec backend python -m app.manage backup      # 1. back up (while it still runs)
+    git pull                                                     # 2. the new version
+    docker compose build                                         # 3. new images (pip and npm run inside)
+    docker compose run --rm --no-deps backend python -m app.manage check   # 4. check with the new image
+    docker compose up -d                                         # 5. start; the database is migrated on start
+
+Download the backup (Admin → System) or copy it out of the volume
+(`docker compose cp backend:/app/data/backups/<file>.zip .`) if you want it outside the server.
+
+### What `python -m app.manage check` looks at
+
+It only reads (the app database is not migrated by it) and prints one line per check:
+**✓** fine, **!** worth a look, **✗** must be fixed. The exit code is 1 when there is a ✗ line,
+so scripts can stop there.
+
+- Python version and the key packages (against `requirements.txt`);
+- the settings parse, and `NCODE_*` variables Ncode does not know (usually typos, they are ignored);
+- the app database opens and its migration revision: up to date, older (**!** - it is upgraded on
+  start), or newer than this version (**✗** - the code was rolled back but not the database);
+- the secret key is there and decrypts the saved database passwords, email password and webhooks;
+- every database connection answers (or the reason it doesn't, e.g. wrong password, VPN off);
+- the backups folder is writable, and how old the last backup is;
+- free disk space.
+
+### Rolling back
+
+If the new version does not work for you, go back to the old code **and** the backup made in step 1:
+
+1. stop the server;
+2. go back to the old version: `git checkout <the previous tag, e.g. v1.0>` (or unpack the old
+   release), then `pip install -r requirements.txt` and `npm install && npm run build` as above
+   (Docker: `docker compose build`);
+3. restore the backup: `python -m app.manage restore backend\data\backups\ncode-backup-<time>.zip`
+   (Docker: `docker compose run --rm --no-deps backend python -m app.manage restore /app/data/backups/<file>.zip --yes`);
+   the database and uploads in use are kept as `*.before-restore-<time>`;
+4. keep the same secret key; run `python -m app.manage check`, then start the server.
+
+Changes made in the new version after the backup (new questions, users ...) are lost by a roll back.
 
 ## Health and monitoring
 

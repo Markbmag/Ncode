@@ -162,6 +162,15 @@ def test_not_a_datadesk_file(env, tmp_path):
         do_import(env, tmp_path / "missing.sqlite", dry_run=True)
 
 
+@pytest.mark.parametrize("folder", ["dd #1", "dd 50%25", "dd 100% ?x"])
+def test_paths_with_url_characters(env, tmp_path, folder):
+    # "#", "%" and "?" in a folder name used to end or garble the sqlite file: URI
+    path = tmp_path / folder / "app-data.sqlite"
+    path.parent.mkdir()
+    datadesk_fixture.build(path)
+    assert do_import(env, path, dry_run=True).dashboards == [("Sales", 2), ("Operations", 2)]
+
+
 def test_convert_single_details():
     spec, notes = convert_single(
         {"from": "t", "joins": [{"table": "u", "type": "right"}], "select": [{"column": "*", "aggregate": "count"}],

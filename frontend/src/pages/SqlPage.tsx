@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
   Badge, Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Select, Skeleton, Text, Tooltip, VStack, useBreakpointValue,
 } from '@chakra-ui/react';
@@ -6,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
-import { NoConnectionsState } from '../components/EmptyStates';
+import { NoConnections } from '../components/LoadError';
 import { Split } from '../components/layout/Split';
 import { CodeEditor } from '../components/sql/CodeEditor';
 import type { CodeEditorHandle } from '../components/sql/CodeEditor';
@@ -30,7 +31,8 @@ import type { ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import type { Transform } from '../query/types';
-import { locale, t, tn } from '../i18n/index.ts';
+import { localDateText } from '../viz/format';
+import { t, tn } from '../i18n/index.ts';
 
 interface Incoming {
   connection?: string;
@@ -52,7 +54,7 @@ export default function SqlPage() {
   }, [incoming?.connection, activeKey, selectConnection]);
 
   if (!ws.loaded) return <Skeleton h="400px" borderRadius="2xl" />;
-  if (!ws.active) return <NoConnectionsState isAdmin={ws.isAdmin} onAdd={ws.openAddConnection} />;
+  if (!ws.active) return <NoConnections />;
   const initial = incoming?.sql && (!incoming.connection || incoming.connection === activeKey) ? incoming.sql : null;
   return <SqlWorkbench key={activeKey} connection={activeKey} initialSql={initial} />;
 }
@@ -76,7 +78,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
     setSearchParams((prev) => valuesToSearch(values, prev), { replace: true });
   };
   const [limit, setLimit] = useState(() => savedSpec?.limit ?? loadJson<number>('ncode_sql_limit', 2000));
-  const [smartDates, setSmartDates] = useState(() => loadJson('ncode_smart_dates', false));
+  const [smartDates, setSmartDates] = useState(() => loadJson(SMART_DATES_KEY, SMART_DATES_DEFAULT));
   const [check, setCheck] = useState<{ ok: boolean; error: string | null } | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0);
   const [viz, setViz] = useState<VizState>(() => saved?.viz ?? loadJson<VizState>(`${draftKey(connection)}_viz`, DEFAULT_VIZ));
@@ -98,7 +100,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
   useEffect(() => {
     if (!saved) saveJson(`${draftKey(connection)}_viz`, viz);
   }, [connection, viz, saved]);
-  useEffect(() => saveJson('ncode_smart_dates', smartDates), [smartDates]);
+  useEffect(() => saveJson(SMART_DATES_KEY, smartDates), [smartDates]);
 
   // Ask the server's guard whether this SQL may run (shown before running).
   useEffect(() => {
@@ -229,7 +231,7 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
                     {h.sql}
                   </Text>
                   <Text fontSize="2xs" color="faintText">
-                    {new Date(h.at).toLocaleString(locale())}
+                    {localDateText(h.at, true)}
                   </Text>
                 </VStack>
               </MenuItem>
@@ -269,13 +271,15 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
         dirty={dirty}
         defaultName={t('SQL query')}
         payload={() => (text.trim() ? { kind: 'sql', connection, spec: { sql: text, limit, ...(transforms.length ? { transforms } : {}) }, viz, parameters: paramDefs } : null)}
-        onRevert={() => {
-          if (!saved || !savedSpec) return;
-          editor.current?.setText(savedSpec.sql);
-          setLimit(savedSpec.limit ?? 2000);
-          setViz(saved.viz ?? DEFAULT_VIZ);
-          setDefs(saved.parameters);
-          setTransforms(savedSpec.transforms ?? []);
+        onRevert={(to) => {
+          const q = to ?? saved;
+          if (!q) return;
+          const spec = q.spec as SqlQuestionSpec;
+          editor.current?.setText(spec.sql);
+          setLimit(spec.limit ?? 2000);
+          setViz(q.viz ?? DEFAULT_VIZ);
+          setDefs(q.parameters);
+          setTransforms(spec.transforms ?? []);
         }}
       />
       <Box flex={1} minH={0}>

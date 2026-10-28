@@ -71,7 +71,7 @@ def test_create_save_and_reopen(env):
 @pytest.mark.parametrize("bad, message", [
     ({"cards": [card("a", kind="text", text="x"), card("a", kind="text", text="y")]}, "unique"),
     ({"cards": [card("a", kind="text", text="x", x=8, w=6)]}, "wider"),
-    ({"cards": [card("a", kind="question")]}, "question_id"),
+    ({"cards": [card("a", kind="question")]}, "has no question"),  # a new card without a question
     ({"cards": [card("a", kind="text", text="x", mappings={"f": {"param": "p"}})]}, "only question cards"),
     ({"filters": [{"id": "f", "label": "F", "type": "text"}], "cards": [card("a", 1, mappings={"g": {"param": "p"}})]}, "unknown filter"),
     ({"tabs": [{"id": "t1", "name": "A"}], "cards": [card("a", kind="text", text="x")]}, "unknown tab"),
@@ -282,3 +282,62 @@ def test_move_dashboard(env):
     moved = call(env, "alice", "PATCH", f"/api/dashboards/{d['id']}", json={"collection_id": team["id"], "name": "Renamed"})
     assert moved["collection_id"] == team["id"] and moved["name"] == "Renamed"
     new_dashboard(env, "carol", collection=team["id"], status=404)
+
+
+# ---------------------------------------------------------------- M10: deleted questions, archived collections, edit conflicts
+
+def test_a_dashboard_with_a_deleted_question_can_be_saved_and_duplicated(env):
+    q = save_builder(env, "alice", spec=COUNT_ORDERS)
+    keep = save_builder(env, "alice", spec=COUNT_ORDERS, name="Kept")
+    d = new_dashboard(env, "alice")
+    put(env, "alice", d["id"], {"cards": [card("a", q["id"]), card("b", keep["id"], x=6), card("t", kind="text", text="hi", y=4)]})
+    call(env, "alice", "PATCH", f"/api/questions/{q['id']}", json={"archived": True})
+    call(env, "alice", "DELETE", f"/api/questions/{q['id']}")
+    loaded = call(env, "alice", "GET", f"/api/dashboards/{d['id']}")
+    # the editor sends the "deleted question" card back as it got it (question_id null): it stays
+    cards = [{k: v for k, v in c.items() if k != "question"} for c in loaded["cards"]]
+    saved = put(env, "alice", d["id"], {"cards": [{**c, "layout": {**c["layout"], "y": c["layout"]["y"] + 1}} for c in cards]})
+    assert [(c["key"], c["question"]["state"] if "question" in c else None) for c in saved["cards"]] == [
+        ("a", "deleted"), ("b", "ok"), ("t", None)]
+    # a copy leaves the deleted card out (it was a 500 before)
+    copy = call(env, "alice", "POST", f"/api/dashboards/{d['id']}/duplicate", json={})
+    assert [c["key"] for c in copy["cards"]] == ["b", "t"]
+    # a new question card without a question is still refused, with a clear message
+    res = put(env, "alice", d["id"], {"cards": cards + [card("z", y=9)]}, status=400)
+    assert res["detail"] == "Card z has no question: choose one or remove the card"
+    put(env, "alice", d["id"], {"cards": cards[1:]})  # removing the deleted card works too
+    assert [c["key"] for c in call(env, "alice", "GET", f"/api/dashboards/{d['id']}")["cards"]] == ["b", "t"]
+
+
+def test_no_new_dashboards_in_an_archived_collection(env):
+    team = new_collection(env, "alice", "Team")
+    d = new_dashboard(env, "alice", collection=team["id"])
+    call(env, "alice", "PATCH", f"/api/collections/{team['id']}", json={"archived": True})
+    assert "archived" in new_dashboard(env, "alice", collection=team["id"], status=409)["detail"]
+    other = new_dashboard(env, "alice", name="Elsewhere")
+    call(env, "alice", "PATCH", f"/api/dashboards/{other['id']}", 409, json={"collection_id": team["id"]})
+    # duplicating one that sits in the archived collection puts the copy in the caller's own collection
+    copy = call(env, "alice", "POST", f"/api/dashboards/{d['id']}/duplicate", json={})
+    assert copy["collection"]["name"] == "alice's collection"
+
+
+def test_dashboard_edit_conflict(env):
+    team = new_collection(env, "alice", "Team")
+    share(env, "alice", team["id"], [{"user": "carol", "level": "edit"}])
+    d = new_dashboard(env, "alice", collection=team["id"])
+    base = d["updated_at"]
+    first = put(env, "carol", d["id"], {"cards": [card("t", kind="text", text="carol")], "base_updated_at": base})
+    assert first["updated_at"] > base and first["updated_by"] == "carol"
+    # alice still has the old version open: her save is refused and nothing changes
+    res = env["client"].put(f"/api/dashboards/{d['id']}", headers=env["alice"],
+                            json={"cards": [card("t", kind="text", text="alice")], "base_updated_at": base})
+    assert res.status_code == 409 and res.headers["X-Edit-Conflict"] == "1"
+    assert "Someone else (carol) saved this dashboard" in res.json()["detail"]
+    assert call(env, "alice", "GET", f"/api/dashboards/{d['id']}")["cards"][0]["text"] == "carol"
+    # "save mine anyway" (no base) and old clients overwrite
+    assert put(env, "alice", d["id"], {"cards": [card("t", kind="text", text="alice")]})["cards"][0]["text"] == "alice"
+    # rename / move check it too; with the current version it goes through
+    now = call(env, "alice", "GET", f"/api/dashboards/{d['id']}")["updated_at"]
+    call(env, "carol", "PATCH", f"/api/dashboards/{d['id']}", 409, json={"name": "Old", "base_updated_at": base})
+    assert call(env, "carol", "PATCH", f"/api/dashboards/{d['id']}", json={"name": "New", "base_updated_at": now})["name"] == "New"
+    put(env, "alice", d["id"], {"cards": [], "base_updated_at": "yesterday"}, status=400)

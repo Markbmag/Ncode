@@ -154,3 +154,15 @@ def test_csv_export_respects_the_row_cap_and_delimiter(tmp_path, sample_db):
     bad = client.get("/api/connections/envdb/export", params={"table": "notes", "delimiter": "|"}, headers=headers)
     assert bad.status_code == 422
     client.close()
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("-2+3+cmd|' /C calc'!A0", "'-2+3+cmd|' /C calc'!A0"),  # starts like a number, runs like a formula
+    ("+7 (999) 123-45-67", "'+7 (999) 123-45-67"),
+    ("=1+1", "'=1+1"), ("@SUM(A1)", "'@SUM(A1)"), ("\tx", "'\tx"), ("\rx", "'\rx"), ("-", "'-"),
+    ("-12.5", "-12.5"), ("+3", "+3"), ("-0,5", "-0,5"), ("1e5", "1e5"), ("-1.2E-3", "-1.2E-3"), ("a-b", "a-b"),
+])
+def test_csv_formula_guard_follows_owasp(value, expected):
+    from app.explore import _csv_cell
+
+    assert _csv_cell(value) == expected

@@ -88,7 +88,7 @@ function tokenize(text: string): Token[] {
       i += num[0].length;
       continue;
     }
-    const ident = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?/.exec(text.slice(i));
+    const ident = /^[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)?/u.exec(text.slice(i));
     if (ident) {
       tokens.push({ kind: 'ident', value: ident[0], pos: start });
       i += ident[0].length;

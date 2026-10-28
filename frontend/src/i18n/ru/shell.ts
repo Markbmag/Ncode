@@ -34,6 +34,8 @@ export const SHELL: Record<string, string> = {
   'Too many attempts. Try again in {n} seconds.': 'Слишком много попыток. Повторите через {n} с.',
   'Too many attempts. Try again in a few seconds.': 'Слишком много попыток. Повторите через несколько секунд.',
   'The server is not reachable. Make sure the backend is running.': 'Сервер недоступен. Проверьте, что backend запущен.',
+  'The server ran into a problem ({status}). Try again; if it keeps happening, tell your administrator.':
+    'На сервере возникла проблема ({status}). Попробуйте ещё раз; если ошибка повторяется, сообщите администратору.',
   'Sign in': 'Войти',
   'Use the account your administrator created for you.': 'Используйте учётную запись, созданную для вас администратором.',
   'Username': 'Имя пользователя',
@@ -256,4 +258,6 @@ export const SHELL: Record<string, string> = {
   'Advanced open-source relational database': 'Продвинутая открытая реляционная база данных',
   'Microsoft\'s relational database': 'Реляционная база данных от Microsoft',
   'A database file on the server': 'Файл базы данных на сервере',
+  'This page could not be loaded': 'Не удалось загрузить страницу',
+  'The server did not answer. Check your connection and try again.': 'Сервер не ответил. Проверьте подключение и повторите попытку.',
 };

@@ -4,7 +4,7 @@
     POST   /api/federated/check          {"spec", "parameters"}  -> the parameters the spec uses, or a 400
 
     GET    /api/datasets?q=&collection=  uploaded files the caller can see
-    POST   /api/datasets?filename=&name=&collection_id=&delimiter=&header=&encoding=&sheet=
+    POST   /api/datasets?filename=&name=&collection_id=&delimiter=&header=&encoding=&number_format=&sheet=
                                          body = the file itself (application/octet-stream)
     GET    /api/datasets/{id}
     PATCH  /api/datasets/{id}            rename / describe / move ("collection_id") / archive ("archived")
@@ -23,7 +23,6 @@ widens access: viewing it does not grant any of these.
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,11 +38,14 @@ from ..content.params import (
     PARAM_OPS, ParameterDef, bind_spec, check_sql_params, resolve, sample_values, spec_params, sql_bind_values,
 )
 from ..content.store import ContentError, ContentStore
+from ..query.compiler import fingerprint
 from ..query.routes import MAX_WAIT_MS, QueryService
 from ..query.runner import ResultCache, fetch_sql, fetch_statement
 from ..query.spec import QuerySpec
 from ..query.sqlguard import find_params
-from .datasets import DatasetStore, IngestError, IngestOptions, format_for, ingest, remove_files
+from .datasets import (
+    DatasetStore, IngestError, IngestOptions, format_for, ingest, remove_files, remove_path, sweep_orphans,
+)
 from .engine import FederatedRun, FederationError, Plan, PreparedSource, check_combine_sql
 from .spec import FederatedSpec, Source
 from .workspace import FederationUnavailable, available
@@ -102,6 +104,7 @@ def register_federation_routes(
     directory = Path(app_db.path).parent / "datasets"
     datasets = DatasetStore(content, directory)
     content.on_files_deleted = lambda files: remove_files(directory, files)
+    sweep_orphans(content.engine, directory)  # files a failed removal (Windows: file still open) left behind
     router = APIRouter(tags=["federation"])
     cap = settings.federation_source_rows
 
@@ -174,7 +177,8 @@ def register_federation_routes(
         engine, compiled, _sql = queries.compile_for(QuerySpec.model_validate(data), user=user, default_limit=limit, max_limit=cap)
         statement = compiled.limited(1)
         return PreparedSource(
-            alias, label, kind, spec.connection, limit=compiled.limit, cache_part=part,
+            # the statement as sent (incl. the viewer's row rules) identifies the data, not just the spec
+            alias, label, kind, spec.connection, limit=compiled.limit, cache_part=[part, fingerprint(statement, engine.dialect)],
             fetch=lambda t: fetch_statement(engine, t, statement, compiled.limit),
         )
 
@@ -331,7 +335,8 @@ def register_federation_routes(
         collection_id: int | None = None,
         delimiter: str = Query("auto", max_length=16),
         header: bool = True,
-        encoding: str = Query("utf-8", max_length=16),
+        encoding: str = Query("auto", max_length=16),
+        number_format: str = Query("auto", max_length=16),
         sheet: str | None = Query(None, max_length=120),
         user: User = Depends(current_user),
     ):
@@ -360,7 +365,9 @@ def register_federation_routes(
                     await asyncio.to_thread(fh.write, chunk)
             if size == 0:
                 raise HTTPException(status_code=400, detail="The file is empty")
-            options = IngestOptions(delimiter=delimiter, header=header, encoding=encoding, sheet=sheet or None)
+            options = IngestOptions(
+                delimiter=delimiter, header=header, encoding=encoding, sheet=sheet or None, number_format=number_format,
+            )
             try:
                 result = await run_in_threadpool(
                     ingest, tmp, fmt, options, dest_dir=directory, max_rows=settings.dataset_max_rows,
@@ -369,10 +376,7 @@ def register_federation_routes(
             except IngestError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+            await run_in_threadpool(remove_path, tmp)
         label = (name or "").strip() or Path(filename).stem or "Uploaded file"
         try:
             d = await run_in_threadpool(
@@ -385,7 +389,7 @@ def register_federation_routes(
             remove_files(directory, [result.file])
             raise fail(exc) from exc
         app_db.audit(user.username, "dataset_upload", phrase=f"{Path(filename).name} -> dataset {d.id} ({d.row_count} rows)", status="ok")
-        return d.summary()
+        return {**d.summary(), "read_as": result.read_as}
 
     @router.patch("/api/datasets/{did}")
     def patch_dataset(did: int, body: DatasetPatch, user: User = Depends(current_user)):

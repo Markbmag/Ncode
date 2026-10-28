@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    Boolean, Column, Float, Integer, MetaData, String, Table, Text,
-    create_engine, delete, func, insert, select, update,
+    Boolean, Column, Float, Index, Integer, MetaData, String, Table, Text,
+    create_engine, delete, event, func, insert, select, update,
 )
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +41,7 @@ users_table = Table(
     Column("created_at", Float, nullable=False),
     Column("email", String(254)),                                          # subscriptions (M8)
     Column("last_login_at", Float),                                        # M9
+    Column("prefs", Text),                                                 # M11: JSON, e.g. the new-user checklist
 )
 
 groups_table = Table(
@@ -115,6 +116,8 @@ audit_table = Table(
     Column("found", Integer),
     Column("error_count", Integer),
     Column("duration_sec", Float),
+    Index("ix_audit_log_username_ts", "username", "ts"),  # Admin → Audit / Usage filters (migration 0008)
+    Index("ix_audit_log_action_ts", "action", "ts"),
 )
 
 
@@ -177,6 +180,18 @@ def _to_user(row: Any) -> User:
     )
 
 
+def _tune_sqlite(dbapi_connection, _record) -> None:
+    # WAL: readers don't wait for writers (many people running dashboards write audit entries),
+    # and a commit no longer waits for the disk twice. NORMAL is still crash-safe in WAL mode;
+    # only the very last transactions can be lost on a power cut.
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
 class AppDB:
     def __init__(self, path: str | Path, cipher: Cipher | None = None):
         path = Path(path)
@@ -186,6 +201,7 @@ class AppDB:
         self.engine = create_engine(
             URL.create("sqlite", database=str(path)), connect_args={"timeout": 15}
         )
+        event.listen(self.engine, "connect", _tune_sqlite)
         upgrade(self.engine)  # creates or migrates the tables (app/migrations)
 
     def dispose(self) -> None:
@@ -281,9 +297,11 @@ class AppDB:
             conn.execute(delete(sessions_table).where(sessions_table.c.user_id == uid))
             conn.execute(delete(group_members_table).where(group_members_table.c.user_id == uid))
             conn.execute(delete(users_table).where(users_table.c.id == uid))
-            from .content.store import forget_user  # the library imports this module
+            from .automation.store import forget_recipient  # both import this module
+            from .content.store import forget_user
 
             forget_user(conn, uid, username)
+            forget_recipient(conn, username)
         return True
 
     # -- groups (M9) ---------------------------------------------------------

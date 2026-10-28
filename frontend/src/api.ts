@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { t } from './i18n/index.ts';
+import { lang } from './i18n/index.ts';
+import { failureDetails, failureMessage, failureRetryable, type ApiFailure } from './lib/apiError.ts';
 
 const TOKEN_KEY = 'ncode_token';
 export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
@@ -21,10 +22,11 @@ export const WS_URL: string = API_URL
 
 export const http = axios.create({ baseURL: API_URL });
 
-// Attach the session token to every request.
+// Attach the session token to every request, and the UI language: the server answers its messages in it.
 http.interceptors.request.use((config) => {
   const token = getToken();
   if (token) config.headers.set('Authorization', `Bearer ${token}`);
+  config.headers.set('Accept-Language', lang());
   return config;
 });
 
@@ -40,18 +42,29 @@ http.interceptors.response.use(
   },
 );
 
-/** Pulls a readable message out of an API error (FastAPI puts it in `detail`). */
+function failureOf(error: unknown): ApiFailure | null {
+  if (!axios.isAxiosError(error)) return null;
+  return { answered: Boolean(error.response), status: error.response?.status, data: error.response?.data };
+}
+
+/**
+ * Pulls a readable message out of an API error (FastAPI puts it in `detail`). A server error
+ * (also an unexpected 500, which answers JSON with an error id) is told apart from no answer at all.
+ */
 export function apiErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
-    const detail: unknown = error.response?.data?.detail;
-    if (typeof detail === 'string' && detail) return detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first: unknown = detail[0];
-      if (typeof first === 'object' && first !== null && 'msg' in first) return String((first as { msg: unknown }).msg);
-    }
-    if (!error.response) return t('The server is not reachable. Make sure the backend is running.');
-  }
-  return fallback;
+  const failure = failureOf(error);
+  return failure ? failureMessage(failure, fallback) : fallback;
+}
+
+/** Whether trying the request again can help (no answer, a server error); not after "not found" or "no access". */
+export function apiErrorRetryable(error: unknown): boolean {
+  return failureRetryable(axios.isAxiosError(error) ? failureOf(error) : null);
+}
+
+/** The database's own error text behind the message, when the server sent one (for analysts). */
+export function apiErrorDetails(error: unknown): string | undefined {
+  const failure = failureOf(error);
+  return failure ? failureDetails(failure) : undefined;
 }
 
 /** Like apiErrorMessage, but also understands errors of requests made with responseType "blob". */
