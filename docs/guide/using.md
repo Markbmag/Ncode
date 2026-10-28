@@ -4,6 +4,26 @@ Databases, search, questions, the library, the SQL editor, charts, combining sou
 the data model, dashboards, subscriptions and sharing. Setup is in [install.md](install.md), administration in
 [admin.md](admin.md).
 
+## First steps
+
+- **Home** shows *Your first steps in Ncode*: open a dashboard, change a filter, find a record, ask a
+  question, save it. Each step ticks itself when you do it, and the list disappears when all five
+  are done (or press *Hide*).
+- **Factory demo** is a practice database that comes with Ncode: a small car plant with lines, shifts,
+  work orders, output, downtime, scrap and vehicles (VINs). Nothing you do there can break anything. Its
+  examples are under **Start here** on the home page: the *Production overview* dashboard and five
+  questions to open, filter, copy and change.
+- **Recently viewed** and **Your dashboards** on the home page bring you back to what you used last.
+- The menu is grouped: *Look up* (Search, Browse, Glossary), *Answer questions* (New question, SQL
+  editor, Combine sources, Uploads), *Saved and shared* (Dashboards, Library, Subscriptions).
+- **Glossary**: what the business terms and numbers mean (e.g. OEE, scrap rate), in English and
+  Russian, with links to the metrics and columns they describe.
+- A **✓ Verified** badge on a question or dashboard means an administrator checked it: it is the
+  official answer. It comes first in searches and collections. Changing the question's query removes
+  the badge until it is checked again.
+- **Share** on any question or dashboard explains how to let others see it: move it from your own
+  collection to a shared one, or give a person or group access to its collection.
+
 ## Adding a database
 
 ### From the interface (recommended)
@@ -54,6 +74,13 @@ Use a **read-only** database account.
 Binary columns (BLOBs) are never searched or returned.
 
 ## Questions (no SQL needed)
+
+The builder shows three steps first: **Data** (which table), **Filter** (only some rows) and
+**Summarise** (*What to count or sum*, and *Group by* a column or a period). *More steps* holds the
+rest: add data from another table (like VLOOKUP), a new column from a formula, filter the summary,
+choose columns, sort, compare and running totals, row limit. A step the question uses is always shown.
+Under the result, one sentence says what you are looking at, e.g. *Sum of Total per month · Status is
+paid · last 90 days*. Hover a column for its description from the data model.
 
 **New question** in the sidebar is a step-by-step builder for the database selected in the sidebar:
 

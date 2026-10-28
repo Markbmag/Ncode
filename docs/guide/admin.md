@@ -95,6 +95,26 @@ reported as broken. When the list is empty: "Everything points at existing table
 After renaming something in a database, open this page, *Check again*, and fix what it lists (open the
 question and pick the new column, or restore the table).
 
+## First steps for newcomers (M11)
+
+- **Factory demo** (Admin → Databases): a practice database that everyone may use, created on the first
+  start in `data/demo/factory.sqlite` with English and Russian names for its tables and columns, three
+  metrics and examples (a shared collection *Factory demo* with five questions and the *Production
+  overview* dashboard). *Hide the demo* removes it for everyone; `NCODE_DEMO=false` never creates it.
+  `NCODE_DEMO_LANGUAGE=ru` names the examples in Russian (set it before the first start). The examples
+  are ordinary content: change, move or delete them.
+- **Start here**: the collection newcomers see first on the home page. The demo's collection is used
+  until you choose another: Home → *Start here* → *Change* (admins only), pick a shared collection and
+  *Show on the home page*. Put your team's verified dashboards there.
+- **Names people recognise** (Admin → Data model): display names and descriptions for tables and
+  columns, each with a Russian translation. They appear in pickers, Browse, Search, results, charts
+  and the record panel; technical names stay visible as hints.
+- **Glossary** (Glossary in the menu): admins add terms with English and Russian text, synonyms and links
+  to metrics, columns and questions. Archive a term to hide it; delete only archived terms.
+- **Verified** (⋯ menu of a question or dashboard → *Mark as verified*): the badge says "this is the
+  official answer"; it goes away when someone changes the question's query (renaming, moving or a new
+  chart keep it).
+
 ## Languages
 
 Every user picks **English** or **Русский** with the EN / RU button next to their name (or on the
