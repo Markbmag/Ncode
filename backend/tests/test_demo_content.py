@@ -32,6 +32,9 @@ def test_examples_are_made_once_shared_and_start_here(tmp_path):
         assert [d["name"] for d in boards] == ["Production overview"]
         board = client.get(f"/api/dashboards/{boards[0]['id']}", headers=carol).json()
         assert {f["id"] for f in board["filters"]} == {"period", "line"}
+        charts = {c["key"]: c["question"]["viz"] for c in board["cards"] if c["kind"] == "question"}
+        assert charts["downtime"]["mode"] == "chart" and charts["downtime"]["spec"]["horizontal"] is True
+        assert charts["vehicles"] == {"mode": "table", "spec": None}
         for card in [c for c in board["cards"] if c["kind"] == "question"]:  # every example runs for a normal user
             res = client.post(f"/api/dashboards/{board['id']}/cards/{card['key']}/run", headers=carol,
                               json={"filters": {"line": ["Final assembly"]}, "wait_ms": 5000}).json()

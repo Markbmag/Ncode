@@ -37,6 +37,8 @@ TEXTS = {
         "orders": ("Work orders", "How many work orders were produced."),
         "vehicles": ("Latest vehicles", "The last 50 cars built, with their VIN."),
         "period": "Period", "line": "Line",
+        "columns": {"week": "Week", "good": "Good pieces", "reason": "Reason", "minutes": "Downtime, min",
+                    "line": "Line", "scrapped": "Scrapped pieces", "orders": "Work orders"},
         "intro": "**Production overview.** Change the *Period* or pick a *Line*: every card follows. "
                  "Click a card's title to open its question.",
     },
@@ -49,6 +51,8 @@ TEXTS = {
         "orders": ("Заказы-наряды", "Сколько заказов-нарядов выполнено."),
         "vehicles": ("Последние автомобили", "Последние 50 собранных машин с VIN."),
         "period": "Период", "line": "Линия",
+        "columns": {"week": "Неделя", "good": "Годные детали", "reason": "Причина", "minutes": "Простой, мин",
+                    "line": "Линия", "scrapped": "Брак, шт.", "orders": "Заказы-наряды"},
         "intro": "**Обзор производства.** Измените *Период* или выберите *Линию* — все карточки обновятся. "
                  "Нажмите на заголовок карточки, чтобы открыть вопрос.",
     },
@@ -59,40 +63,44 @@ def _spec(**parts: Any) -> dict[str, Any]:
     return {"version": 1, "connection": "demo", **parts}
 
 
-QUESTIONS: dict[str, dict[str, Any]] = {
-    "output": _spec(
-        source={"table": "production_output"},
-        joins=[{"table": "work_orders"}, {"table": "production_lines"}],
-        aggregations=[{"fn": "sum", "ref": "production_output.good_qty", "alias": "good_pieces"}],
-        breakouts=[{"ref": "production_output.reported_at", "bucket": "week"}],
-    ),
-    "downtime": _spec(
-        source={"table": "downtime_events"},
-        joins=[{"table": "downtime_reasons"}, {"table": "production_lines"}],
-        aggregations=[{"fn": "sum", "ref": "downtime_events.minutes", "alias": "minutes"}],
-        breakouts=[{"ref": "downtime_reasons.name"}],
-        order=[{"ref": "minutes", "dir": "desc"}],
-        limit=10,
-    ),
-    "scrap": _spec(
-        source={"table": "scrap_records"},
-        joins=[{"table": "work_orders"}, {"table": "production_lines"}],
-        aggregations=[{"fn": "sum", "ref": "scrap_records.qty", "alias": "scrapped"}],
-        breakouts=[{"ref": "production_lines.name"}],
-        order=[{"ref": "scrapped", "dir": "desc"}],
-    ),
-    "orders": _spec(
-        source={"table": "work_orders"},
-        joins=[{"table": "production_lines"}],
-        aggregations=[{"fn": "count", "alias": "work_orders"}],
-    ),
-    "vehicles": _spec(
-        source={"table": "vehicles"},
-        fields=[{"ref": "vin"}, {"ref": "model"}, {"ref": "color"}, {"ref": "market"}, {"ref": "built_at"}],
-        order=[{"ref": "built_at", "dir": "desc"}],
-        limit=50,
-    ),
-}
+def questions(c: dict[str, str]) -> dict[str, tuple[dict[str, Any], dict[str, Any] | None]]:
+    """(spec, chart) of each example; result columns carry readable names in the content's language.
+    Saved as the editors save it: {"mode": "chart", "spec": <VizSpec>}."""
+    return {
+        "output": (_spec(
+            source={"table": "production_output"},
+            joins=[{"table": "work_orders"}, {"table": "production_lines"}],
+            aggregations=[{"fn": "sum", "ref": "production_output.good_qty", "alias": c["good"]}],
+            breakouts=[{"ref": "production_output.reported_at", "bucket": "week", "alias": c["week"]}],
+        ), {"version": 1, "type": "line", "x": c["week"], "series": [{"y": c["good"]}]}),
+        "downtime": (_spec(
+            source={"table": "downtime_events"},
+            joins=[{"table": "downtime_reasons"}, {"table": "production_lines"}],
+            aggregations=[{"fn": "sum", "ref": "downtime_events.minutes", "alias": c["minutes"]}],
+            breakouts=[{"ref": "downtime_reasons.name", "alias": c["reason"]}],
+            order=[{"ref": c["minutes"], "dir": "desc"}],
+            limit=10,
+        ), {"version": 1, "type": "bar", "x": c["reason"], "series": [{"y": c["minutes"]}], "horizontal": True}),
+        "scrap": (_spec(
+            source={"table": "scrap_records"},
+            joins=[{"table": "work_orders"}, {"table": "production_lines"}],
+            aggregations=[{"fn": "sum", "ref": "scrap_records.qty", "alias": c["scrapped"]}],
+            breakouts=[{"ref": "production_lines.name", "alias": c["line"]}],
+            order=[{"ref": c["scrapped"], "dir": "desc"}],
+        ), {"version": 1, "type": "bar", "x": c["line"], "series": [{"y": c["scrapped"]}]}),
+        "orders": (_spec(
+            source={"table": "work_orders"},
+            joins=[{"table": "production_lines"}],
+            aggregations=[{"fn": "count", "alias": c["orders"]}],
+        ), {"version": 1, "type": "kpi", "value": c["orders"]}),
+        "vehicles": (_spec(
+            source={"table": "vehicles"},
+            fields=[{"ref": "vin"}, {"ref": "model"}, {"ref": "color"}, {"ref": "market"}, {"ref": "built_at"}],
+            order=[{"ref": "built_at", "dir": "desc"}],
+            limit=50,
+        ), None),
+    }
+
 
 # the dashboard: which date column the period filter narrows, and the line name for the line filter
 DATES = {"output": "production_output.reported_at", "downtime": "downtime_events.started_at",
@@ -100,8 +108,8 @@ DATES = {"output": "production_output.reported_at", "downtime": "downtime_events
 LINES = {"output": "production_lines.name", "downtime": "production_lines.name",
          "scrap": "production_lines.name", "orders": "production_lines.name"}
 LAYOUT = {  # 12 columns
-    "intro": (0, 0, 12, 2), "orders": (0, 2, 3, 4), "output": (3, 2, 9, 4),
-    "downtime": (0, 6, 6, 5), "scrap": (6, 6, 6, 5), "vehicles": (0, 11, 12, 6),
+    "intro": (0, 0, 12, 2), "orders": (0, 2, 3, 6), "output": (3, 2, 9, 6),
+    "downtime": (0, 8, 6, 8), "scrap": (6, 8, 6, 8), "vehicles": (0, 16, 12, 8),
 }
 
 
@@ -134,10 +142,11 @@ def seed_demo_content(
         col = store.create_collection(system, name, description)
         store.set_grants(system, col.id, [{"role": "all", "level": "view"}])
         ids: dict[str, int] = {}
-        for key, spec in QUESTIONS.items():
+        for key, (spec, chart) in questions(texts["columns"]).items():
             qname, qdesc = texts[key]
             ids[key] = store.create_question(
-                system, name=qname, description=qdesc, collection_id=col.id, connection="demo", kind="builder", spec=spec,
+                system, name=qname, description=qdesc, collection_id=col.id, connection="demo", kind="builder",
+                spec=spec, viz={"mode": "chart", "spec": chart} if chart else {"mode": "table", "spec": None},
             ).id
         cards: list[dict[str, Any]] = [{"key": "intro", "kind": "text", "text": texts["intro"], "layout": _layout("intro")}]
         for key, qid in ids.items():
