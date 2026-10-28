@@ -205,6 +205,8 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
     onLogout,
     connections,
     loaded,
+    connectionsError: connectionsQuery.isError ? connectionsQuery.error : null,
+    reloadConnections: () => void connectionsQuery.refetch(),
     activeKey,
     active,
     selectConnection,

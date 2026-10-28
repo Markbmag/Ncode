@@ -12,6 +12,7 @@ import type { LoggedQuery } from './api';
 import { Panel } from './Panel';
 import { localDateText } from '../viz/format';
 import { locale, t, tc, tn } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 const sec = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v < 10 ? t('{s} s', { s: v.toFixed(2) }) : t('{s} s', { s: Math.round(v) }));
 
@@ -50,6 +51,7 @@ export function UsagePanel() {
         </Select>
       </HStack>
       {usage.isPending && <Skeleton h="300px" borderRadius="2xl" />}
+      {usage.isError && <LoadError error={usage.error} title={t('Could not load the usage figures')} onRetry={() => void usage.refetch()} />}
       {u && (
         <>
           <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing={3} data-testid="usage-totals">
@@ -171,6 +173,7 @@ function Small({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
 function Log({ kind, days }: { kind: 'slow' | 'errors'; days: number }) {
   const log = useQueryLog(kind, days);
   if (log.isPending) return <Skeleton h="80px" />;
+  if (log.isError) return <LoadError compact error={log.error} title={t('Could not load the query log')} onRetry={() => void log.refetch()} />;
   const rows: LoggedQuery[] = log.data?.queries ?? [];
   if (!rows.length)
     return (

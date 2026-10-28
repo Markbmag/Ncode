@@ -168,6 +168,7 @@ describe('formatting', () => {
     assert.equal(formatValue('2026-01-05T10:00:07.250', 'datetime'), '5 Jan 2026 10:00:07');
     assert.equal(formatValue('2026-01-05T00:00:00', 'datetime'), '5 Jan 2026');
     assert.equal(formatValue('2026-01-05', 'date'), '5 Jan 2026');
+    assert.equal(formatValue('2026-01-01', 'date', 'dimension', { name: 'created_at_month' }), 'Jan 2026');
     assert.equal(formatValue(1, 'boolean'), 'true');
   });
 

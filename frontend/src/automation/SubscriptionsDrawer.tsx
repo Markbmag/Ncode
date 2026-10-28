@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Checkbox, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerFooter,
   DrawerHeader, DrawerOverlay, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Modal, ModalBody,
@@ -61,25 +61,24 @@ function DrawerInner({ target, startWith }: { target: SubscriptionTarget; startW
   const ws = useWorkspace();
   const list = useSubscriptions({ target_type: target.type, target_id: target.id });
   const options = useSubscriptionOptions();
-  const [editing, setEditing] = useState<{ id: number | null; body: SubscriptionBody } | null>(null);
-  // a new one needs the options (is email set up?): opened straight into a new one, it starts once they are loaded
-  const [pending, setPending] = useState(startWith);
-
-  const startNew = (alert: boolean) => {
-    if (!options.data) return;
-    setEditing({
-      id: null,
-      body: newSubscription(target.type, target.id, ws.user.username, alert, {
-        emailReady: options.data.email_configured,
-        filters: target.type === 'dashboard' ? { ...(target.values ?? {}) } : {},
-      }),
-    });
-  };
-  useEffect(() => {
-    if (!pending || !options.data) return;
-    setPending(null);
-    startNew(pending === 'alert');
-  });
+  // a new one needs the options (is email set up?): until they are loaded it is only 'subscription' / 'alert'
+  const [state, setEditing] = useState<{ id: number | null; body: SubscriptionBody } | 'subscription' | 'alert' | null>(startWith ?? null);
+  const fresh = typeof state === 'string' ? state : null;
+  const made = useMemo(
+    () =>
+      fresh && options.data
+        ? {
+            id: null,
+            body: newSubscription(target.type, target.id, ws.user.username, fresh === 'alert', {
+              emailReady: options.data.email_configured,
+              filters: target.type === 'dashboard' ? { ...(target.values ?? {}) } : {},
+            }),
+          }
+        : null,
+    [fresh, options.data, target, ws.user.username],
+  );
+  const editing = typeof state === 'string' ? made : state;
+  const startNew = (alert: boolean) => setEditing(alert ? 'alert' : 'subscription');
   const edit = (s: Subscription) =>
     setEditing({ id: s.id, body: { name: s.name, target_type: s.target_type, target_id: s.target_id, schedule: s.schedule, recipients: s.recipients, options: s.options, alert: s.alert, enabled: s.enabled } });
 

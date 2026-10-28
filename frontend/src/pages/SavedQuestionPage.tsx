@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Alert, AlertDescription, AlertIcon, AlertTitle, Button, Skeleton, VStack } from '@chakra-ui/react';
+import { Alert, AlertIcon, Button, Skeleton, VStack } from '@chakra-ui/react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
-import { apiErrorMessage } from '../api';
 import { useQuestion } from '../library/api';
 import type { SavedQuestion } from '../library/api';
 import { QuestionHeader } from '../library/QuestionHeader';
@@ -10,6 +9,7 @@ import { Builder } from './QuestionsPage';
 import { CombineWorkspace } from './CombinePage';
 import { SqlWorkbench } from './SqlPage';
 import { t } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 /** /questions/:id - a saved question, opened in the builder or the SQL editor. */
 export default function SavedQuestionPage() {
@@ -32,13 +32,16 @@ export default function SavedQuestionPage() {
   if (question.isPending || !ws.loaded) return <Skeleton h="400px" borderRadius="2xl" />;
   if (question.isError || !q)
     return (
-      <Alert status="error" borderRadius="xl" flexDirection="column" alignItems="flex-start" gap={2}>
-        <AlertTitle>{t('This question could not be opened')}</AlertTitle>
-        <AlertDescription fontSize="sm">{apiErrorMessage(question.error, t('It may have been deleted, or it was not shared with you.'))}</AlertDescription>
-        <Button as={RouterLink} to="/library" size="sm">
-          {t('Go to the library')}
-        </Button>
-      </Alert>
+      <LoadError
+        error={question.error ?? new Error('missing')}
+        title={t('This question could not be opened')}
+        onRetry={() => void question.refetch()}
+        actions={
+          <Button as={RouterLink} to="/library" size="sm" variant="ghost">
+            {t('Go to the library')}
+          </Button>
+        }
+      />
     );
   if (q.kind === 'federated') return <CombineWorkspace key={q.id} saved={q} />;
   if (!usable) return <NoDatabase q={q} />;

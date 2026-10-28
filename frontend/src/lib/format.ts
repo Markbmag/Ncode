@@ -3,7 +3,7 @@
  * only the display is.
  */
 import type { ColumnType } from '../api';
-import { formatDate } from '../viz/format.ts';
+import { dateStyleFromName, formatDate } from '../viz/format.ts';
 
 const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
 const PLAIN_NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4, useGrouping: false });
@@ -38,7 +38,8 @@ export function formatValue(value: unknown, type: ColumnType, role: 'dimension' 
     case 'date':
     case 'datetime':
       // in the language's date style (12 Oct 2026 / 12.10.2026); copy and CSV keep the ISO value
-      return typeof value === 'string' ? formatDate(value.replace(/\.\d+(?=Z|[+-]\d|$)/, ''), 'auto') : String(value);
+      // a builder bucket (created_at_month) reads like the chart axis: "Jan 2026" rather than its first day
+      return typeof value === 'string' ? formatDate(value.replace(/\.\d+(?=Z|[+-]\d|$)/, ''), dateStyleFromName(opts.name ?? '')) : String(value);
     case 'boolean':
       return value === true || value === 1 ? 'true' : value === false || value === 0 ? 'false' : String(value);
     case 'json':

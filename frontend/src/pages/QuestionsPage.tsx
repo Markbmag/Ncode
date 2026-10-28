@@ -7,7 +7,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
-import { NoConnectionsState } from '../components/EmptyStates';
+import { NoConnections } from '../components/LoadError';
 import { Split } from '../components/layout/Split';
 import { CustomColumnsEditor } from '../components/query/CustomColumnsEditor';
 import { FilterEditor } from '../components/query/FilterEditor';
@@ -44,7 +44,7 @@ const draftKey = (connection: string) => `ncode_question_${connection}`;
 export default function QuestionsPage() {
   const ws = useWorkspace();
   if (!ws.loaded) return <Skeleton h="400px" borderRadius="2xl" />;
-  if (!ws.active) return <NoConnectionsState isAdmin={ws.isAdmin} onAdd={ws.openAddConnection} />;
+  if (!ws.active) return <NoConnections />;
   return <Builder key={ws.activeKey} connection={ws.activeKey} />;
 }
 

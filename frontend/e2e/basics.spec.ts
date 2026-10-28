@@ -44,6 +44,28 @@ test('every main page opens without errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('a page whose main request fails says so, and "Try again" loads it', async ({ page }) => {
+  await signIn(page, 'admin', '/');
+  await expect(page.getByRole('heading', { name: /Hello, admin/ })).toBeVisible();
+  // the server fails these requests until "fixed" (react-query retries twice before giving up)
+  let failing = true;
+  await page.route(/\/api\/(connections|dashboards|subscriptions)(\?|$)/, (route) =>
+    failing && route.request().method() === 'GET'
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"detail":"The server ran into a problem"}' })
+      : route.continue());
+  for (const [path, ok] of [['/', /databases? available to you/], ['/dashboards', /All dashboards/], ['/subscriptions', /Subscriptions and alerts/]] as const) {
+    failing = true;
+    await page.goto(path);
+    const box = page.getByTestId('load-error').first();
+    await expect(box).toBeVisible({ timeout: 15_000 });
+    await expect(box).toContainText('The server ran into a problem');
+    failing = false;
+    await box.getByTestId('load-error-retry').click();
+    await expect(page.getByTestId('load-error')).toHaveCount(0);
+    await expect(page.getByText(ok).first()).toBeVisible();
+  }
+});
+
 test('the phone layout never scrolls sideways @phone', async ({ page }) => {
   await signIn(page, 'carol');
   for (const path of ['/', '/search', '/browse', '/library', '/dashboards', '/questions']) {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Alert, AlertIcon, Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Select,
+  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Select,
   SimpleGrid, Skeleton, Tab, TabList, TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack,
 } from '@chakra-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,7 +13,7 @@ import { PeopleSettings } from '../admin/PeopleSettings';
 import { AuditPanel } from '../admin/AuditPanel';
 import { SystemPanel } from '../admin/SystemPanel';
 import { BrokenContentPanel } from '../admin/BrokenContentPanel';
-import { apiErrorMessage, http } from '../api';
+import { http } from '../api';
 import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { EditableColumns, FieldDialog, ManualRelationships, MetricsPanel } from '../semantic/DataModelEditor';
 import { EngineBadge } from '../components/EngineBadge';
@@ -23,6 +23,7 @@ import { engineMeta } from '../lib/engines';
 import { queryKeys } from '../lib/queryClient';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { t, tn, tc } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 function TableCard({ table, connection }: { table: SchemaTable; connection: string }) {
   const [editing, setEditing] = useState<SchemaColumn | null>(null);
@@ -74,10 +75,7 @@ function DataModel({ connectionKey }: { connectionKey: string }) {
   if (schemaQuery.isPending) return <Skeleton h="240px" borderRadius="xl" />;
   if (schemaQuery.isError)
     return (
-      <Alert status="error" borderRadius="xl">
-        <AlertIcon />
-        {apiErrorMessage(schemaQuery.error, t('Could not read the database structure'))}
-      </Alert>
+      <LoadError error={schemaQuery.error} title={t('Could not read the database structure')} onRetry={() => void schemaQuery.refetch()} />
     );
 
   const total = data?.tables.length ?? 0;
@@ -199,7 +197,9 @@ export default function AdminPage() {
                     </Button>
                   }
                 >
-                  {ws.connections.length === 0 ? (
+                  {ws.connectionsError !== null && ws.connections.length === 0 ? (
+                    <LoadError compact error={ws.connectionsError} title={t('Could not load your databases')} onRetry={ws.reloadConnections} />
+                  ) : ws.connections.length === 0 ? (
                     <Text fontSize="sm" color="mutedText">
                       {t('No databases yet.')}
                     </Text>

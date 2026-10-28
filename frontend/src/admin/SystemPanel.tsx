@@ -6,6 +6,7 @@ import { Panel } from './Panel';
 import { people, useBackups, useReady } from './peopleApi';
 import { localDateText } from '../viz/format';
 import { t } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 const size = (bytes: number) =>
   bytes > 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes > 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -45,6 +46,7 @@ export function SystemPanel() {
           </Box>
         </Alert>
         {backups.isPending && <Skeleton h="60px" />}
+        {backups.isError && <LoadError compact error={backups.error} title={t('Could not load the backups')} onRetry={() => void backups.refetch()} />}
         {backups.data?.backups.length === 0 && (
           <Text fontSize="sm" color="mutedText">
             {t('No backups yet.')}
@@ -76,7 +78,8 @@ export function SystemPanel() {
       </Panel>
 
       <Panel title={t('Health')} subtitle={t('What load balancers and monitoring see: /api/health (alive), /api/health/ready (ready), /metrics (Prometheus, admins or NCODE_METRICS_TOKEN).')}>
-        {!ready.data && <Skeleton h="60px" />}
+        {!ready.data && ready.isError && <LoadError compact error={ready.error} title={t('Could not check the server')} onRetry={() => void ready.refetch()} />}
+        {!ready.data && !ready.isError && <Skeleton h="60px" />}
         {ready.data && (
           <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} data-testid="health">
             <Tile label={t('Status')} value={ready.data.status === 'ok' ? t('ready') : t('not ready')} good={ready.data.status === 'ok'} />

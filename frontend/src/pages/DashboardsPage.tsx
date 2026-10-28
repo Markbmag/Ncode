@@ -13,6 +13,7 @@ import { dashboards, useDashboards } from '../dashboards/api';
 import type { DashboardSummary } from '../dashboards/types';
 import { localDateText } from '../viz/format';
 import { t } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -56,7 +57,11 @@ export default function DashboardsPage() {
       )}
       <Panel title={query ? t('Dashboards matching “{query}”', { query }) : t('All dashboards')}>
         {all.isPending && <Skeleton h="100px" />}
-        {all.isError && <Empty>{apiErrorMessage(all.error, t('Could not load the dashboards'))}</Empty>}
+        {all.isError && (
+          <Box p={2}>
+            <LoadError compact error={all.error} title={t('Could not load the dashboards')} onRetry={() => void all.refetch()} />
+          </Box>
+        )}
         {all.data?.length === 0 && <Empty>{query ? t('Nothing found.') : t('No dashboards yet. Create one, then add saved questions to it.')}</Empty>}
         {all.data?.map((d) => (
           <DashboardRow key={d.id} d={d} showCollection />

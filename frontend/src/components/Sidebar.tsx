@@ -10,6 +10,7 @@ import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { NAV_ITEMS } from '../shell/nav';
 import { EngineBadge } from './EngineBadge';
 import { engineMeta } from '../lib/engines';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { t } from '../i18n/index.ts';
 
 interface SidebarProps {
@@ -113,6 +114,7 @@ export function NavLinks({ isAdmin, compact = false }: { isAdmin: boolean; compa
 }
 
 export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEdit, user, onLogout }: SidebarProps) {
+  const { connectionsError, reloadConnections } = useWorkspace();
   const [email, setEmail] = useState<string | null>(user.email ?? null);
   const [editingEmail, setEditingEmail] = useState(false);
   return (
@@ -203,10 +205,18 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
           );
         })}
 
-        {connections.length === 0 && (
+        {connections.length === 0 && !connectionsError && (
           <Text fontSize="sm" color="mutedText" px={3} py={4}>
             {t('No databases yet.')}
           </Text>
+        )}
+        {connectionsError !== null && connections.length === 0 && (
+          <Box px={3} py={3} fontSize="sm">
+            <Text color="red.300">{t('Could not load your databases')}</Text>
+            <Button size="xs" variant="subtle" mt={2} onClick={reloadConnections} data-testid="sidebar-retry">
+              {t('Try again')}
+            </Button>
+          </Box>
         )}
       </VStack>
 

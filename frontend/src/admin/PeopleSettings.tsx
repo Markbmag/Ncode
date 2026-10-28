@@ -16,6 +16,7 @@ import { connectionsValue, people, useAdminUsers, useGroups, useRowRules } from 
 import type { AdminUser, Group } from './peopleApi';
 import { localDateText } from '../viz/format';
 import { t, tc, tn } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 const when = (ts: number | null) => (ts ? localDateText(ts * 1000, true) : t('never'));
 
@@ -97,7 +98,8 @@ function Users() {
       }
     >
       {users.isPending && <Skeleton h="80px" />}
-      <Box overflowX="auto">
+      {users.isError && <LoadError compact error={users.error} title={t('Could not load the people')} onRetry={() => void users.refetch()} />}
+      <Box overflowX="auto" display={users.isError ? 'none' : undefined}>
         <Table size="sm" data-testid="users-table">
           <Thead>
             <Tr>
@@ -281,6 +283,7 @@ function Groups() {
       }
     >
       <VStack align="stretch" spacing={2}>
+        {groups.isError && <LoadError compact error={groups.error} title={t('Could not load the groups')} onRetry={() => void groups.refetch()} />}
         {groups.data?.length === 0 && (
           <Text fontSize="sm" color="mutedText">
             {t('No groups yet, e.g. “Sales EU”, “Logistics”, “Management”.')}

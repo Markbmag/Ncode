@@ -9,6 +9,7 @@ import { admin, useAdminSettings, useDestinations } from './api';
 import type { Destination, EmailSettings } from './api';
 import { Panel } from './Panel';
 import { t } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 const KIND_HELP: Record<string, { label: string; secret: string; help: string }> = {
   slack: {
@@ -37,7 +38,7 @@ const KIND_HELP: Record<string, { label: string; secret: string; help: string }>
 export function DeliverySettings() {
   const settings = useAdminSettings();
   if (settings.isPending) return <Skeleton h="300px" borderRadius="2xl" />;
-  if (!settings.data) return <Text color="red.400">{apiErrorMessage(settings.error, t('Could not load the settings'))}</Text>;
+  if (!settings.data) return <LoadError error={settings.error} title={t('Could not load the settings')} onRetry={() => void settings.refetch()} />;
   return (
     <VStack align="stretch" spacing={6}>
       <SiteAddress key={settings.data.general.site_url} current={settings.data.general.site_url} />
@@ -62,11 +63,11 @@ function SiteAddress({ current }: { current: string }) {
     <Panel title={t('Site address')} subtitle={t('How people reach Ncode, e.g. https://ncode.company.local. Links in emails and public links start with it.')}>
       <HStack maxW="640px">
         <Input size="sm" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={window.location.origin} data-testid="site-url" />
-        <Button size="sm" variant="brand" onClick={() => void save()} isDisabled={url.trim() === current}>
+        <Button size="sm" variant="brand" flexShrink={0} onClick={() => void save()} isDisabled={url.trim() === current}>
           {t('Save')}
         </Button>
         {!current && (
-          <Button size="sm" variant="ghost" onClick={() => setUrl(window.location.origin)}>
+          <Button size="sm" variant="ghost" flexShrink={0} onClick={() => setUrl(window.location.origin)}>
             {t('Use this one')}
           </Button>
         )}

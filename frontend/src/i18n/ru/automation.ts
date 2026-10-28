@@ -237,4 +237,5 @@ export const AUTOMATION: Record<string, string> = {
   'Your email address': 'Ваш адрес почты',
   'Email address saved': 'Адрес почты сохранён',
   'recipients::To': 'Кому',
+  'Could not load the subscriptions': 'Не удалось загрузить подписки',
 };

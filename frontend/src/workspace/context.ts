@@ -26,6 +26,8 @@ export interface WorkspaceValue {
 
   connections: Connection[];
   loaded: boolean;
+  connectionsError: unknown;       // the list of databases could not be loaded (null when fine)
+  reloadConnections: () => void;
   activeKey: string;
   active: Connection | undefined;
   selectConnection: (key: string) => void;

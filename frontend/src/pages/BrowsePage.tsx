@@ -1,6 +1,6 @@
 import { Skeleton, VStack } from '@chakra-ui/react';
 import { ConnectionHeader } from '../components/ConnectionHeader';
-import { NoConnectionsState } from '../components/EmptyStates';
+import { NoConnections } from '../components/LoadError';
 import { TableExplorer } from '../components/TableExplorer';
 import { useWorkspace } from '../workspace/useWorkspace';
 
@@ -8,7 +8,7 @@ export default function BrowsePage() {
   const ws = useWorkspace();
   let content;
   if (!ws.loaded) content = <Skeleton h="400px" borderRadius="2xl" />;
-  else if (!ws.active) content = <NoConnectionsState isAdmin={ws.isAdmin} onAdd={ws.openAddConnection} />;
+  else if (!ws.active) content = <NoConnections />;
   else
     content = (
       <TableExplorer

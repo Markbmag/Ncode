@@ -16,6 +16,7 @@ import type { UploadedDataset } from '../federation/api';
 import { encodingLabel } from '../federation/labels';
 import type { Dataset } from '../federation/types';
 import { UploadDialog } from '../federation/UploadDialog';
+import { LoadError } from '../components/LoadError';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -56,9 +57,9 @@ export default function DatasetsPage() {
       <Box bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" overflow="hidden">
         {list.isPending && <Skeleton h="100px" />}
         {list.isError && (
-          <Text fontSize="sm" color="red.400" p={3}>
-            {apiErrorMessage(list.error, t('Could not load the files'))}
-          </Text>
+          <Box p={2}>
+            <LoadError compact error={list.error} title={t('Could not load the files')} onRetry={() => void list.refetch()} />
+          </Box>
         )}
         {list.data?.length === 0 && (
           <Text fontSize="sm" color="faintText" px={3} py={4}>

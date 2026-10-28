@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
-import { NoConnectionsState } from '../components/EmptyStates';
+import { NoConnections } from '../components/LoadError';
 import { Split } from '../components/layout/Split';
 import { CodeEditor } from '../components/sql/CodeEditor';
 import type { CodeEditorHandle } from '../components/sql/CodeEditor';
@@ -54,7 +54,7 @@ export default function SqlPage() {
   }, [incoming?.connection, activeKey, selectConnection]);
 
   if (!ws.loaded) return <Skeleton h="400px" borderRadius="2xl" />;
-  if (!ws.active) return <NoConnectionsState isAdmin={ws.isAdmin} onAdd={ws.openAddConnection} />;
+  if (!ws.active) return <NoConnections />;
   const initial = incoming?.sql && (!incoming.connection || incoming.connection === activeKey) ? incoming.sql : null;
   return <SqlWorkbench key={activeKey} connection={activeKey} initialSql={initial} />;
 }

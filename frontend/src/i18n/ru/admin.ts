@@ -293,4 +293,12 @@ export const ADMIN: Record<string, string> = {
   "The uploaded file's data is missing on the server ({file}).": 'Данные загруженного файла отсутствуют на сервере ({file}).',
   'Source {name}:': 'Источник {name}:',
   'Card {name}:': 'Карточка {name}:',
+  'Could not load the audit log': 'Не удалось загрузить журнал аудита',
+  'Could not load the people': 'Не удалось загрузить список пользователей',
+  'Could not load the groups': 'Не удалось загрузить группы',
+  'Could not load what is shared': 'Не удалось загрузить список опубликованного',
+  'Could not load the backups': 'Не удалось загрузить резервные копии',
+  'Could not check the server': 'Не удалось проверить сервер',
+  'Could not load the usage figures': 'Не удалось загрузить статистику использования',
+  'Could not load the query log': 'Не удалось загрузить журнал запросов',
 };

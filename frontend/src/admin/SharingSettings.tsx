@@ -11,6 +11,7 @@ import { admin, useAdminSettings } from './api';
 import { Panel } from './Panel';
 import { localDateText } from '../viz/format';
 import { t, tn } from '../i18n/index.ts';
+import { LoadError } from '../components/LoadError';
 
 /** Admin → Sharing: switch public links and embedding on or off, the embedding key, everything shared. */
 export function SharingSettings() {
@@ -20,7 +21,7 @@ export function SharingSettings() {
   const [key, setKey] = useState<string | null>(null);
   const [chosen, setFlags] = useState<{ public_links: boolean; embedding: boolean } | null>(null);
   if (settings.isPending) return <Skeleton h="300px" borderRadius="2xl" />;
-  if (!settings.data) return <Text color="red.400">{apiErrorMessage(settings.error, t('Could not load the settings'))}</Text>;
+  if (!settings.data) return <LoadError error={settings.error} title={t('Could not load the settings')} onRetry={() => void settings.refetch()} />;
   const s = settings.data.sharing;
   const flags = chosen ?? { public_links: s.public_links, embedding: s.embedding };
   const site = settings.data.general.site_url;
@@ -72,15 +73,16 @@ export function SharingSettings() {
           </HStack>
           <HStack>
             <KeyIcon boxSize={4} />
-            <Input size="sm" maxW="520px" fontFamily="mono" fontSize="xs" isReadOnly value={key ?? (s.embedding_key_set ? '•'.repeat(40) : t('no key yet'))} data-testid="embedding-key" />
+            <Input size="sm" maxW="520px" minW={0} fontFamily="mono" fontSize="xs" isReadOnly value={key ?? (s.embedding_key_set ? '•'.repeat(40) : t('no key yet'))} data-testid="embedding-key" />
             {s.embedding_key_set && key === null && (
-              <Button size="sm" variant="subtle" onClick={() => void admin.embeddingKey().then(setKey).catch(fail(t('Could not read the key')))}>
+              <Button size="sm" variant="subtle" flexShrink={0} onClick={() => void admin.embeddingKey().then(setKey).catch(fail(t('Could not read the key')))}>
                 {t('Show')}
               </Button>
             )}
             {key && <IconButton aria-label={t('Copy the key')} size="sm" icon={<CopyIcon boxSize={4} />} onClick={() => void copy(key)} />}
             <Button
               size="sm"
+              flexShrink={0}
               variant={s.embedding_key_set ? 'ghost' : 'brand'}
               onClick={() => {
                 if (s.embedding_key_set && !window.confirm(t('A new key stops every embed until the websites use the new key. Continue?'))) return;
@@ -99,6 +101,7 @@ export function SharingSettings() {
 
       <Panel title={t('Shared outside Ncode')} subtitle={t('Every public link and embed. Stopping one takes effect at once.')}>
         {links.isPending && <Skeleton h="60px" />}
+        {links.isError && <LoadError compact error={links.error} title={t('Could not load what is shared')} onRetry={() => void links.refetch()} />}
         {links.data?.length === 0 && (
           <Text fontSize="sm" color="mutedText">
             {t('Nothing is shared.')}

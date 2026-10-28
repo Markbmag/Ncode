@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton,
+  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton,
   MenuDivider, MenuItem, MenuList, Select, Skeleton, Text, Textarea, Tooltip, useBreakpointValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -24,6 +24,7 @@ import { cardQueue, dashboards, useDashboard } from '../dashboards/api';
 import { DashboardCard } from '../dashboards/DashboardCard';
 import { AddQuestionDialog, CardDialog, FiltersDialog } from '../dashboards/EditDialogs';
 import { FilterBar } from '../dashboards/FilterBar';
+import { LoadError } from '../components/LoadError';
 import { applyToSearch } from '../dashboards/filterValues';
 import type { FilterUpdate } from '../dashboards/filterValues';
 import {
@@ -44,13 +45,16 @@ export default function DashboardPage() {
   if (query.isPending) return <Skeleton h="480px" borderRadius="2xl" />;
   if (query.isError || !query.data)
     return (
-      <Alert status="error" borderRadius="xl" flexDirection="column" alignItems="flex-start" gap={2}>
-        <Text fontWeight={600}>{t('This dashboard could not be opened')}</Text>
-        <Text fontSize="sm">{apiErrorMessage(query.error, t('It may have been deleted, or it was not shared with you.'))}</Text>
-        <Button as={RouterLink} to="/dashboards" size="sm">
-          {t('All dashboards')}
-        </Button>
-      </Alert>
+      <LoadError
+        error={query.error ?? new Error('missing')}
+        title={t('This dashboard could not be opened')}
+        onRetry={() => void query.refetch()}
+        actions={
+          <Button as={RouterLink} to="/dashboards" size="sm" variant="ghost">
+            {t('All dashboards')}
+          </Button>
+        }
+      />
     );
   return <DashboardView key={id} dashboard={query.data} />;
 }

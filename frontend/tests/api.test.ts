@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setLangForTests } from '../src/i18n/index.ts';
-import { failureDetails, failureMessage } from '../src/lib/apiError.ts';
+import { failureDetails, failureMessage, failureRetryable } from '../src/lib/apiError.ts';
 
 test('no answer at all is "not reachable", a server error is not', () => {
   setLangForTests('en');
@@ -30,4 +30,14 @@ test('the Russian UI asks the server for Russian', async () => {
   assert.match(src, /headers\.set\('Accept-Language', lang\(\)\)/);
   const ws = (await import('node:fs')).readFileSync('src/hooks/useSearch.ts', 'utf8');
   assert.match(ws, /lang: lang\(\)/);
+});
+
+test('"Try again" is offered when it can help (M10)', () => {
+  assert.equal(failureRetryable({ answered: false }), true);
+  assert.equal(failureRetryable({ answered: true, status: 500 }), true);
+  assert.equal(failureRetryable({ answered: true, status: 503 }), true);
+  assert.equal(failureRetryable({ answered: true, status: 429 }), true);
+  assert.equal(failureRetryable({ answered: true, status: 404 }), false);
+  assert.equal(failureRetryable({ answered: true, status: 403 }), false);
+  assert.equal(failureRetryable(null), true);
 });

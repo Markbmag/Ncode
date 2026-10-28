@@ -258,4 +258,6 @@ export const SHELL: Record<string, string> = {
   'Advanced open-source relational database': 'Продвинутая открытая реляционная база данных',
   'Microsoft\'s relational database': 'Реляционная база данных от Microsoft',
   'A database file on the server': 'Файл базы данных на сервере',
+  'This page could not be loaded': 'Не удалось загрузить страницу',
+  'The server did not answer. Check your connection and try again.': 'Сервер не ответил. Проверьте подключение и повторите попытку.',
 };

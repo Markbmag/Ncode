@@ -48,3 +48,12 @@ export function failureDetails(failure: ApiFailure): string | undefined {
   const details = (data as { details: unknown }).details;
   return typeof details === 'string' && details ? details : undefined;
 }
+
+/**
+ * Whether "Try again" can help: no answer, a server error (5xx), a timeout or too many requests.
+ * Another 4xx (not found, no access, invalid) answers the same the next time.
+ */
+export function failureRetryable(failure: ApiFailure | null): boolean {
+  if (!failure || !failure.answered || failure.status === undefined) return true;
+  return failure.status >= 500 || failure.status === 408 || failure.status === 429;
+}

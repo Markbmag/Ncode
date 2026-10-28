@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { lang } from './i18n/index.ts';
-import { failureDetails, failureMessage, type ApiFailure } from './lib/apiError.ts';
+import { failureDetails, failureMessage, failureRetryable, type ApiFailure } from './lib/apiError.ts';
 
 const TOKEN_KEY = 'ncode_token';
 export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
@@ -54,6 +54,11 @@ function failureOf(error: unknown): ApiFailure | null {
 export function apiErrorMessage(error: unknown, fallback: string): string {
   const failure = failureOf(error);
   return failure ? failureMessage(failure, fallback) : fallback;
+}
+
+/** Whether trying the request again can help (no answer, a server error); not after "not found" or "no access". */
+export function apiErrorRetryable(error: unknown): boolean {
+  return failureRetryable(axios.isAxiosError(error) ? failureOf(error) : null);
 }
 
 /** The database's own error text behind the message, when the server sent one (for analysts). */
