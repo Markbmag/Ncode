@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { Skeleton, VStack, useDisclosure } from '@chakra-ui/react';
+import { Button, Skeleton, Text, VStack, useDisclosure } from '@chakra-ui/react';
 import { ConnectionHeader } from '../components/ConnectionHeader';
 import { NoResultsState, ReadyState } from '../components/EmptyStates';
 import { NoConnections } from '../components/LoadError';
@@ -11,11 +11,27 @@ import { SearchProgress } from '../components/SearchProgress';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { t } from '../i18n/index.ts';
 
+const DEMO_KEY = 'demo'; // the Factory demo database (backend app/demo.py)
+const DEMO_EXAMPLE = 'PA-3001'; // one of its part numbers
+
 export default function SearchPage() {
   const ws = useWorkspace();
   const { search: state, scope, tables: tableList, excludePatterns } = ws;
   const scopeModal = useDisclosure();
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // "Search for PA-3001": fill the box, then search once the phrase is in place
+  const pending = useRef<string | null>(null);
+  const tryExample = (value: string) => {
+    pending.current = value;
+    ws.setPhrase(value);
+  };
+  const { phrase, startSearch } = ws;
+  useEffect(() => {
+    if (pending.current === null || pending.current !== phrase) return;
+    pending.current = null;
+    startSearch();
+  }, [phrase, startSearch]);
 
   // "/" focuses the search box
   useEffect(() => {
@@ -76,7 +92,31 @@ export default function SearchPage() {
       <ResultsPanel key={ws.searchCount} state={state} connectionLabel={ws.active?.label ?? ''} onOpenTable={ws.openInExplorer} />
     );
   } else {
-    content = <ReadyState connectionLabel={ws.active?.label ?? t('your database')} scopeLabel={scopeLabel} />;
+    content = (
+      <ReadyState
+        connectionLabel={ws.active?.label ?? t('your database')}
+        scopeLabel={scopeLabel}
+        action={
+          // one example (M11): a value that exists in the Factory demo, else what to type
+          <VStack spacing={2}>
+            <Text fontSize="xs" color="faintText">
+              {ws.activeKey === DEMO_KEY
+                ? t('Example: the part number {value}', { value: DEMO_EXAMPLE })
+                : t('Example: an order number, a VIN or part of a customer’s name')}
+            </Text>
+            {ws.activeKey === DEMO_KEY ? (
+              <Button size="sm" variant="brand" onClick={() => tryExample(DEMO_EXAMPLE)} data-testid="search-example">
+                {t('Search for “{value}”', { value: DEMO_EXAMPLE })}
+              </Button>
+            ) : (
+              <Button size="sm" variant="subtle" onClick={() => inputRef.current?.focus()} data-testid="search-example">
+                {t('Type what you are looking for')}
+              </Button>
+            )}
+          </VStack>
+        }
+      />
+    );
   }
 
   return (

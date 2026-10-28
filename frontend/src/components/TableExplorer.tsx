@@ -12,6 +12,8 @@ import { ChevronDownIcon, DownloadIcon, SearchIcon, TableIcon } from '../icons';
 import { Link as RouterLink } from 'react-router-dom';
 import { TableProfile } from '../analysis/TableProfile';
 import { Highlight } from './Highlight';
+import { FriendlyName } from './FriendlyName';
+import { byLabel, nameMatches } from '../lib/names';
 import { RowDrawer } from './RowDrawer';
 import { locale, t, tn } from '../i18n/index.ts';
 
@@ -138,11 +140,13 @@ export function TableExplorer({
     };
   }, [connectionKey, table, tab]);
 
-  const visibleTables = useMemo(() => {
-    if (!tables) return [];
-    const needle = listFilter.trim().toLowerCase();
-    return needle ? tables.filter((t) => t.name.toLowerCase().includes(needle)) : tables;
-  }, [tables, listFilter]);
+  // data model names (M11): the friendly name with the technical one next to it; found by either
+  const labelled = useMemo(() => byLabel(tables ?? []), [tables]);
+  const visibleTables = useMemo(
+    () => labelled.filter((l) => nameMatches(listFilter, l.name, l.showTechnical ? l.label : null)),
+    [labelled, listFilter],
+  );
+  const current = labelled.find((l) => l.name === table);
 
   const loading = query !== null && tab === 'data' && result?.key !== queryKey;
   const data = result?.data;
@@ -253,7 +257,8 @@ export function TableExplorer({
               {t('No tables match.')}
             </Text>
           )}
-          {visibleTables.slice(0, 400).map((t) => {
+          {visibleTables.slice(0, 400).map((l) => {
+            const t = l.item;
             const active = t.name === table;
             return (
               <Flex
@@ -272,9 +277,9 @@ export function TableExplorer({
                 onClick={() => selectTable(t.name)}
               >
                 <TableIcon boxSize={4} color={active ? 'brand.300' : 'faintText'} flexShrink={0} />
-                <Text flex={1} fontFamily="mono" fontSize="sm" noOfLines={1} fontWeight={active ? 600 : 400}>
-                  {t.name}
-                </Text>
+                <Box flex={1} minW={0} fontSize="sm" fontWeight={active ? 600 : 400} data-testid={`browse-table-${t.name}`}>
+                  <FriendlyName label={l.label} name={t.name} description={l.description} showTechnical={l.showTechnical} mono stacked />
+                </Box>
                 <Text fontSize="xs" color="faintText">
                   {t.columns}
                 </Text>
@@ -310,14 +315,31 @@ export function TableExplorer({
             <Text fontSize="sm" color="mutedText" maxW="380px">
               {t('Browse the data, sort by any column, filter by a phrase and export the result to CSV.')}
             </Text>
+            {/* one example to start from (M11: empty states give one action) */}
+            {visibleTables.length > 0 && (
+              <>
+                <Text fontSize="xs" color="faintText" maxW="380px">
+                  {t('Example: open a table, click a column title to sort it, type a value to keep only matching rows.')}
+                </Text>
+                <Button size="sm" variant="brand" onClick={() => selectTable(visibleTables[0].name)} data-testid="browse-first-table">
+                  {t('Open “{name}”', { name: visibleTables[0].label })}
+                </Button>
+              </>
+            )}
           </Flex>
         ) : (
           <VStack align="stretch" spacing={3}>
             <Flex justify="space-between" align="center" gap={3} wrap="wrap">
               <HStack spacing={3} minW={0}>
-                <Text fontFamily="mono" fontSize="lg" fontWeight={650} noOfLines={1}>
-                  {table}
-                </Text>
+                <FriendlyName
+                  label={current?.label ?? table}
+                  name={table}
+                  description={current?.description}
+                  showTechnical={current?.showTechnical}
+                  mono
+                  fontSize="lg"
+                  fontWeight={650}
+                />
                 <ButtonGroup isAttached size="xs">
                   <Button variant={tab === 'data' ? 'brand' : 'subtle'} onClick={() => setTab('data')}>
                     {t('Data')}
@@ -629,6 +651,7 @@ export function TableExplorer({
 
       <RowDrawer
         hit={drawerHit}
+        connection={connectionKey}
         onClose={() => setDrawerRow(null)}
         phrase={applied.q}
         matchMode={applied.mode}

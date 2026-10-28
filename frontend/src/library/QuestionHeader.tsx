@@ -11,8 +11,11 @@ import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIco
 import { library } from './api';
 import { withBase } from './conflict';
 import { useEditConflict } from './ConflictDialog';
+import { VerifiedBadge, VerifyMenuItem } from './VerifiedBadge';
+import { queryChanged } from './verified.ts';
 import type { QuestionPayload, SavedQuestion } from './api';
 import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
+import { ShareButton } from './ShareItem';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
 import { ShareDialog } from '../sharing/ShareDialog';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -135,6 +138,8 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   };
 
   const ready = payload !== undefined && payload() !== null;
+  // saving a changed query takes the Verified mark away (the server does it; warn first)
+  const losesBadge = !!saved?.verified && canEdit && dirty && ready && queryChanged(saved, payload());
 
   return (
     <Flex align="center" gap={3} wrap="wrap" data-testid="question-header">
@@ -172,6 +177,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               />
             </Tooltip>
           )}
+          {saved && <VerifiedBadge verified={saved.verified} />}
           {saved && !canEdit && <Badge>{t('view only')}</Badge>}
           {saved?.model && <Badge colorScheme="teal">{t('model')}</Badge>}
           {saved && dirty && <Badge colorScheme="orange">{t('edited')}</Badge>}
@@ -186,9 +192,22 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       <HStack spacing={2} wrap="wrap">
         {children}
         {saved && (
+          <ShareButton
+            target={{
+              type: 'question', id: saved.id, name: saved.name, collectionId: saved.collection_id, canEdit,
+              params: saved.parameters.map((p) => ({ name: p.name, label: p.label || p.name })),
+            }}
+          />
+        )}
+        {saved && (
           <Tooltip label={t('Subscriptions and alerts')} hasArrow>
             <IconButton aria-label={t('Subscriptions and alerts')} size="sm" variant="ghost" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('list')} data-testid="question-subscriptions" />
           </Tooltip>
+        )}
+        {losesBadge && (
+          <Text fontSize="xs" color="orange.400" maxW="200px" data-testid="verified-warning">
+            {t('Saving removes the Verified badge')}
+          </Text>
         )}
         {(!saved || canEdit) && (
           <Button
@@ -230,6 +249,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void duplicate()}>
                 {t('Duplicate')}
               </MenuItem>
+              <VerifyMenuItem kind="question" id={saved.id} verified={saved.verified} />
               <MenuItem icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('alert')} data-testid="question-alert">
                 {t('Set up an alert…')}
               </MenuItem>

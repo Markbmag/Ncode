@@ -1,7 +1,9 @@
 import { Badge, Box, Button, Flex, IconButton, Input, Select, SimpleGrid, Text, VStack } from '@chakra-ui/react';
 import type { ColumnType } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
-import { AGGREGATES, BUCKETS, aggregationName } from '../../query/draft';
+import { AGGREGATES, BUCKETS } from '../../query/draft';
+import { aggregationLabel, plainNamer } from '../../query/outputs';
+import type { Namer } from '../../query/outputs';
 import type { Aggregation, Breakout, Bucket } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
@@ -42,9 +44,10 @@ interface SummarizeEditorProps {
   options: PickOption[];
   onChange: (aggregations: Aggregation[], breakouts: Breakout[]) => void;
   metrics?: MetricOption[];
+  namer?: Namer; // readable names of the result columns ("Sum of Total") for the name placeholders
 }
 
-export function SummarizeEditor({ aggregations, breakouts, options, onChange, metrics = [] }: SummarizeEditorProps) {
+export function SummarizeEditor({ aggregations, breakouts, options, onChange, metrics = [], namer = plainNamer }: SummarizeEditorProps) {
   const typeOf = (ref?: string) => options.find((o) => o.ref === ref)?.type ?? 'unknown';
   const setAgg = (i: number, a: Aggregation | null) => onChange(a === null ? aggregations.filter((_, k) => k !== i) : aggregations.map((x, k) => (k === i ? a : x)), breakouts);
   const setBrk = (i: number, b: Breakout | null) => onChange(aggregations, b === null ? breakouts.filter((_, k) => k !== i) : breakouts.map((x, k) => (k === i ? b : x)));
@@ -60,7 +63,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
     <SimpleGrid columns={{ base: 1, '2xl': 2 }} spacing={4}>
       <VStack align="stretch" spacing={2} data-testid="metrics">
         <Text fontSize="xs" color="mutedText" fontWeight={700}>
-          {t('Metrics')}
+          {t('What to count or sum')}
         </Text>
         {aggregations.map((a, i) => {
           if (a.fn === 'metric') {
@@ -70,7 +73,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
                 <Badge colorScheme="green" variant="subtle" textTransform="none" fontSize="xs" px={2} py={1} title={m?.description ?? undefined}>
                   ★ {m?.name ?? t('Metric {id} (not available)', { id: a.metric })}
                 </Badge>
-                <Input size="sm" maxW="130px" placeholder={m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} />
+                <Input size="sm" maxW="130px" placeholder={m?.name ?? m?.slug} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} title={t('Name in the result (optional)')} />
                 <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
               </Flex>
             );
@@ -88,14 +91,14 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
               {info.needsColumn && (
                 <ColumnSelect options={options} types={TYPES_FOR[a.fn]} value={a.ref} onChange={(ref) => setAgg(i, { ...a, ref })} maxW="200px" aria-label={t('Metric column')} />
               )}
-              <Input size="sm" maxW="130px" placeholder={aggregationName({ ...a, alias: undefined })} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} />
+              <Input size="sm" maxW="130px" placeholder={aggregationLabel({ ...a, alias: undefined }, namer).label} value={a.alias ?? ''} onChange={(e) => setAgg(i, { ...a, alias: cleanResultName(e.target.value) })} aria-label={t('Result column name')} title={t('Name in the result (optional)')} />
               <IconButton aria-label={t('Remove metric')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setAgg(i, null)} />
             </Flex>
           );
         })}
         <Flex gap={2} wrap="wrap">
           <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={() => onChange([...aggregations, { fn: aggregations.length ? 'sum' : 'count' }], breakouts)} data-testid="add-metric">
-            {t('Metric')}
+            {t('Count or sum')}
           </Button>
           {metrics.length > 0 && (
             <Select
@@ -122,7 +125,11 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
 
       <VStack align="stretch" spacing={2} data-testid="group-by">
         <Text fontSize="xs" color="mutedText" fontWeight={700}>
-          {t('Grouped by')}
+          {t('Group by')}
+          <Text as="span" fontWeight={400} color="faintText">
+            {' '}
+            {t('(one row per value)')}
+          </Text>
         </Text>
         {breakouts.map((b, i) => {
           const type = typeOf(b.ref);
@@ -160,7 +167,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
       {aggregations.length === 0 && breakouts.length === 0 && (
         <Box gridColumn="1 / -1">
           <Text fontSize="sm" color="faintText">
-            {t('Not summarised: the question shows rows. Add a metric (sum, count …) and a grouping to get totals per group.')}
+            {t('Not summarised: the question shows rows. Count or sum something and group by a column to get totals per group, for example a count per month.')}
           </Text>
         </Box>
       )}

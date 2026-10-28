@@ -8,7 +8,7 @@ import { locale, t, tn } from '../i18n/index.ts';
 import { ChartIcon, CodeIcon, SearchIcon, TableIcon, UploadIcon } from '../icons';
 import { useQuestions } from '../library/api';
 import { DialogShell } from '../library/dialogs';
-import { humanize } from '../query/draft';
+import { byLabel, prettify, tableLabel } from '../lib/names';
 import { useSchema } from '../query/useSchema';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { formatBytes, useDatasets } from './api';
@@ -47,9 +47,10 @@ function SourceForm({ initial, taken, onClose, onSave }: { initial: Partial<Sour
   const upload = useDisclosure();
 
   const fallbackLabel =
-    type === 'question' ? questionName : type === 'dataset' ? datasetName : type === 'builder' ? humanize(table) : `SQL on ${connection}`;
+    type === 'question' ? questionName : type === 'dataset' ? datasetName : type === 'builder' ? (table && tableLabel(connection, table)) : `SQL on ${connection}`;
   const finalLabel = label.trim() || fallbackLabel || 'Source';
-  const finalAlias = alias.trim() || aliasFor(finalLabel, taken);
+  // a table's alias comes from its technical name: the friendly one may be in Russian (M11)
+  const finalAlias = alias.trim() || aliasFor(type === 'builder' && !label.trim() && table ? prettify(table) : finalLabel, taken);
   const aliasOk = /^[a-z_][a-z0-9_]{0,31}$/.test(finalAlias) && !taken.includes(finalAlias) && finalAlias !== 'result';
 
   const build = (): Source | null => {
@@ -156,7 +157,7 @@ function ConnectionSelect({ value, onChange }: { value: string; onChange: (key: 
 
 function TableSelect({ connection, value, onChange }: { connection: string; value: string; onChange: (table: string) => void }) {
   const schema = useSchema(connection);
-  const names = useMemo(() => (schema.data?.tables ?? []).map((tb) => tb.name).sort((a, b) => a.localeCompare(b)), [schema.data]);
+  const picks = useMemo(() => byLabel(schema.data?.tables ?? []), [schema.data]); // data model names (M11)
   return (
     <FormControl>
       <FormLabel fontSize="sm">{t('Table')}</FormLabel>
@@ -164,9 +165,9 @@ function TableSelect({ connection, value, onChange }: { connection: string; valu
         <Skeleton h="32px" />
       ) : (
         <Select size="sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder={t('Pick a table…')} data-testid="source-table">
-          {names.map((name) => (
-            <option key={name} value={name}>
-              {name}
+          {picks.map((p) => (
+            <option key={p.name} value={p.name} title={[p.showTechnical ? p.name : null, p.description].filter(Boolean).join(' — ') || undefined}>
+              {p.showTechnical ? p.label : p.name}
             </option>
           ))}
         </Select>

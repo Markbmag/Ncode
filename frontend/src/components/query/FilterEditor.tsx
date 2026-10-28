@@ -98,10 +98,17 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
         <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} onClick={addCondition}>
           {t('Filter')}
         </Button>
+        {/* one add button per step (M11): a group of conditions is the quieter second choice */}
         {depth < MAX_DEPTH - 1 && (
-          <Button size="xs" variant="ghost" leftIcon={<PlusIcon boxSize={3} />} onClick={addGroup}>
-            {group.op === 'and' ? t('Group (any of)') : t('Group (all of)')}
-          </Button>
+          <Tooltip
+            label={group.op === 'and' ? t('Conditions where one is enough, e.g. status is paid or shipped') : t('Conditions that must all be true')}
+            hasArrow
+            openDelay={300}
+          >
+            <Button size="xs" variant="ghost" color="mutedText" fontWeight={500} onClick={addGroup} data-testid="add-filter-group">
+              {group.op === 'and' ? t('Either … or …') : t('Both … and …')}
+            </Button>
+          </Tooltip>
         )}
       </HStack>
     </VStack>

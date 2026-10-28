@@ -7,6 +7,7 @@ import { SMART_DATES_DEFAULT, formatValue } from '../../lib/format';
 import { formatNumber } from '../../viz/format';
 import type { ColumnFormat } from '../../viz/types';
 import { cellToString } from '../../lib/csv';
+import { columnDescription, columnTitle, typeWord } from '../../viz/labels';
 import { t } from '../../i18n/index.ts';
 
 const ROW_HEIGHT = 32;
@@ -17,7 +18,7 @@ const TYPE_MARK: Record<ColumnType, string> = {
 
 function defaultWidth(col: ResultColumn): number {
   const byType: Partial<Record<ColumnType, number>> = { number: 120, boolean: 90, date: 120, datetime: 170, time: 110 };
-  const forName = col.name.length * 8 + 48;
+  const forName = columnTitle(col).length * 8 + 48;
   return Math.min(320, Math.max(byType[col.type] ?? 180, forName));
 }
 
@@ -112,44 +113,60 @@ export function ResultsTable({ columns, rows, smartDates = SMART_DATES_DEFAULT, 
           <Box w={`${NUMBER_COL_WIDTH}px`} flexShrink={0} px={2} py={2} color="faintText" fontSize="xs" textAlign="right">
             #
           </Box>
-          {columns.map((col, i) => (
-            <Flex
-              key={`${col.name}-${i}`}
-              role="columnheader"
-              w={`${colWidths[i]}px`}
-              flexShrink={0}
-              align="center"
-              gap={1.5}
-              px={2}
-              py={2}
-              position="relative"
-              justify={col.type === 'number' ? 'flex-end' : 'flex-start'}
-            >
-              <Tooltip
-                label={`${col.display_name ? `${col.name} · ` : ''}${col.type}${col.role === 'measure' ? ` · ${t('measure')}` : ''}${col.description ? ` — ${col.description}` : ''}`}
-                hasArrow
-                openDelay={400}
+          {columns.map((col, i) => {
+            const title = columnTitle(col);
+            const description = columnDescription(col);
+            return (
+              <Flex
+                key={`${col.name}-${i}`}
+                role="columnheader"
+                w={`${colWidths[i]}px`}
+                flexShrink={0}
+                align="center"
+                gap={1.5}
+                px={2}
+                py={2}
+                position="relative"
+                justify={col.type === 'number' ? 'flex-end' : 'flex-start'}
               >
-                <Text as="span" fontSize="2xs" color="faintText" fontFamily="mono">
-                  {TYPE_MARK[col.type] ?? '?'}
-                </Text>
-              </Tooltip>
-              <Text as="span" fontWeight={700} fontSize="xs" noOfLines={1} title={col.name} color={col.generated ? 'teal.300' : undefined}>
-                {col.display_name || col.name}
-              </Text>
-              <Box
-                position="absolute"
-                right={0}
-                top={0}
-                bottom={0}
-                w="6px"
-                cursor="col-resize"
-                _hover={{ bg: 'brand.400' }}
-                onPointerDown={startResize(i)}
-                aria-label={t('Resize {name}', { name: col.name })}
-              />
-            </Flex>
-          ))}
+                {/* hover: what the data model says about the column, then its technical name and type (M11) */}
+                <Tooltip
+                  label={
+                    <Box>
+                      {description && <Text mb={1}>{description}</Text>}
+                      <Text fontSize="xs" opacity={0.8}>
+                        {title !== col.name ? `${col.name} · ` : ''}
+                        {typeWord(col.type)}
+                      </Text>
+                    </Box>
+                  }
+                  hasArrow
+                  openDelay={300}
+                  placement="top"
+                >
+                  <Flex as="span" align="center" gap={1.5} minW={0} cursor="help" data-testid="column-header">
+                    <Text as="span" fontSize="2xs" color="faintText" fontFamily="mono">
+                      {TYPE_MARK[col.type] ?? '?'}
+                    </Text>
+                    <Text as="span" fontWeight={700} fontSize="xs" noOfLines={1} color={col.generated ? 'teal.300' : undefined} textDecoration={description ? 'underline dotted' : undefined} textUnderlineOffset="3px">
+                      {title}
+                    </Text>
+                  </Flex>
+                </Tooltip>
+                <Box
+                  position="absolute"
+                  right={0}
+                  top={0}
+                  bottom={0}
+                  w="6px"
+                  cursor="col-resize"
+                  _hover={{ bg: 'brand.400' }}
+                  onPointerDown={startResize(i)}
+                  aria-label={t('Resize {name}', { name: title })}
+                />
+              </Flex>
+            );
+          })}
         </Flex>
 
         <Box h={`${virtualizer.getTotalSize()}px`} position="relative">
@@ -198,8 +215,8 @@ export function ResultsTable({ columns, rows, smartDates = SMART_DATES_DEFAULT, 
                       title={value === null || value === undefined ? undefined : String(typeof value === 'object' ? JSON.stringify(value) : value)}
                     >
                       {value === null || value === undefined ? (
-                        <Text as="span" color="faintText" fontStyle="italic" fontSize="xs">
-                          null
+                        <Text as="span" color="faintText" aria-label={t('(empty)')}>
+                          —
                         </Text>
                       ) : (
                         typeof value === 'number' && col.format

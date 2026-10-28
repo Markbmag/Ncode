@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { lang } from './i18n/index.ts';
 import { failureDetails, failureMessage, failureRetryable, type ApiFailure } from './lib/apiError.ts';
+import type { Translations } from './lib/names.ts';
 
 const TOKEN_KEY = 'ncode_token';
 export const UNAUTHORIZED_EVENT = 'ncode:unauthorized';
@@ -105,7 +106,7 @@ export interface Connection {
   engine: string;
   database: string;
   id_hints: string[];
-  source: string; // "env" (from .env) | "ui" (managed in the interface)
+  source: string; // "env" (from .env) | "ui" (managed in the interface) | "demo" (M11, also for non-admins)
   editable: boolean;
 }
 
@@ -156,6 +157,10 @@ export interface TableInfo {
   name: string;
   columns: number;
   searchable: number;
+  // data model (M11), present when an admin named the table; show with nameOf() from lib/names
+  display_name?: string | null;
+  description?: string | null;
+  translations?: Translations | null;
 }
 
 export interface SearchHit {
@@ -245,12 +250,17 @@ export interface SchemaColumn {
   format?: Record<string, unknown> | null;
   hidden?: boolean;
   parse_as_date?: boolean;
+  translations?: Translations | null; // M11: {"ru": {"display_name", "description"}}
 }
 
 export interface SchemaTable {
   name: string;
   primary_key: string[];
   columns: SchemaColumn[];
+  // data model (M11)
+  display_name?: string | null;
+  description?: string | null;
+  translations?: Translations | null;
 }
 
 export interface Relationship {
@@ -279,13 +289,14 @@ export interface ResultColumn {
   description?: string | null;
   semantic_type?: string | null;
   format?: Record<string, unknown> | null;
+  translations?: Translations | null; // M11: show with nameOf(col.name, col) from lib/names
   generated?: boolean; // added by a calculation (running total ...)
 }
 
 export interface ResultEnvelope {
   columns: ResultColumn[];
   rows: unknown[][];
-  stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean };
+  stats: { duration_ms: number; row_count: number; truncated: boolean; cached: boolean; cached_age_sec?: number | null }; // age of a reused result (M11)
   sql: string | null;
   federation?: FederationInfo | null; // multi-source questions (M6)
   analysis?: Record<string, unknown> | null; // profiles and X-rays (M7)

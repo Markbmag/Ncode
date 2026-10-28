@@ -13,6 +13,7 @@ import { MAX_SCATTER_SERIES, OTHER, assignColors } from './palette.ts';
 import type { ChartTheme } from './palette.ts';
 import { nextDates, trendValues } from './stats.ts';
 import type { ColumnFormat, VizSpec } from './types.ts';
+import { columnDescription, titleOf } from './labels.ts';
 import { t as tr } from '../i18n/index.ts';
 
 type AnyRecord = Record<string, unknown>;
@@ -74,6 +75,50 @@ function axisStyle(theme: ChartTheme): AnyRecord {
     axisLabel: { color: theme.muted, hideOverlap: true },
     splitLine: { lineStyle: { color: theme.grid, width: 1, type: 'solid' } },
     nameTextStyle: { color: theme.textSecondary },
+    nameMoveOverlap: true, // an axis title moves clear of the tick labels (rotated ones too)
+  };
+}
+
+/** The plot area: tick labels and axis titles stay inside the chart's box. */
+function gridOf(box: { left: number; right: number; top: number; bottom: number }): AnyRecord {
+  return { ...box, outerBoundsMode: 'same', outerBoundsContain: 'all' };
+}
+
+/** Axis titles are on unless switched off (M11); a title typed in the settings wins. */
+function axisTitle(viz: VizSpec, typed: string | undefined, automatic: string | undefined): string | undefined {
+  if (typed) return typed;
+  return viz.axis?.titles === false ? undefined : automatic || undefined;
+}
+
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+interface TooltipParam {
+  marker?: string;
+  seriesName?: string;
+  name?: string;
+  axisValueLabel?: string;
+  value?: unknown;
+}
+
+/**
+ * A tooltip that also says what the measures mean (their data-model descriptions, M11).
+ * Null when no measure has a description: the default tooltip stays.
+ */
+export function describingTooltip(notes: { title: string; description: string | null }[], format: (v: unknown) => string): ((p: unknown) => string) | null {
+  const described = notes.filter((n): n is { title: string; description: string } => !!n.description);
+  if (described.length === 0) return null;
+  const seen = new Set<string>();
+  const footer = described
+    .filter((n) => !seen.has(n.title) && !!seen.add(n.title))
+    .map((n) => `<div style="margin-top:6px;max-width:280px;white-space:normal;opacity:0.75;font-size:11px">${escapeHtml(described.length > 1 ? `${n.title}: ${n.description}` : n.description)}</div>`)
+    .join('');
+  return (params: unknown) => {
+    const list = (Array.isArray(params) ? params : [params]) as TooltipParam[];
+    const head = list[0]?.axisValueLabel ?? list[0]?.name ?? '';
+    const rows = list
+      .map((p) => `<div>${p.marker ?? ''}${escapeHtml(String(p.seriesName ?? ''))}<b style="float:right;margin-left:16px">${escapeHtml(format(Array.isArray(p.value) ? p.value[1] : p.value))}</b></div>`)
+      .join('');
+    return `${head ? `<div style="margin-bottom:4px">${escapeHtml(String(head))}</div>` : ''}${rows}${footer}`;
   };
 }
 
@@ -103,11 +148,14 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   const showSymbols = data.categories.length <= 40;
   const last = data.series.length - 1;
 
+  // a measure is named by its readable title ("Sum of Revenue"); its colour and highlight follow the column
+  const titles = data.series.map((s) => (viz.breakout ? s.name : titleOf(t.columns, s.name)));
+  const shownName = (i: number) => (titles.indexOf(titles[i]) === i ? titles[i] : data.series[i].name);
   const series = data.series.map((s, i) => {
     const kind = viz.breakout ? kindOf(0) : kindOf(i);
     const color = viz.highlight && viz.highlight !== s.name ? theme.deemphasis : colors[s.name];
     const common = {
-      name: s.name,
+      name: shownName(i),
       data: values[i],
       itemStyle: { color },
       emphasis: { focus: 'series' },
@@ -186,12 +234,14 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   }
   const labels = categories.map((c) => categoryLabel(t, viz, c));
   const longest = Math.max(0, ...labels.map((l) => l.length));
+  // axis titles by default (M11): the categories' column, and the measure when there is one
+  const measureTitle = viz.breakout || data.series.length === 1 ? titleOf(t.columns, data.series[0]?.column) : undefined;
   const categoryAxis = {
     type: 'category',
     data: labels,
-    name: viz.axis?.xTitle,
+    name: axisTitle(viz, viz.axis?.xTitle, titleOf(t.columns, viz.x)),
     nameLocation: 'middle',
-    nameGap: 28,
+    nameGap: 12,
     boundaryGap: series.some((s) => s.type === 'bar'),
     ...axisStyle(theme),
     // Text categories: show each label when there are few (rotated if long); dates and many
@@ -208,9 +258,9 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   };
   const valueAxis = {
     type: 'value',
-    name: viz.axis?.yTitle,
+    name: axisTitle(viz, viz.axis?.yTitle, percent && measureTitle ? `${measureTitle}, %` : measureTitle),
     nameLocation: 'middle',
-    nameGap: 48,
+    nameGap: 12,
     min: percent ? 0 : (viz.axis?.yMin ?? undefined),
     max: percent ? 100 : (viz.axis?.yMax ?? undefined),
     ...axisStyle(theme),
@@ -222,16 +272,22 @@ function cartesian(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   const option: EChartsOption = {
     ...base(theme),
     legend: legendOf(viz, theme, series.length),
-    grid: { left: 8, right: viz.labels ? 48 : 16, top: series.length > 1 && viz.legend !== 'bottom' ? 36 : 16, bottom: viz.legend === 'bottom' ? 36 : 8, containLabel: true },
+    grid: gridOf({ left: 8, right: viz.labels ? 48 : 16, top: series.length > 1 && viz.legend !== 'bottom' ? 36 : 16, bottom: viz.legend === 'bottom' ? 36 : 8 }),
     xAxis: (horizontal ? valueAxis : categoryAxis) as EChartsOption['xAxis'],
     yAxis: (horizontal ? { ...categoryAxis, inverse: true } : valueAxis) as EChartsOption['yAxis'],
     series: series as EChartsOption['series'],
   };
+  const valueText = (v: unknown) => (typeof v === 'number' ? (percent ? `${v.toFixed(1)}%` : formatNumber(v, measureFmt)) : '—');
+  const describing = describingTooltip(
+    (viz.breakout ? data.series.slice(0, 1) : data.series).map((s) => ({ title: titleOf(t.columns, s.column), description: columnDescription(t.columns.find((c) => c.name === s.column)) })),
+    valueText,
+  );
   option.tooltip = {
     ...(option.tooltip as AnyRecord),
     trigger: lineLike ? 'axis' : 'item',
     axisPointer: lineLike ? { type: 'line', lineStyle: { color: theme.axis, width: 1 } } : undefined,
-    valueFormatter: (v: unknown) => (typeof v === 'number' ? (percent ? `${v.toFixed(1)}%` : formatNumber(v, measureFmt)) : '—'),
+    valueFormatter: valueText,
+    ...(describing ? { formatter: describing } : {}),
   } as EChartsOption['tooltip'];
   return option;
 }
@@ -260,7 +316,8 @@ function pie(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
         // Direct labels only on slices big enough to carry one; the legend and tooltip cover the rest.
         data: slices.map((s) => {
           const big = s.value / total >= 0.08;
-          return { ...s, name: categoryLabel(t, viz, s.name), itemStyle: { color: colors[s.name] }, label: { show: big }, labelLine: { show: big } };
+          const name = colIndex(t, viz.x) < 0 && s.name !== OTHER ? titleOf(t.columns, s.name) : categoryLabel(t, viz, s.name);
+          return { ...s, name, itemStyle: { color: colors[s.name] }, label: { show: big }, labelLine: { show: big } };
         }),
       },
     ],
@@ -280,15 +337,15 @@ function scatter(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   return {
     ...base(theme),
     legend: legendOf(viz, theme, ys.length),
-    grid: { left: 8, right: 16, top: ys.length > 1 ? 36 : 16, bottom: 8, containLabel: true },
+    grid: gridOf({ left: 8, right: 16, top: ys.length > 1 ? 36 : 16, bottom: 8 }),
     tooltip: { ...(base(theme).tooltip as AnyRecord), trigger: 'item' },
-    xAxis: { type: 'value', scale: true, name: viz.axis?.xTitle ?? viz.x, nameLocation: 'middle', nameGap: 28, ...axisStyle(theme), axisLabel: { color: theme.muted, formatter: (v: number) => formatAxisNumber(v, xFmt) } },
-    yAxis: { type: 'value', scale: true, name: viz.axis?.yTitle, ...axisStyle(theme), axisLine: { show: false }, axisLabel: { color: theme.muted, formatter: (v: number) => formatAxisNumber(v, fmtOf(viz, ys[0])) } },
+    xAxis: { type: 'value', scale: true, name: axisTitle(viz, viz.axis?.xTitle, titleOf(t.columns, viz.x)), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), axisLabel: { color: theme.muted, formatter: (v: number) => formatAxisNumber(v, xFmt) } },
+    yAxis: { type: 'value', scale: true, name: axisTitle(viz, viz.axis?.yTitle, ys.length === 1 ? titleOf(t.columns, ys[0]) : undefined), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), axisLine: { show: false }, axisLabel: { color: theme.muted, formatter: (v: number) => formatAxisNumber(v, fmtOf(viz, ys[0])) } },
     series: ys.map((y) => {
       const yi = colIndex(t, y);
       return {
         type: 'scatter',
-        name: y,
+        name: titleOf(t.columns, y),
         data: t.rows.map((r, k) => [toNumber(r[xi]), toNumber(r[yi]), sizes[k] ?? null]),
         // bubble area proportional to the value; at least 8 px so it stays visible and hoverable
         symbolSize: (v: (number | null)[]) => (si >= 0 ? Math.max(8, Math.sqrt(Math.abs(v[2] ?? 0) / maxSize) * 48) : 9),
@@ -307,10 +364,10 @@ function histogramChart(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOptio
   const fmt = fmtOf(viz, column);
   return {
     ...base(theme),
-    grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
+    grid: gridOf({ left: 8, right: 16, top: 16, bottom: 8 }),
     tooltip: { ...(base(theme).tooltip as AnyRecord), trigger: 'item' },
-    xAxis: { type: 'category', data: bins.map((b) => `${formatAxisNumber(b.from, fmt)} – ${formatAxisNumber(b.to, fmt)}`), name: viz.axis?.xTitle ?? column, nameLocation: 'middle', nameGap: 28, ...axisStyle(theme), splitLine: { show: false } },
-    yAxis: { type: 'value', name: viz.axis?.yTitle ?? tr('rows'), nameLocation: 'middle', nameGap: 40, ...axisStyle(theme), axisLine: { show: false } },
+    xAxis: { type: 'category', data: bins.map((b) => `${formatAxisNumber(b.from, fmt)} – ${formatAxisNumber(b.to, fmt)}`), name: axisTitle(viz, viz.axis?.xTitle, titleOf(t.columns, column)), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), splitLine: { show: false } },
+    yAxis: { type: 'value', name: axisTitle(viz, viz.axis?.yTitle, tr('rows')), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), axisLine: { show: false } },
     series: [
       {
         type: 'bar',
@@ -344,10 +401,10 @@ function heatmap(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
   const fmt = fmtOf(viz, t.columns[vi]?.name);
   return {
     ...base(theme),
-    grid: { left: 8, right: 16, top: 16, bottom: 56, containLabel: true },
+    grid: gridOf({ left: 8, right: 16, top: 16, bottom: 56 }),
     tooltip: { ...(base(theme).tooltip as AnyRecord), trigger: 'item', valueFormatter: (v: unknown) => (typeof v === 'number' ? formatNumber(v, fmt) : '—') },
-    xAxis: { type: 'category', data: xs.map((x) => categoryLabel(t, viz, x)), ...axisStyle(theme), splitLine: { show: false } },
-    yAxis: { type: 'category', data: ys, ...axisStyle(theme), splitLine: { show: false } },
+    xAxis: { type: 'category', data: xs.map((x) => categoryLabel(t, viz, x)), name: axisTitle(viz, viz.axis?.xTitle, titleOf(t.columns, viz.x)), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), splitLine: { show: false } },
+    yAxis: { type: 'category', data: ys, name: axisTitle(viz, viz.axis?.yTitle, titleOf(t.columns, viz.y2)), nameLocation: 'middle', nameGap: 12, ...axisStyle(theme), splitLine: { show: false } },
     visualMap: {
       min: values.length ? Math.min(...values) : 0,
       max: values.length ? Math.max(...values) : 1,
@@ -364,7 +421,7 @@ function heatmap(t: Table, viz: VizSpec, theme: ChartTheme): EChartsOption {
     series: [
       {
         type: 'heatmap',
-        name: t.columns[vi]?.name,
+        name: titleOf(t.columns, t.columns[vi]?.name),
         data: [...cells.entries()].map(([k, v]) => {
           const [x, y] = k.split('\u0000');
           return [xs.indexOf(x), ys.indexOf(y), v];

@@ -91,6 +91,25 @@ def test_results_are_cached_and_refresh_skips_the_cache(env):
     second = post(client, alice, "/api/query", {"spec": REVENUE})["result"]["stats"]
     fresh = post(client, alice, "/api/query", {"spec": REVENUE, "refresh": True})["result"]["stats"]
     assert (first["cached"], second["cached"], fresh["cached"]) == (False, True, False)
+    # M11: a reused result says how old it is ("saved result from 2 min ago"); a fresh one does not
+    assert first["cached_age_sec"] is None and fresh["cached_age_sec"] is None
+    assert isinstance(second["cached_age_sec"], int) and 0 <= second["cached_age_sec"] < 60
+
+
+def test_the_result_cache_knows_the_age_of_what_it_keeps(monkeypatch):
+    from app.query import runner
+    from app.results import ResultEnvelope, ResultStats
+
+    now = [1000.0]
+    monkeypatch.setattr(runner.time, "time", lambda: now[0])
+    cache = runner.ResultCache(ttl_sec=600)
+    cache.put("k", ResultEnvelope(columns=[], rows=[], stats=ResultStats(duration_ms=5, row_count=0)))
+    now[0] += 125
+    envelope, age = cache.get_with_age("k")
+    assert age == 125 and envelope.stats.row_count == 0
+    assert cache.get("k") is envelope
+    now[0] += 600  # older than the TTL: gone
+    assert cache.get_with_age("k") is None and cache.get("k") is None
 
 
 def test_truncation_flag(env):

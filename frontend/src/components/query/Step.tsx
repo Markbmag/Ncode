@@ -8,12 +8,14 @@ interface StepProps {
   children: ReactNode;
   actions?: ReactNode;
   testId?: string;
+  /** which step this is (the builder scrolls to a step opened from "More steps") */
+  anchor?: string;
 }
 
 /** One block of the notebook-style builder (Data, Join, Filter, Summarise ...). */
-export function Step({ title, color, hint, children, actions, testId }: StepProps) {
+export function Step({ title, color, hint, children, actions, testId, anchor }: StepProps) {
   return (
-    <Box data-testid={testId}>
+    <Box data-testid={testId} data-step={anchor}>
       <Flex align="center" justify="space-between" mb={1.5} gap={2}>
         <Text fontSize="xs" fontWeight={800} letterSpacing="0.08em" color={color} textTransform="uppercase">
           {title}

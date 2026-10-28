@@ -2,6 +2,7 @@ import { Button, Flex, IconButton, Input, Select, Text, VStack } from '@chakra-u
 import type { ResultColumn } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
 import type { Transform, TransformType } from '../../query/types';
+import { columnTitle } from '../../viz/labels';
 import { t } from '../../i18n/index.ts';
 
 const TRANSFORMS: { type: TransformType; label: string; hint: string }[] = [
@@ -35,7 +36,7 @@ export function TransformsEditor({ transforms, columns, onChange }: Props) {
   const dims = base.filter((c) => c.role === 'dimension');
   const dates = base.filter((c) => c.type === 'date' || c.type === 'datetime');
   const set = (i: number, next: Transform | null) => onChange(next === null ? transforms.filter((_, k) => k !== i) : transforms.map((x, k) => (k === i ? next : x)));
-  const label = (c: ResultColumn) => c.display_name || c.name;
+  const label = (c: ResultColumn) => columnTitle(c);
 
   if (base.length === 0 && transforms.length === 0)
     return (
@@ -99,8 +100,8 @@ export function TransformsEditor({ transforms, columns, onChange }: Props) {
             )}
             {tf.type === 'outliers' && (
               <Select size="sm" maxW="170px" value={tf.method ?? 'iqr'} onChange={(e) => set(i, { ...tf, method: e.target.value as 'iqr' | 'zscore' })} aria-label={t('Method')}>
-                <option value="iqr">{t('beyond 1.5 × IQR')}</option>
-                <option value="zscore">{t('more than 3 σ')}</option>
+                <option value="iqr">{t('far from the middle (1.5 × IQR)')}</option>
+                <option value="zscore">{t('far from the average (3 σ)')}</option>
               </Select>
             )}
             <IconButton aria-label={t('Remove calculation')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => set(i, null)} />
@@ -116,7 +117,7 @@ export function TransformsEditor({ transforms, columns, onChange }: Props) {
         onClick={() => onChange([...transforms, { type: dates.length ? 'previous_period' : 'pct_of_total', column: numbers[numbers.length - 1]?.name ?? '' }])}
         data-testid="add-transform"
       >
-        {t('Calculation')}
+        {t('Comparison or total')}
       </Button>
     </VStack>
   );

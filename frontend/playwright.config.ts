@@ -33,7 +33,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `${python} -m tests.e2e_server --port ${API_PORT} --origin http://127.0.0.1:${WEB_PORT}`,
+      command: `${python} -m tests.e2e_server --port ${API_PORT} --origin http://127.0.0.1:${WEB_PORT} --demo en`,
       cwd: '../backend',
       url: `http://127.0.0.1:${API_PORT}/api/health`,
       reuseExistingServer: false,

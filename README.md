@@ -27,6 +27,8 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   webhook on a schedule, with CSV / Excel attached; alerts when a number crosses a line.
 - **Share outside Ncode** - public links (password, expiry) and signed embedding in other websites.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
+- **Easy to start** - a Factory demo database with ready examples, a home page with first steps,
+  plain words, a sentence under every result, a glossary, verified official answers.
 - **Team ready** - users and groups, row-level security, an audit log, usage and slow-query reports,
   backups, English and Russian.
 - **Production ready** - Docker Compose with automatic HTTPS (Caddy), health checks and Prometheus metrics, CI.

@@ -34,6 +34,7 @@ class ResultColumn(BaseModel):
     description: str | None = None
     semantic_type: str | None = None
     format: dict[str, Any] | None = None
+    translations: dict[str, Any] | None = None  # M11: {"ru": {"display_name", "description"}}
     generated: bool = False  # added by a transform (running total ...)
 
 
@@ -42,6 +43,7 @@ class ResultStats(BaseModel):
     row_count: int
     truncated: bool = False
     cached: bool = False
+    cached_age_sec: int | None = None  # a reused result: how old it is ("saved result from 2 min ago", M11)
 
 
 class ResultEnvelope(BaseModel):

@@ -8,9 +8,11 @@ interface FrameProps {
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** room for a row of tips (up to 860 px) */
+  wide?: boolean;
 }
 
-function Frame({ icon, title, children, action }: FrameProps) {
+function Frame({ icon, title, children, action, wide = false }: FrameProps) {
   return (
     <Flex
       direction="column"
@@ -40,7 +42,7 @@ function Frame({ icon, title, children, action }: FrameProps) {
       <Heading as="h2" fontSize="xl" fontWeight={650}>
         {title}
       </Heading>
-      <Box color="mutedText" maxW="480px" fontSize="sm" lineHeight="tall">
+      <Box color="mutedText" maxW={wide ? '860px' : '480px'} w={wide ? '100%' : undefined} fontSize="sm" lineHeight="tall">
         {children}
       </Box>
       {action}
@@ -76,9 +78,11 @@ export function NoConnectionsState({ isAdmin, onAdd }: NoConnectionsProps) {
 interface ReadyProps {
   connectionLabel: string;
   scopeLabel: string;
+  /** one example to try (M11) */
+  action?: ReactNode;
 }
 
-export function ReadyState({ connectionLabel, scopeLabel }: ReadyProps) {
+export function ReadyState({ connectionLabel, scopeLabel, action }: ReadyProps) {
   const tips = [
     {
       icon: <SearchIcon boxSize={4} />,
@@ -97,7 +101,7 @@ export function ReadyState({ connectionLabel, scopeLabel }: ReadyProps) {
     },
   ];
   return (
-    <Frame icon={<SearchIcon boxSize={7} />} title={t('Find anything in {name}', { name: connectionLabel })}>
+    <Frame icon={<SearchIcon boxSize={7} />} title={t('Find anything in {name}', { name: connectionLabel })} action={action} wide>
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mt={2} textAlign="left" w="100%" maxW="860px">
         {tips.map((tip) => (
           <VStack

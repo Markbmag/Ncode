@@ -227,6 +227,8 @@ RU: dict[str, str] = {
     "Cannot decrypt the saved password - was the secret key changed or lost?":
         "Не удаётся расшифровать сохранённый пароль — не был ли секретный ключ изменён или утерян?",
     # ---------------------------------------------------------------- app/content
+    "An archived question cannot be verified. Restore it first": "Архивный вопрос нельзя отметить как проверенный. Сначала восстановите его",
+    "An archived dashboard cannot be verified. Restore it first": "Архивный дашборд нельзя отметить как проверенный. Сначала восстановите его",
     "Invalid dashboard: base_updated_at must be a number": "Неверный дашборд: base_updated_at должно быть числом",
     "No such question card on this dashboard": "На этом дашборде нет такой карточки вопроса",
     "The question on this card was deleted": "Вопрос этой карточки удалён",
@@ -365,6 +367,40 @@ RU: dict[str, str] = {
     "a {self.type} source needs {need}": "источнику {self.type} нужно: {need}",
     "a sql source needs a connection": "SQL-источнику нужна база данных",
     "{self.alias!r} cannot be used as a source name": "{self.alias!r} нельзя использовать как имя источника",
+    # ---------------------------------------------------------------- app/glossary.py (M11)
+    "Glossary term not found": "Термин глоссария не найден",
+    "A term needs a name and a definition": "У термина должны быть название и определение",
+    "There is already a term {other.term!r}": "Термин {other.term!r} уже есть",
+    "The archive already has the term {other.term!r}: restore it instead":
+        "Термин {other.term!r} уже есть в архиве: восстановите его",
+    "Archive the term first; only archived terms can be deleted":
+        "Сначала отправьте термин в архив: удалить можно только архивный термин",
+    "Metric {link['id']} does not exist": "Метрика {link['id']} не найдена",
+    "Question {link['id']} does not exist": "Вопрос {link['id']} не найден",
+    "translations are keyed by a two-letter language code such as 'ru'":
+        "переводы задаются по двухбуквенному коду языка, например 'ru'",
+    "a synonym has at most {MAX_TERM} characters": "синоним может быть не длиннее {MAX_TERM} символов",
+    # ---------------------------------------------------------------- app/home.py
+    "Personal settings are nested too deeply": "Личные настройки слишком глубоко вложены",
+    "Personal settings are limited to 8 KB": "Личные настройки занимают не больше 8 КБ",
+    "checklist must be an object": "checklist должен быть объектом",
+    "checklist.done must be a list of step names": "checklist.done должен быть списком названий шагов",
+    "Unknown checklist step {unknown[0]!r}": "Неизвестный шаг списка {unknown[0]!r}",
+    "checklist.hidden must be true or false": "checklist.hidden должен быть true или false",
+    "A personal collection is private: choose a shared collection": "Личная коллекция видна только владельцу: выберите общую коллекцию",
+    "The collection {col.name!r} is archived. Restore it first, or choose another collection":
+        "Коллекция {col.name!r} в архиве. Сначала восстановите её или выберите другую коллекцию",
+    # ---------------------------------------------------------------- app/semantic, app/demo.py (M11)
+    "too many languages": "слишком много языков",
+    "unknown language {language!r}": "неизвестный язык {language!r}",
+    "translations for {language!r} must be an object": "переводы для {language!r} должны быть объектом",
+    "{key!r} cannot be translated here (only {allowed})": "{key!r} здесь не переводится (только {allowed})",
+    "the translation of {key!r} must be text": "перевод {key!r} должен быть текстом",
+    "the translation of {key!r} is too long (at most {limit} characters)":
+        "перевод {key!r} слишком длинный (не больше {limit} символов)",
+    "The demo database cannot be changed; an admin can hide it":
+        "Демо-базу нельзя изменить; администратор может её скрыть",
+    "The demo database is turned off on the server (NCODE_DEMO)": "Демо-база выключена на сервере (NCODE_DEMO)",
     # ---------------------------------------------------------------- app/models.py
     "phrase must not be empty": "фраза не должна быть пустой",
     "must not be empty": "не должно быть пустым",

@@ -1,6 +1,7 @@
 /** Dashboards (mirrors backend/app/content/dashboards.py and dashboard_routes.py). */
 import type { ParameterDef } from '../library/params.ts';
 import type { VizState } from '../viz/state.ts';
+import type { Verified } from '../library/verified.ts';
 import { t } from '../i18n/index.ts';
 
 export type FilterType = 'date_range' | 'date' | 'text' | 'category' | 'number';
@@ -40,6 +41,8 @@ export interface CardQuestion {
   viz?: VizState | null;
   tables?: string[];
   fields?: { name: string; type: string }[]; // multi-source questions: the combined columns
+  description?: string | null; // the card's caption is built from these (M11)
+  spec?: Record<string, unknown> | null; // builder questions only
 }
 
 export interface DashCard {
@@ -80,6 +83,7 @@ export interface DashboardSummary {
   created_at: number;
   updated_at: number;
   updated_by: string | null;
+  verified?: Verified | null; // an admin marked it as the official one (M11)
 }
 
 export interface Dashboard extends DashboardSummary, Definition {

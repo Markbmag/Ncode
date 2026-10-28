@@ -17,6 +17,7 @@ import { encodingLabel } from '../federation/labels';
 import type { Dataset } from '../federation/types';
 import { UploadDialog } from '../federation/UploadDialog';
 import { LoadError } from '../components/LoadError';
+import { InlineHint } from '../components/InlineHint';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -61,10 +62,27 @@ export default function DatasetsPage() {
             <LoadError compact error={list.error} title={t('Could not load the files')} onRetry={() => void list.refetch()} />
           </Box>
         )}
-        {list.data?.length === 0 && (
+        {list.data?.length === 0 && text.trim() !== '' && (
           <Text fontSize="sm" color="faintText" px={3} py={4}>
-            {text.trim() ? t('Nothing found.') : t('No files yet. Upload a CSV or Excel file, then combine it with a database in “Combine”.')}
+            {t('Nothing found.')}
           </Text>
+        )}
+        {list.data?.length === 0 && text.trim() === '' && (
+          <InlineHint
+            icon={<UploadIcon boxSize={4} />}
+            example={t('a spreadsheet of planned quantities per part, compared with what the database says was built.')}
+            action={
+              enabled ? (
+                <Button size="sm" variant="brand" leftIcon={<UploadIcon boxSize={4} />} onClick={upload.onOpen}>
+                  {t('Upload a file')}
+                </Button>
+              ) : undefined
+            }
+          >
+            {enabled
+              ? t('No files yet. Upload a CSV or Excel file: it becomes a table you can ask questions about and combine with a database.')
+              : t('Uploads are turned off on this server')}
+          </InlineHint>
         )}
         {list.data?.map((d) => (
           <DatasetRow key={d.id} d={d} showCollection />

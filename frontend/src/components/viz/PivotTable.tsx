@@ -3,6 +3,7 @@ import { pivot } from '../../viz/data';
 import type { Table } from '../../viz/data';
 import { formatCell, formatNumber } from '../../viz/format';
 import type { VizSpec } from '../../viz/types';
+import { titleOf } from '../../viz/labels';
 import { t } from '../../i18n/index.ts';
 
 const MAX_COLS = 60;
@@ -32,7 +33,7 @@ export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
       <CTable size="sm" sx={{ fontVariantNumeric: 'tabular-nums' }}>
         <Thead position="sticky" top={0} bg="chipBg" zIndex={1}>
           <Tr>
-            <Th>{spec.rows.join(' · ') || ''}</Th>
+            <Th>{spec.rows.map((r) => titleOf(table.columns, r)).join(' · ') || ''}</Th>
             {cols.map((ck, c) =>
               spec.values.map((_v, k) => (
                 <Th key={`${c}-${k}`} isNumeric>

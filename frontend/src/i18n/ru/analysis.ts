@@ -266,4 +266,9 @@ export const ANALYSIS: Record<string, string> = {
   'Every row counts.': 'Учитываются все строки.',
   'How it is defined, who owns it': 'Как она определяется, кто за неё отвечает',
   'separator::Tab': 'Табуляция',
+  // M11: home page, menu, share dialog, empty states
+  'Add the first source': 'Добавить первый источник',
+  'planned quantities from an uploaded spreadsheet next to the built quantities from a database, matched by part number.': 'плановые количества из загруженной таблицы рядом с фактическим выпуском из базы данных, сопоставленные по номеру детали.',
+  'No files yet. Upload a CSV or Excel file: it becomes a table you can ask questions about and combine with a database.': 'Файлов пока нет. Загрузите файл CSV или Excel — он станет таблицей, к которой можно задавать вопросы и объединять с базой данных.',
+  'a spreadsheet of planned quantities per part, compared with what the database says was built.': 'таблица с планом по деталям, которую сравнивают с фактическим выпуском из базы данных.',
 };

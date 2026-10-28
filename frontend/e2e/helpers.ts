@@ -2,12 +2,12 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 export const API = 'http://127.0.0.1:8765';
 
-export const USERS = {
+export const USERS: Record<string, string> = {
   admin: 'admin-pass-1',
   carol: 'carol-pass-1',
   alice: 'alice-pass-1',
-} as const;
-export type Who = keyof typeof USERS;
+};
+export type Who = string;
 
 /** A session token from the API (faster than the sign-in form, which has its own test). */
 export async function token(request: APIRequestContext, who: Who): Promise<string> {
@@ -16,16 +16,20 @@ export async function token(request: APIRequestContext, who: Who): Promise<strin
   return (await res.json()).token as string;
 }
 
-/** Opens `path` signed in as `who`, in English unless `lang` says otherwise. */
-export async function signIn(page: Page, who: Who, path = '/', lang: 'en' | 'ru' = 'en'): Promise<string> {
+/**
+ * Opens `path` signed in as `who`, in English unless `lang` says otherwise, with the Shop test
+ * database selected (the Factory demo also exists; `database: null` keeps the app's own choice).
+ */
+export async function signIn(page: Page, who: Who, path = '/', lang: 'en' | 'ru' = 'en', database: string | null = 'shop'): Promise<string> {
   const t = await token(page.request, who);
-  await page.addInitScript(([value, language]) => {
+  await page.addInitScript(([value, language, db]) => {
     // only on the first load: the app itself may change these later (language switch, sign-out)
     if (sessionStorage.getItem('e2e_init')) return;
     sessionStorage.setItem('e2e_init', '1');
     localStorage.setItem('ncode_token', value);
     localStorage.setItem('ncode_lang', language);
-  }, [t, lang]);
+    if (db) localStorage.setItem('ncode_active', JSON.stringify(db));
+  }, [t, lang, database] as const);
   await page.goto(path);
   return t;
 }
@@ -58,3 +62,11 @@ export async function expectNoHorizontalScroll(page: Page): Promise<void> {
 }
 
 export const unique = (prefix: string) => `${prefix} ${Date.now().toString(36)}`;
+
+/** A new user (made by the admin) who has never signed in: the newcomer tests start from zero. */
+export async function newUser(request: APIRequestContext, prefix = 'newcomer'): Promise<string> {
+  const name = `${prefix}${Date.now().toString(36)}`;
+  await api(request, 'admin', 'POST', '/api/admin/users', { username: name, password: 'newcomer-pass-1', role: 'user' });
+  USERS[name] = 'newcomer-pass-1';
+  return name;
+}

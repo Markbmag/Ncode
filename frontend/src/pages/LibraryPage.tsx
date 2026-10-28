@@ -8,12 +8,14 @@ import { Link as RouterLink, NavLink, useNavigate, useParams } from 'react-route
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import { LoadError } from '../components/LoadError';
+import { InlineHint } from '../components/InlineHint';
 import {
   ArchiveIcon, ChartIcon, ChevronRightIcon, CodeIcon, CopyIcon, FolderIcon, LayoutIcon, MergeIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon,
   SearchIcon, StarIcon, TrashIcon, UploadIcon, UsersIcon,
 } from '../icons';
 import { flattenTree, library, useArchive, useCollection, useCollections, useQuestions } from '../library/api';
 import { withBase } from '../library/conflict';
+import { VerifiedBadge, VerifyMenuItem } from '../library/VerifiedBadge';
 import type { CollectionInfo, QuestionKind, QuestionSummary } from '../library/api';
 import { CollectionDialog, ConfirmDialog, MoveDialog, ShareDialog } from '../library/dialogs';
 import { dashboards, useDashboards } from '../dashboards/api';
@@ -169,6 +171,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
           {q.description && ` · ${q.description}`}
         </Text>
       </Box>
+      <VerifiedBadge verified={q.verified} size="xs" />
       {q.imported && <Badge fontSize="2xs">DataDesk</Badge>}
       {q.model && <Badge fontSize="2xs" colorScheme="teal">{t('model')}</Badge>}
       {q.access === 'view' && <Badge fontSize="2xs">{t('view only')}</Badge>}
@@ -186,6 +189,7 @@ function QuestionRow({ q, showCollection = false }: { q: QuestionSummary; showCo
           <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/questions/${(await library.duplicate(q.id)).id}`))}>
             {t('Duplicate')}
           </MenuItem>
+          <VerifyMenuItem kind="question" id={q.id} verified={q.verified} />
           {q.access === 'edit' && (
             <>
               <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
@@ -313,7 +317,21 @@ function LibraryHome() {
             />
           </Panel>
           <Panel title={t('Recently changed')}>
-            <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} onRetry={() => void recent.refetch()} empty={t('No saved questions yet. Build one and press Save.')} showCollection />
+            {recent.data?.length === 0 ? (
+              <InlineHint
+                icon={<ChartIcon boxSize={4} />}
+                example={t('“Orders per month”: pick the orders table, count its rows, group them by month, press Save.')}
+                action={
+                  <Button as={RouterLink} to="/questions" size="sm" variant="brand">
+                    {t('New question')}
+                  </Button>
+                }
+              >
+                {t('Nothing is saved yet. Questions you and your team save show up here, newest first.')}
+              </InlineHint>
+            ) : (
+              <QuestionList items={recent.data} loading={recent.isPending} error={recent.error} onRetry={() => void recent.refetch()} empty="" showCollection />
+            )}
           </Panel>
         </>
       )}
@@ -446,7 +464,15 @@ function CollectionView({ id }: { id: number }) {
         </Panel>
       )}
       <Panel title={t('Questions')} actions={c.access === 'edit' ? <NewButtons collection={c.id} /> : undefined}>
-        <QuestionList items={data.questions} loading={false} error={null} empty={c.access === 'edit' ? t('Empty. Save a question into this collection.') : t('Empty.')} />
+        {data.questions.length === 0 && c.access === 'edit' ? (
+          <InlineHint example={t('build a question, press Save and choose “{name}” as its collection.', { name: c.mine ? t('My collection') : c.name })}>
+            {c.mine
+              ? t('Your private place: questions saved here are yours until you move them to a shared collection.')
+              : t('No questions here yet. Questions saved into this collection are seen by everyone who can open it.')}
+          </InlineHint>
+        ) : (
+          <QuestionList items={data.questions} loading={false} error={null} empty={t('Empty.')} />
+        )}
       </Panel>
       {((data.datasets?.length ?? 0) > 0 || c.access === 'edit') && (
         <Panel

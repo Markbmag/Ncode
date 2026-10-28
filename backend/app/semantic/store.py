@@ -3,6 +3,10 @@
 * Column metadata, per connection / table / column: display name, description,
   semantic type (currency, percent, category ...), number/date format, hidden, and
   "parse as date" for text columns that hold dates in several formats.
+* Table metadata (M11): display name and description of a table.
+* Translations (M11) of those names and of metrics, per UI language:
+  {"ru": {"display_name": "...", "description": "..."}} (metrics: "name" / "description").
+  The frontend shows the text in the UI language and falls back to the base text.
 * Manual relationships, for databases without foreign keys: the builder then joins
   and suggests joins as if they were real foreign keys.
 * Metrics: a named aggregation on a table ("Revenue" = sum of total where status is
@@ -27,7 +31,7 @@ from sqlalchemy.engine import Engine
 
 from ..appdb import User
 from ..content.store import ContentError, NotFound
-from ..content.tables import field_metadata_table, metrics_table, relationships_table
+from ..content.tables import field_metadata_table, metrics_table, relationships_table, table_metadata_table
 from ..query.spec import AggregateFn, Expr, FilterGroup, QuerySpec
 
 SemanticType = Literal[
@@ -41,9 +45,63 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class FieldIn(_Model):
+_LANGUAGE = re.compile(r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
+NAME_TEXTS = {"display_name": 200, "description": 5000}  # translatable texts of tables and columns
+METRIC_TEXTS = {"name": 120, "description": 5000}
+
+
+def clean_translations(raw: dict[str, Any] | None, texts: dict[str, int]) -> dict[str, dict[str, str]] | None:
+    """{"ru": {"display_name": " Заказы ", "description": ""}} -> {"ru": {"display_name": "Заказы"}}; None when empty."""
+    if not raw:
+        return None
+    if len(raw) > 10:
+        raise ValueError("too many languages")
+    out: dict[str, dict[str, str]] = {}
+    for language, values in raw.items():
+        if not isinstance(language, str) or not _LANGUAGE.match(language):
+            raise ValueError(f"unknown language {language!r}")
+        if values is None:
+            continue
+        if not isinstance(values, dict):
+            raise ValueError(f"translations for {language!r} must be an object")
+        kept: dict[str, str] = {}
+        for key, value in values.items():
+            if key not in texts:
+                allowed = ", ".join(texts)
+                raise ValueError(f"{key!r} cannot be translated here (only {allowed})")
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise ValueError(f"the translation of {key!r} must be text")
+            limit = texts[key]
+            if len(value) > limit:
+                raise ValueError(f"the translation of {key!r} is too long (at most {limit} characters)")
+            if value.strip():
+                kept[key] = value.strip()
+        if kept:
+            out[language] = kept
+    return out or None
+
+
+class _Named(_Model):
+    """Display name, description and their translations (tables and columns)."""
+
     display_name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
+    translations: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _translations(self) -> "_Named":
+        self.translations = clean_translations(self.translations, NAME_TEXTS)
+        return self
+
+
+class TableIn(_Named):
+    def empty(self) -> bool:
+        return not (self.display_name or "").strip() and not (self.description or "").strip() and not self.translations
+
+
+class FieldIn(_Named):
     semantic_type: SemanticType | None = None
     format: dict[str, Any] | None = None
     hidden: bool = False
@@ -98,6 +156,12 @@ class MetricIn(_Model):
     table: str = Field(min_length=1, max_length=255)
     definition: MetricDefinition
     format: dict[str, Any] | None = None
+    translations: dict[str, Any] | None = None  # {"ru": {"name", "description"}}
+
+    @model_validator(mode="after")
+    def _translations(self) -> "MetricIn":
+        self.translations = clean_translations(self.translations, METRIC_TEXTS)
+        return self
 
 
 @dataclass
@@ -112,6 +176,7 @@ class Metric:
     archived: bool
     updated_at: float
     updated_by: str | None
+    translations: dict[str, Any] | None = None
 
     @property
     def slug(self) -> str:
@@ -122,12 +187,14 @@ class Metric:
             "id": self.id, "name": self.name, "description": self.description, "connection": self.connection,
             "table": self.table, "definition": self.definition, "format": self.format, "archived": self.archived,
             "slug": self.slug, "updated_at": self.updated_at, "updated_by": self.updated_by,
+            "translations": self.translations,
         }
 
 
 @dataclass
 class _Cache:
     fields: dict[str, dict[str, dict[str, dict[str, Any]]]] = field(default_factory=dict)  # conn -> table -> column -> meta
+    tables: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)  # conn -> table -> meta
     rels: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     metrics: dict[int, Metric] = field(default_factory=dict)
 
@@ -157,6 +224,11 @@ class SemanticStore:
                 cache.fields.setdefault(r.connection, {}).setdefault(r.table_name, {})[r.column_name] = {
                     "display_name": r.display_name, "description": r.description, "semantic_type": r.semantic_type,
                     "format": _loads(r.format, None), "hidden": bool(r.hidden), "parse_as_date": bool(r.parse_as_date),
+                    "translations": _loads(r.translations, None),
+                }
+            for r in conn.execute(select(table_metadata_table)).all():
+                cache.tables.setdefault(r.connection, {})[r.table_name] = {
+                    "display_name": r.display_name, "description": r.description, "translations": _loads(r.translations, None),
                 }
             for r in conn.execute(select(relationships_table).order_by(relationships_table.c.id)).all():
                 cache.rels.setdefault(r.connection, []).append({
@@ -166,7 +238,7 @@ class SemanticStore:
             for r in conn.execute(select(metrics_table).order_by(metrics_table.c.name)).all():
                 cache.metrics[r.id] = Metric(
                     r.id, r.name, r.description, r.connection, r.table_name, _loads(r.definition, {}),
-                    _loads(r.format, None), bool(r.archived), r.updated_at, r.updated_by,
+                    _loads(r.format, None), bool(r.archived), r.updated_at, r.updated_by, _loads(r.translations, None),
                 )
         with self._lock:
             self._cache = cache
@@ -175,6 +247,26 @@ class SemanticStore:
     def _changed(self) -> None:
         with self._lock:
             self._cache = None
+
+    # ------------------------------------------------------------------ tables
+    def tables(self, connection: str) -> dict[str, dict[str, Any]]:
+        """{table: {"display_name", "description", "translations"}} of the tables that have any."""
+        return self._data().tables.get(connection, {})
+
+    def set_table(self, user: User, connection: str, table: str, values: TableIn) -> dict[str, Any] | None:
+        where = (table_metadata_table.c.connection == connection) & (table_metadata_table.c.table_name == table)
+        with self.engine.begin() as conn:
+            conn.execute(delete(table_metadata_table).where(where))
+            if not values.empty():
+                conn.execute(insert(table_metadata_table).values(
+                    connection=connection, table_name=table,
+                    display_name=(values.display_name or "").strip() or None,
+                    description=(values.description or "").strip() or None,
+                    translations=json.dumps(values.translations, ensure_ascii=False) if values.translations else None,
+                    updated_at=time.time(), updated_by=user.username,
+                ))
+        self._changed()
+        return self.tables(connection).get(table)
 
     # ------------------------------------------------------------------ columns
     def fields(self, connection: str) -> dict[str, dict[str, dict[str, Any]]]:
@@ -195,6 +287,7 @@ class SemanticStore:
                     description=(values.description or "").strip() or None,
                     semantic_type=values.semantic_type, format=json.dumps(values.format) if values.format else None,
                     hidden=values.hidden, parse_as_date=values.parse_as_date,
+                    translations=json.dumps(values.translations, ensure_ascii=False) if values.translations else None,
                     updated_at=time.time(), updated_by=user.username,
                 ))
         self._changed()
@@ -251,6 +344,7 @@ class SemanticStore:
             name=body.name.strip(), description=(body.description or "").strip() or None, connection=body.connection,
             table_name=body.table, definition=json.dumps(body.definition.model_dump(mode="json", by_alias=True, exclude_none=True)),
             format=json.dumps(body.format) if body.format else None, updated_at=time.time(), updated_by=user.username,
+            translations=json.dumps(body.translations, ensure_ascii=False) if body.translations else None,
         )
         with self.engine.begin() as conn:
             if mid is None:

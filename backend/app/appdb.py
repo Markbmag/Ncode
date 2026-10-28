@@ -198,6 +198,8 @@ class AppDB:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.cipher = cipher
+        # Connections everyone may use whatever their own or their groups' list says (the demo, M11)
+        self.open_connections: set[str] = set()
         self.engine = create_engine(
             URL.create("sqlite", database=str(path)), connect_args={"timeout": 15}
         )
@@ -256,6 +258,8 @@ class AppDB:
                     conns = None
                     break
                 conns.update(allowed)
+            if conns is not None:
+                conns |= self.open_connections
             out.append(replace(
                 u, group_ids=tuple(sorted(r.id for r in mine)),
                 group_connections=None if conns is None else tuple(sorted(conns)),

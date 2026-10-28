@@ -9,11 +9,13 @@ import { PageHeader } from '../components/PageHeader';
 import { ArchiveIcon, CopyIcon, FolderIcon, LayoutIcon, MoreIcon, PlusIcon, SearchIcon, StarIcon } from '../icons';
 import { useCollections } from '../library/api';
 import { CollectionPicker, DialogShell, MoveDialog } from '../library/dialogs';
+import { VerifiedBadge, VerifyMenuItem } from '../library/VerifiedBadge';
 import { dashboards, useDashboards } from '../dashboards/api';
 import type { DashboardSummary } from '../dashboards/types';
 import { localDateText } from '../viz/format';
 import { t } from '../i18n/index.ts';
 import { LoadError } from '../components/LoadError';
+import { InlineHint } from '../components/InlineHint';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -62,7 +64,20 @@ export default function DashboardsPage() {
             <LoadError compact error={all.error} title={t('Could not load the dashboards')} onRetry={() => void all.refetch()} />
           </Box>
         )}
-        {all.data?.length === 0 && <Empty>{query ? t('Nothing found.') : t('No dashboards yet. Create one, then add saved questions to it.')}</Empty>}
+        {all.data?.length === 0 && query && <Empty>{t('Nothing found.')}</Empty>}
+        {all.data?.length === 0 && !query && (
+          <InlineHint
+            icon={<LayoutIcon boxSize={4} />}
+            example={t('“Line output this week”: three saved questions side by side, with one date filter on top.')}
+            action={
+              <Button size="sm" variant="brand" leftIcon={<PlusIcon boxSize={4} />} onClick={create.onOpen}>
+                {t('New dashboard')}
+              </Button>
+            }
+          >
+            {t('No dashboards yet. A dashboard puts saved questions on one page that everyone reads the same way.')}
+          </InlineHint>
+        )}
         {all.data?.map((d) => (
           <DashboardRow key={d.id} d={d} showCollection />
         ))}
@@ -116,6 +131,7 @@ export function DashboardRow({ d, showCollection = false }: { d: DashboardSummar
           {d.description && ` · ${d.description}`}
         </Text>
       </Box>
+      <VerifiedBadge verified={d.verified} size="xs" />
       {d.imported && <Badge fontSize="2xs">DataDesk</Badge>}
       {d.access === 'view' && <Badge fontSize="2xs">{t('view only')}</Badge>}
       <IconButton
@@ -132,6 +148,7 @@ export function DashboardRow({ d, showCollection = false }: { d: DashboardSummar
           <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/dashboards/${(await dashboards.duplicate(d.id)).id}`))}>
             {t('Duplicate')}
           </MenuItem>
+          <VerifyMenuItem kind="dashboard" id={d.id} verified={d.verified} />
           {d.access === 'edit' && (
             <>
               <MenuItem icon={<FolderIcon boxSize={4} />} onClick={move.onOpen}>
