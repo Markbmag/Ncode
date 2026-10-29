@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { Box, Flex, HStack, IconButton, Skeleton, VStack } from '@chakra-ui/react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { ColorModeButton, Logo, NavLinks, Sidebar } from '../components/Sidebar';
+import { ColorModeButton, DatabaseSwitcher, Logo, NavLinks, Sidebar } from '../components/Sidebar';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { LogOutIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -50,6 +50,17 @@ export default function AppShell() {
               <IconButton aria-label={t('Sign out')} size="sm" icon={<LogOutIcon boxSize={4} />} onClick={ws.onLogout} />
             </HStack>
           </Flex>
+          <Box px={3} pb={2}>
+            <DatabaseSwitcher
+              connections={ws.connections}
+              activeKey={ws.activeKey}
+              onSelect={ws.selectConnection}
+              isAdmin={ws.isAdmin}
+              onAdd={ws.openAddConnection}
+              onEdit={ws.openEditConnection}
+              collapsed={false}
+            />
+          </Box>
           <Box px={2} pb={2}>
             <NavLinks isAdmin={ws.isAdmin} compact />
           </Box>
@@ -61,6 +72,7 @@ export default function AppShell() {
           px={wide ? { base: 3, md: 4 } : fullWidth ? { base: 3, md: 6 } : { base: 4, md: 8 }}
           py={wide ? 3 : { base: 5, md: 8 }}
           h={wide ? { base: 'auto', md: '100vh' } : undefined}
+          sx={wide ? { '@media (min-width: 48em)': { '@supports (height: 100dvh)': { height: '100dvh' } } } : undefined}
         >
           <Suspense fallback={<PageFallback />}>
             <Outlet />

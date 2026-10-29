@@ -319,3 +319,10 @@ export const BadgeCheckIcon = make(
     <path d="m9 12 2 2 4-4" />
   </>,
 );
+
+export const PanelLeftIcon = make(
+  <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M9 3v18" />
+  </>,
+);

@@ -321,4 +321,10 @@ export const SHELL: Record<string, string> = {
   // M11: the demo database
   'Factory demo': 'Демо: завод',
   'Sample data to try things out': 'Пример данных, чтобы всё попробовать',
+  'Show the menu with names': 'Показать меню с названиями',
+  'Make the menu narrow': 'Сделать меню узким',
+  'Database: {name}': 'База данных: {name}',
+  'Change the database the pages work on': 'Сменить базу данных, с которой работают страницы',
+  'Databases you can use': 'Доступные вам базы данных',
+  'Pick a database': 'Выберите базу данных',
 };

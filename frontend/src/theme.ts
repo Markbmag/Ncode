@@ -42,6 +42,8 @@ export const theme = extendTheme({
       faintText: { default: '#8a91ad', _dark: '#6b7494' },
       matchBg: { default: '#fde68a', _dark: 'rgba(250, 204, 21, 0.26)' },
       matchText: { default: '#1b2036', _dark: '#fef3c7' },
+      scrollThumb: { default: 'rgba(27, 32, 54, 0.22)', _dark: 'rgba(230, 233, 245, 0.16)' },
+      scrollThumbHover: { default: 'rgba(27, 32, 54, 0.38)', _dark: 'rgba(230, 233, 245, 0.30)' },
     },
   },
   styles: {
@@ -49,6 +51,20 @@ export const theme = extendTheme({
       'html, body, #root': { height: '100%' },
       body: { bg: 'appBg', color: 'bodyText', fontFeatureSettings: "'cv11', 'ss01'", WebkitFontSmoothing: 'antialiased' },
       '::selection': { background: 'rgba(99, 102, 241, 0.35)' },
+      // native controls (date pickers, scrollbars) follow the theme
+      '.chakra-ui-dark': { colorScheme: 'dark' },
+      '.chakra-ui-light': { colorScheme: 'light' },
+      // thin scrollbars in the theme's colours instead of the system's grey bars
+      '*': { scrollbarWidth: 'thin', scrollbarColor: 'var(--chakra-colors-scrollThumb) transparent' },
+      '*::-webkit-scrollbar': { width: '10px', height: '10px' },
+      '*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner': { background: 'transparent' },
+      '*::-webkit-scrollbar-thumb': {
+        backgroundColor: 'var(--chakra-colors-scrollThumb)',
+        borderRadius: '10px',
+        border: '2px solid transparent',
+        backgroundClip: 'content-box',
+      },
+      '*::-webkit-scrollbar-thumb:hover': { backgroundColor: 'var(--chakra-colors-scrollThumbHover)' },
     },
   },
   components: {
