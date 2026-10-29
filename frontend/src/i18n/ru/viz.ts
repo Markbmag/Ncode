@@ -202,4 +202,6 @@ export const VIZ: Record<string, string> = {
   "yes / no": "да / нет",
   "file data": "двоичные данные",
   "unknown type": "неизвестный тип",
+  'Customize': 'Настроить',
+  'Colours, labels, axes, legend, goal line, number format': 'Цвета, подписи, оси, легенда, линия цели, формат чисел',
 };

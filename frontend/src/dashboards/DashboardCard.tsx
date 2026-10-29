@@ -1,12 +1,15 @@
 import { useContext, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, Tooltip, useColorMode, useToast,
+  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton,
+  Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, Tooltip, useColorMode, useToast,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { apiErrorMessageAsync, http } from '../api';
 import { Visualization } from '../components/viz/Visualization';
+import { VizSettings } from '../components/viz/VizSettings';
+import { seriesData } from '../viz/data';
 import type { EChartHandle } from '../components/viz/EChart';
-import { AlertIcon, ChartIcon, CodeIcon, DownloadIcon, MoreIcon, PencilIcon, RefreshIcon, TableIcon, XIcon } from '../icons';
+import { AlertIcon, ChartIcon, CodeIcon, DownloadIcon, MoreIcon, PencilIcon, RefreshIcon, SettingsIcon, TableIcon, XIcon } from '../icons';
 import { buildCsvFromArrays, downloadText, safeFilename, saveBlob } from '../lib/csv';
 import { chartTheme } from '../viz/palette';
 import { DEFAULT_VIZ, effectiveViz } from '../viz/state';
@@ -141,6 +144,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const toast = useToast();
   const { colorMode } = useColorMode();
   const chartRef = useRef<EChartHandle | null>(null);
+  const [styling, setStyling] = useState(false);
   const vizState = card.viz ?? q?.viz ?? DEFAULT_VIZ;
   // readable column names and the caption, from the question (public links have no spec: plain names)
   const named = useQuestionCaption(q && runnable ? q : null, !endpoints);
@@ -241,6 +245,10 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   else body = <Visualization result={result} viz={spec} chartRef={chartRef} />;
 
   const flipViz = () => onChange?.({ ...card, viz: { mode: vizState.mode === 'table' ? 'chart' : 'table', spec: vizState.spec } });
+  // how this card looks on this dashboard (the question itself keeps its own chart)
+  const styleChart = (next: VizSpec) => onChange?.({ ...card, viz: { mode: 'chart', spec: next } });
+  const chartSpec = spec && spec.type !== 'table' ? spec : null;
+  const seriesNames = result && chartSpec ? (chartSpec.breakout ? seriesData(result, chartSpec).series.map((s) => s.name) : (chartSpec.series ?? []).map((s) => s.y)) : [];
 
   return (
     <Frame
@@ -256,6 +264,11 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
             <Tooltip label={vizState.mode === 'table' ? t('Show as chart') : t('Show as table')} hasArrow>
               <IconButton aria-label={t('Table or chart')} size="xs" variant="ghost" className="no-drag" icon={vizState.mode === 'table' ? <ChartIcon boxSize={3} /> : <TableIcon boxSize={3} />} onClick={flipViz} />
             </Tooltip>
+            {chartSpec && (
+              <Tooltip label={t('Change how this chart looks on the dashboard')} hasArrow>
+                <IconButton aria-label={t('Change how this chart looks on the dashboard')} size="xs" variant="ghost" className="no-drag" icon={<SettingsIcon boxSize={3} />} onClick={() => setStyling(true)} data-testid="card-chart-settings" />
+              </Tooltip>
+            )}
           </HStack>
         ) : (
           status
@@ -266,6 +279,23 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
       <Box h="100%" pointerEvents={editing ? 'none' : undefined}>
         {body}
       </Box>
+      {styling && result && chartSpec && (
+        <Drawer isOpen onClose={() => setStyling(false)} placement="right" size="sm">
+          <DrawerOverlay bg="blackAlpha.300" />
+          <DrawerContent>
+            <DrawerCloseButton />
+            <DrawerHeader fontSize="md">
+              {t('Chart settings')}
+              <Text fontSize="xs" color="mutedText" fontWeight={400} mt={1}>
+                {t('For this card on this dashboard; the saved question keeps its own chart.')}
+              </Text>
+            </DrawerHeader>
+            <DrawerBody pb={8}>
+              <VizSettings spec={chartSpec} columns={result.columns} onChange={styleChart} seriesNames={seriesNames} />
+            </DrawerBody>
+          </DrawerContent>
+        </Drawer>
+      )}
     </Frame>
   );
 }

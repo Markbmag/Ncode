@@ -133,8 +133,10 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
                 ))}
               </Select>
             </Tooltip>
-            <Tooltip label={t('Chart settings')} hasArrow>
-              <IconButton size="xs" variant="subtle" aria-label={t('Chart settings')} icon={<SettingsIcon boxSize={3.5} />} onClick={settings.onOpen} data-testid="chart-settings" />
+            <Tooltip label={t('Colours, labels, axes, legend, goal line, number format')} hasArrow openDelay={400}>
+              <Button size="xs" variant="subtle" leftIcon={<SettingsIcon boxSize={3.5} />} onClick={settings.onOpen} data-testid="chart-settings">
+                {t('Customize')}
+              </Button>
             </Tooltip>
             {!effective?.auto && (
               <Tooltip label={t('Back to the automatic chart')} hasArrow>

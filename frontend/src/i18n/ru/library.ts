@@ -336,4 +336,6 @@ export const LIBRARY: Record<string, string> = {
   'No dashboards yet. A dashboard puts saved questions on one page that everyone reads the same way.': 'Дашбордов пока нет. Дашборд собирает сохранённые вопросы на одной странице, которую все читают одинаково.',
   '“Line output this week”: three saved questions side by side, with one date filter on top.': '«Выпуск линий за неделю»: три сохранённых вопроса рядом и один фильтр по дате сверху.',
   'To move it, make a new collection: choose “A new collection…”.': 'Чтобы переместить, создайте новую коллекцию: выберите «Новая коллекция…».',
+  'Change how this chart looks on the dashboard': 'Изменить вид графика на этом дашборде',
+  'For this card on this dashboard; the saved question keeps its own chart.': 'Для этой карточки на этом дашборде; у сохранённого вопроса остаётся свой график.',
 };
