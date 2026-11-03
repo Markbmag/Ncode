@@ -46,7 +46,7 @@ test('a word with a context has its own Russian, falling back to the plain word'
 
 test('areas agree on the Russian of a shared text', async () => {
   const seen = new Map<string, [string, string]>();
-  for (const area of ['shell', 'query', 'viz', 'library', 'analysis', 'automation', 'admin']) {
+  for (const area of ['shell', 'query', 'viz', 'library', 'analysis', 'automation', 'admin', 'kanban']) {
     const mod = (await import(`../src/i18n/ru/${area}.ts`)) as Record<string, Record<string, string>>;
     for (const [en, ru] of Object.entries(Object.values(mod)[0])) {
       const before = seen.get(en);

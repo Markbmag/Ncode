@@ -44,6 +44,18 @@ export const theme = extendTheme({
       matchText: { default: '#1b2036', _dark: '#fef3c7' },
       scrollThumb: { default: 'rgba(27, 32, 54, 0.22)', _dark: 'rgba(230, 233, 245, 0.16)' },
       scrollThumbHover: { default: 'rgba(27, 32, 54, 0.38)', _dark: 'rgba(230, 233, 245, 0.30)' },
+      // Ncode - Kanban (K1): columns, cards and the board's backdrop
+      boardBg: { default: '#eef0f7', _dark: '#0b1122' },
+      columnBg: { default: '#e5e8f2', _dark: 'rgba(255, 255, 255, 0.035)' },
+      cardBg: { default: '#ffffff', _dark: '#17203a' },
+      cardHoverBg: { default: '#fbfbff', _dark: '#1c2747' },
+      dropBg: { default: 'rgba(99, 102, 241, 0.10)', _dark: 'rgba(129, 140, 248, 0.12)' },
+    },
+    shadows: {
+      card: { default: '0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10)', _dark: '0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05)' },
+      cardHover: { default: '0 6px 16px -6px rgba(16, 24, 40, 0.22), 0 2px 4px rgba(16, 24, 40, 0.06)', _dark: '0 8px 20px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)' },
+      cardDrag: { default: '0 22px 40px -12px rgba(16, 24, 40, 0.38), 0 0 0 1px rgba(99, 102, 241, 0.35)', _dark: '0 24px 44px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(129, 140, 248, 0.5)' },
+      tile: { default: '0 18px 44px -22px rgba(79, 70, 229, 0.45)', _dark: '0 24px 60px -24px rgba(0, 0, 0, 0.8)' },
     },
   },
   styles: {

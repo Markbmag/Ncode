@@ -459,7 +459,7 @@ def register_kanban_routes(
                         break
                     receiver = asyncio.ensure_future(websocket.receive())  # client messages are not used
                 tasks = [receiver, getter]
-        except WebSocketDisconnect:
+        except (WebSocketDisconnect, OSError):  # the tab was closed (uvicorn's ClientDisconnected is an OSError)
             pass
         finally:
             for t in tasks:
@@ -468,8 +468,8 @@ def register_kanban_routes(
                 events.unsubscribe(board_id, queue)
             try:
                 await websocket.close()
-            except RuntimeError:
-                pass  # already closed
+            except (RuntimeError, WebSocketDisconnect, OSError):
+                pass  # already closed, or the other side is gone
 
     app.state.kanban = store
     return store

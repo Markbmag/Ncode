@@ -5,6 +5,7 @@ import { ColorModeButton, DatabaseSwitcher, Logo, NavLinks, Sidebar } from '../c
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { LogOutIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { ServiceSwitcher } from '../launcher/ServiceSwitcher';
 import { t } from '../i18n/index.ts';
 
 function PageFallback() {
@@ -45,6 +46,7 @@ export default function AppShell() {
           <Flex align="center" justify="space-between" px={4} py={3}>
             <Logo />
             <HStack>
+              <ServiceSwitcher placement="bottom-end" />
               <LanguageSwitch />
               <ColorModeButton />
               <IconButton aria-label={t('Sign out')} size="sm" icon={<LogOutIcon boxSize={4} />} onClick={ws.onLogout} />

@@ -1,6 +1,9 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppShell from './shell/AppShell';
+import { HomeEntry } from './launcher/HomeEntry';
+import { PageSpinner } from './launcher/PageSpinner';
+import { LAUNCHER_PATH } from './launcher/service';
 
 // Each section is its own chunk: heavy editors and charts (M2, M3) only load when opened.
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -19,11 +22,16 @@ const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const ChartGalleryPage = lazy(() => import('./pages/ChartGalleryPage'));
 const GlossaryPage = lazy(() => import('./pages/GlossaryPage'));
+// The launcher (Search & BI or Kanban; outside the BI menu) and Ncode - Kanban, a separate service with its own frame (K1).
+const LauncherPage = lazy(() => import('./launcher/LauncherPage'));
+const KanbanApp = lazy(() => import('./kanban/KanbanApp'));
 
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<AppShell />}>
+      <Route path={LAUNCHER_PATH} element={<Suspense fallback={<PageSpinner />}><LauncherPage /></Suspense>} />
+      <Route path="kanban/*" element={<Suspense fallback={<PageSpinner />}><KanbanApp /></Suspense>} />
+      <Route element={<HomeEntry><AppShell /></HomeEntry>}>
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="browse" element={<BrowsePage />} />

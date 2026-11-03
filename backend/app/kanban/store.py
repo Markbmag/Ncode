@@ -252,7 +252,16 @@ class KanbanStore:
             .group_by(cards_table.c.board_id, columns_table.c.is_done)
         ):
             counts[(r[0], bool(r[1]))] = r[2]
-        names = _names(conn, [r.owner_id for r in rows])
+        # who is on each board, in words on the boards page ("carol, alice and 2 others")
+        member_rows = conn.execute(select(m.c.board_id, m.c.user_id, m.c.group_id).where(m.c.board_id.in_(ids))).all()
+        names = _names(conn, [r.owner_id for r in rows] + [r.user_id for r in member_rows if r.user_id is not None])
+        group_names = {g.id: g.name for g in conn.execute(select(groups_table.c.id, groups_table.c.name).where(
+            groups_table.c.id.in_({r.group_id for r in member_rows if r.group_id is not None})))}
+        member_names: dict[int, list[str]] = {}
+        for r in member_rows:
+            label = names.get(r.user_id) if r.user_id is not None else group_names.get(r.group_id)
+            if label:
+                member_names.setdefault(r.board_id, []).append(label)
         out = []
         for r in rows:
             acc = Access(r, roles.get(r.id), user.is_admin)
@@ -261,6 +270,7 @@ class KanbanStore:
                 "owner": names.get(r.owner_id), "owner_id": r.owner_id if r.owner_id >= 0 else None,
                 "role": acc.role, "can_edit": acc.can_edit, "can_manage": acc.can_manage,
                 "members_count": members.get(r.id, 0),
+                "member_names": sorted(member_names.get(r.id, []), key=str.lower)[:6],
                 "cards_open": counts.get((r.id, False), 0), "cards_done": counts.get((r.id, True), 0),
                 "created_at": r.created_at, "updated_at": r.updated_at, "updated_by": r.updated_by,
                 "archived": bool(r.archived),

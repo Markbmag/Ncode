@@ -10,6 +10,7 @@ test('signing in: a wrong password is explained, the right one opens the home pa
   await expect(page.getByText(/wrong|incorrect|invalid/i).first()).toBeVisible();
   await page.getByLabel('Password').fill('carol-pass-1');
   await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByTestId('launch-bi').click(); // the launcher: Search & BI or Kanban (K1)
   await expect(page.getByRole('heading', { name: /Hello, carol/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
