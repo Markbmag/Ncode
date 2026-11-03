@@ -1,15 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement,
-  Select, Skeleton, Text, Textarea, VStack,
+  Badge, Box, Button, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement,
+  Select, Skeleton, Text, Textarea, Tooltip, VStack,
 } from '@chakra-ui/react';
+import { useQueries } from '@tanstack/react-query';
+import { http } from '../api';
+import type { SchemaV2 } from '../api';
+import { queryKeys } from '../lib/queryClient';
+import type { SchemaInfo } from '../query/draft';
 import { ChartIcon, CodeIcon, LinkIcon, SearchIcon, XIcon } from '../icons';
 import { useQuestions } from '../library/api';
 import type { QuestionSummary } from '../library/api';
 import { DialogShell } from '../library/dialogs';
 import { humanize } from '../query/draft';
 import { useSchema } from '../query/useSchema';
-import { filterId, fittingParams, suggestMapping } from './logic';
+import { connectFilter } from './connect';
+import { filterId, fittingParams } from './logic';
 import { Markdown } from './Markdown';
 import { FILTER_TYPES } from './types';
 import type { DashCard, DashFilter, FilterType, Mapping } from './types';
@@ -144,39 +150,76 @@ export function FiltersDialog(props: FiltersDialogProps) {
   return props.isOpen ? <FiltersForm {...props} /> : null;
 }
 
+/** The schemas of the cards' databases: which columns a filter can connect to (M12). */
+function useCardSchemas(cards: DashCard[]): (connection: string) => SchemaInfo | null {
+  const connections = [...new Set(cards.filter((c) => c.question?.kind === 'builder' && c.question.connection).map((c) => c.question!.connection!))];
+  const results = useQueries({
+    queries: connections.map((connection) => ({
+      queryKey: queryKeys.schema(connection),
+      queryFn: async () => (await http.get<SchemaV2>(`/api/connections/${connection}/schema`)).data,
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const loaded = results.map((r) => r.data?.connection ?? '').join('|');
+  return useMemo(() => {
+    const by = new Map(results.filter((r) => r.data).map((r) => [r.data!.connection, { tables: r.data!.tables, relationships: r.data!.relationships }]));
+    return (connection: string) => by.get(connection) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+}
+
 function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, onSave }: FiltersDialogProps) {
   const [filters, setFilters] = useState<DashFilter[]>(initialFilters);
   const [cards, setCards] = useState<DashCard[]>(initialCards);
   const [selected, setSelected] = useState<string | null>(initialFilters[0]?.id ?? null);
+  // M12: a filter added here connects itself to the cards; the cards connected by hand stay as they are
+  const [byHand, setByHand] = useState<Record<string, string[]>>({});
+  const schemaOf = useCardSchemas(initialCards);
   const current = filters.find((f) => f.id === selected) ?? null;
   const questionCards = cards.filter((c) => c.kind === 'question' && c.question && (c.question.state === 'ok' || c.question.state === 'archived'));
+  const isFresh = (id: string) => !initialFilters.some((f) => f.id === id);
+  const autoConnected = (f: DashFilter) => (isFresh(f.id) ? questionCards.filter((c) => c.mappings?.[f.id] && !(byHand[f.id] ?? []).includes(c.key)) : []);
+  const connect = (f: DashFilter, list: DashCard[], keep: string[]) => connectFilter(f, list, schemaOf, (c) => keep.includes(c.key)).cards;
+
+  // the columns of a database arrive after the dialog opened: connect the new filters once they are there
+  useEffect(() => {
+    setCards((list) => filters.filter((f) => isFresh(f.id)).reduce((acc, f) => connect(f, acc, byHand[f.id] ?? []), list));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemaOf]);
 
   const add = (type: FilterType) => {
     const label = FILTER_TYPES.find((ft) => ft.type === type)?.label ?? t('Filter');
     const f: DashFilter = { id: filterId(label, filters.map((x) => x.id)), label, type, default: null, required: false };
     setFilters([...filters, f]);
     setSelected(f.id);
-    // map it where a parameter obviously fits
-    setCards(cards.map((c) => {
-      const m = suggestMapping(f, c.question);
-      return m ? { ...c, mappings: { ...c.mappings, [f.id]: m } } : c;
-    }));
+    // connect it where a parameter or a column obviously fits (a date range: each card's date)
+    setCards(connect(f, cards, []));
   };
   const update = (patch: Partial<DashFilter>) => {
     if (!current) return;
     // a filter added in this dialog takes its id (used in links: ?f.status=...) from its label
-    const fresh = !initialFilters.some((f) => f.id === current.id);
+    const fresh = isFresh(current.id);
     const id = fresh && patch.label !== undefined ? filterId(patch.label, filters.filter((f) => f.id !== current.id).map((f) => f.id)) : current.id;
-    setFilters(filters.map((f) => (f.id === current.id ? { ...f, ...patch, id } : f)));
+    const next = { ...current, ...patch, id };
+    setFilters(filters.map((f) => (f.id === current.id ? next : f)));
+    let list = cards;
     if (id !== current.id) {
-      setCards(cards.map((c) => {
+      list = cards.map((c) => {
         if (!c.mappings?.[current.id]) return c;
         const rest = { ...c.mappings, [id]: c.mappings[current.id] };
         delete rest[current.id];
         return { ...c, mappings: rest };
-      }));
+      });
+      setByHand(({ [current.id]: moved, ...rest }) => (moved ? { ...rest, [id]: moved } : rest));
       setSelected(id);
     }
+    // a new filter named "Line" (or turned into another type) connects to the columns that fit now
+    if (fresh && (patch.label !== undefined || patch.type !== undefined)) list = connect(next, list, byHand[current.id] ?? []);
+    setCards(list);
+  };
+  const connectRest = () => {
+    if (!current) return;
+    setCards(connect(current, cards, cards.filter((c) => c.mappings?.[current.id]).map((c) => c.key)));
   };
   const remove = (id: string) => {
     setFilters(filters.filter((f) => f.id !== id));
@@ -188,8 +231,9 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
     }));
     setSelected(filters.find((f) => f.id !== id)?.id ?? null);
   };
-  const setMapping = (key: string, mapping: Mapping | null) =>
-    current &&
+  const setMapping = (key: string, mapping: Mapping | null) => {
+    if (!current) return;
+    setByHand((all) => ({ ...all, [current.id]: [...new Set([...(all[current.id] ?? []), key])] }));
     setCards(cards.map((c) => {
       if (c.key !== key) return c;
       const rest = { ...c.mappings };
@@ -197,6 +241,7 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
       else delete rest[current.id];
       return { ...c, mappings: rest };
     }));
+  };
 
   return (
     <DialogShell isOpen onClose={onClose} title={t('Dashboard filters')} submitLabel={t('Apply')} size="4xl" onSubmit={async () => onSave(filters, cards)}>
@@ -280,17 +325,44 @@ function FiltersForm({ onClose, filters: initialFilters, cards: initialCards, on
                 <IconButton aria-label={t('Remove filter')} size="sm" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => remove(current.id)} />
               </HStack>
               <Box>
-                <Text fontSize="xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.06em" mb={2}>
-                  {t('Applies to')}
-                </Text>
+                <Flex align="center" justify="space-between" gap={2} mb={2}>
+                  <Text fontSize="xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.06em">
+                    {t('Applies to')}
+                  </Text>
+                  {questionCards.some((c) => !c.mappings?.[current.id]) && (
+                    <Tooltip label={t('Connects the cards that are not connected yet to their obvious column; the others stay as they are.')} hasArrow>
+                      <Button size="xs" variant="ghost" onClick={connectRest} data-testid="connect-rest">
+                        {t('Connect the other cards')}
+                      </Button>
+                    </Tooltip>
+                  )}
+                </Flex>
                 {questionCards.length === 0 && (
                   <Text fontSize="sm" color="faintText">
                     {t('Add question cards first.')}
                   </Text>
                 )}
+                {isFresh(current.id) && questionCards.length > 0 && (
+                  <Text fontSize="xs" color="mutedText" mb={2} data-testid="auto-connected">
+                    {autoConnected(current).length > 0
+                      ? t('Connected by itself to {n} of {total} cards (the matching column of each). Check them and change any below.', {
+                          n: autoConnected(current).length,
+                          total: questionCards.length,
+                        })
+                      : current.type === 'category' || current.type === 'text' || current.type === 'number'
+                        ? t('Name the filter like the column it narrows (e.g. Line) and the cards with that column connect by themselves, or connect them below.')
+                        : t('No card has a column for this filter: connect them below.')}
+                  </Text>
+                )}
                 <VStack align="stretch" spacing={2}>
                   {questionCards.map((c) => (
-                    <MappingRow key={c.key} card={c} filter={current} onChange={(m) => setMapping(c.key, m)} />
+                    <MappingRow
+                      key={c.key}
+                      card={c}
+                      filter={current}
+                      auto={autoConnected(current).some((x) => x.key === c.key)}
+                      onChange={(m) => setMapping(c.key, m)}
+                    />
                   ))}
                 </VStack>
               </Box>
@@ -335,7 +407,7 @@ function DefaultInput({ filter, onChange }: { filter: DashFilter; onChange: (val
   );
 }
 
-function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFilter; onChange: (m: Mapping | null) => void }) {
+function MappingRow({ card, filter, auto = false, onChange }: { card: DashCard; filter: DashFilter; auto?: boolean; onChange: (m: Mapping | null) => void }) {
   const q = card.question!;
   const schema = useSchema(q.kind === 'builder' && q.connection ? q.connection : '');
   const params = fittingParams(filter.type, q);
@@ -360,6 +432,13 @@ function MappingRow({ card, filter, onChange }: { card: DashCard; filter: DashFi
       <Text fontSize="sm" flex={1} noOfLines={1}>
         {card.title || q.name}
       </Text>
+      {auto && (
+        <Tooltip label={t('Connected by itself: the column of the same type and name. Change it if it is not the right one.')} hasArrow>
+          <Badge fontSize="2xs" colorScheme="purple" variant="subtle" textTransform="none" data-testid="mapping-auto">
+            {t('automatic')}
+          </Badge>
+        </Tooltip>
+      )}
       <Select
         size="sm"
         maxW="280px"

@@ -5,7 +5,8 @@
     PUT    /api/semantic/{connection}/tables/{table}             {"display_name", "description", "translations"}
     GET    /api/semantic/{connection}/fields                     column metadata of the connection
     PUT    /api/semantic/{connection}/fields/{table}/{column}    {"display_name", "description", "semantic_type",
-                                                                  "format", "hidden", "parse_as_date", "translations"}
+                                                                  "format", "hidden", "parse_as_date", "translations",
+                                                                  "label_column" (foreign keys: shown instead of the id, M12)}
     GET    /api/semantic/{connection}/relationships              relationships added by hand
     POST   /api/semantic/{connection}/relationships              {"from_table", "from_columns", "to_table", "to_columns"}
     DELETE /api/semantic/{connection}/relationships/{id}
@@ -15,8 +16,9 @@
     PUT    /api/metrics/{id}    PATCH /api/metrics/{id} {"archived": true}
 
 A metric's definition is an aggregation of its table, e.g.
-{"fn": "sum", "ref": "orders.total", "where": {"op": "and", "rules": [{"ref": "orders.status", "op": "=", "value": "paid"}]}};
-questions use it as {"fn": "metric", "metric": <id>}.
+{"fn": "sum", "ref": "orders.total", "where": {"op": "and", "rules": [{"ref": "orders.status", "op": "=", "value": "paid"}]}},
+or one total divided by another (M12): {"fn": "ratio", "numerator": {"fn": "sum", "ref": "scrap_qty"},
+"denominator": {"fn": "sum", "expr": ...}}; questions use it as {"fn": "metric", "metric": <id>}.
 
 Translations: {"ru": {"display_name": "...", "description": "..."}} (metrics: "name" / "description").
 """
@@ -34,6 +36,7 @@ from ..db import ConnectionRegistry
 from ..dberrors import db_http_error
 from ..query.routes import QueryService
 from ..query.spec import QuerySpec
+from .labels import foreign_target
 from .store import FieldIn, MetricIn, RelationshipIn, SemanticStore, TableIn
 
 
@@ -90,7 +93,23 @@ def register_semantic_routes(
     def put_field(connection: str, table: str, column: str, body: FieldIn, admin: User = Depends(require_admin)):
         require_connection(connection, admin)
         check_column(connection, table, column)
+        if body.label_column:
+            check_label(connection, table, column, body.label_column)
         return {"field": semantic.set_field(admin, connection, table, column, body)}
+
+    def check_label(connection: str, table: str, column: str, label: str) -> None:
+        """"Show values as" needs a foreign key (or a relationship added here) and a column of the related table."""
+        try:
+            _primary, foreign = registry.get_keys(connection)
+        except Exception as exc:
+            raise db_http_error(exc, registry.get_config(connection).engine, "Could not read the database structure") from exc
+        manual = semantic.foreign_keys(connection)
+        target = foreign_target({table: list(foreign.get(table, [])) + manual.get(table, [])}, table, column)
+        if target is None:
+            raise HTTPException(status_code=400, detail=f"{column!r} does not refer to another table; add a relationship first")
+        to_table, key = target
+        if label not in columns_of(connection).get(to_table, []) or label == key:
+            raise HTTPException(status_code=400, detail=f"{to_table!r} has no column {label!r} to show")
 
     # ------------------------------------------------------------------ relationships
     @router.get("/api/semantic/{connection}/relationships")

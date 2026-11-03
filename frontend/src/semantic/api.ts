@@ -31,6 +31,7 @@ export interface FieldMeta {
   format?: ColumnFormat | null;
   hidden?: boolean;
   parse_as_date?: boolean;
+  label_column?: string | null; // M12, foreign keys: "Show values as" - the related table's column shown in place of the id
   translations?: Translations | null; // M11: {"ru": {"display_name", "description"}}
 }
 
@@ -41,11 +42,24 @@ export interface TableMeta {
   translations?: Translations | null;
 }
 
-export interface MetricDefinition {
-  fn: Exclude<Aggregation['fn'], 'metric'>;
+export type TotalFn = Exclude<Aggregation['fn'], 'metric'>;
+
+/** One total of the metric's table (also each side of a ratio). */
+export interface MetricPart {
+  fn: TotalFn;
   ref?: string;
-  expr?: Expr; // a formula instead of a column (set up through the API, e.g. the demo's "Scrap rate")
+  expr?: Expr; // a formula instead of a column (e.g. good + scrapped pieces)
   where?: FilterGroup | null;
+}
+
+/** One total, or (M12) one total divided by another: {"fn": "ratio", "numerator", "denominator"}, where = for both. */
+export interface MetricDefinition {
+  fn: TotalFn | 'ratio';
+  ref?: string;
+  expr?: Expr;
+  where?: FilterGroup | null;
+  numerator?: MetricPart;
+  denominator?: MetricPart;
 }
 
 export interface Metric {
@@ -81,6 +95,7 @@ async function refresh(connection: string) {
     queryClient.invalidateQueries({ queryKey: queryKeys.tables(connection) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.tableNames(connection) }),
     queryClient.invalidateQueries({ queryKey: metricKeys.list(connection) }),
+    queryClient.invalidateQueries({ queryKey: ['values', connection] }), // value pickers show the names (M12)
   ]);
 }
 

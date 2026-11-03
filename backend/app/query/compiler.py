@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Integer, Numeric, String, and_, case, column, distinct, false, func, literal,
+    Boolean, Date, DateTime, Integer, Numeric, String, and_, case, cast, column, distinct, false, func, literal,
     literal_column, not_, null, or_, select, table as sa_table, true, type_coerce,
 )
 from sqlalchemy import types as sqltypes
@@ -47,6 +47,7 @@ class OutputColumn:
     name: str
     type: str  # normalised, see schema_graph.TYPES
     source: tuple[str, str] | None = None  # (table, column) whose metadata (format, display name) applies
+    remapped: dict[str, str] | None = None  # M12: shows table.label in place of the id table.key
 
 
 @dataclass
@@ -98,6 +99,7 @@ class SpecCompiler:
         max_limit: int = 10_000,
         now: dt.datetime | None = None,
         fields: dict[str, dict[str, dict[str, Any]]] | None = None,
+        labels: dict[tuple[str, str], Any] | None = None,
     ):
         self.spec = spec
         self.dialect = dialect if isinstance(dialect, str) else dialect.name
@@ -112,6 +114,11 @@ class SpecCompiler:
         self.tables: dict[str, _Table] = {}          # alias -> table in the query
         self.custom: dict[str, _Typed] = {}          # custom expression name -> compiled
         self.outputs: dict[str, _Typed] = {}         # output name -> underlying (unlabelled) expression
+        # M12 "Show values as": {(table, column): LabelLink} (app/semantic/labels.py); a breakout on such a
+        # column shows the related table's name, while having / order still use the id
+        self.labels = labels or {}
+        self.remapped: dict[str, _Typed] = {}       # output name -> the id it shows the name of
+        self._label_joins: list[tuple[Any, Any]] = []
 
     # ------------------------------------------------------------------ names
     def _real_table(self, name: str) -> str:
@@ -381,20 +388,25 @@ class SpecCompiler:
         selected: list[Any] = []
         columns: list[OutputColumn] = []
 
-        def add_output(name: str, typed: _Typed) -> None:
+        def add_output(name: str, typed: _Typed, shown: tuple[_Typed, dict[str, str]] | None = None) -> None:
             unique = _unique(name, names)
             names.append(unique)
-            selected.append(typed.expr.label(unique))
-            columns.append(OutputColumn(unique, typed.type, typed.source))
+            selected.append((shown[0] if shown else typed).expr.label(unique))
+            columns.append(OutputColumn(unique, shown[0].type if shown else typed.type, typed.source, shown[1] if shown else None))
             self.outputs[unique] = typed
+            if shown:
+                self.remapped[unique] = typed
 
         group_by: list[Any] = []
         grouped = bool(spec.aggregations or spec.breakouts)
         if grouped:
             for b in spec.breakouts:
                 typed, default_name = self._breakout(b)
-                add_output(b.alias or default_name, typed)
+                shown = self._label(b, typed)
+                add_output(b.alias or default_name, typed, shown)
                 group_by.append(typed.expr)
+                if shown:
+                    group_by.append(shown[0].expr)
             for a in spec.aggregations:
                 typed, default_name = self._aggregation(a)
                 add_output(a.alias or default_name, typed)
@@ -415,6 +427,8 @@ class SpecCompiler:
             for name, typed in self.custom.items():
                 add_output(name, typed)
 
+        for clause, condition in self._label_joins:
+            joined = joined.outerjoin(clause, condition)
         stmt = select(*selected).select_from(joined)
         if spec.filters is not None and spec.filters.rules:
             stmt = stmt.where(self._condition_tree(spec.filters))
@@ -425,7 +439,9 @@ class SpecCompiler:
 
         order = []
         for o in spec.order:
-            if o.ref in self.outputs:
+            if o.ref in self.remapped:
+                target = self.remapped[o.ref].expr  # names in place of ids keep the order of the ids
+            elif o.ref in self.outputs:
                 target = literal_column(_quoted(o.ref, self.dialect))  # ORDER BY the output alias
             elif grouped:
                 raise CompileError(f"Sort a summarised question by one of its columns: {', '.join(names)}")
@@ -434,7 +450,10 @@ class SpecCompiler:
             order.append(target.desc() if o.dir == "desc" else target.asc())
         if not order and spec.breakouts:
             # Charts want time/categories in order.
-            order = [literal_column(_quoted(n, self.dialect)).asc() for n in names[: len(spec.breakouts)]]
+            order = [
+                self.remapped[n].expr.asc() if n in self.remapped else literal_column(_quoted(n, self.dialect)).asc()
+                for n in names[: len(spec.breakouts)]
+            ]
         if order:
             stmt = stmt.order_by(*order)
 
@@ -523,10 +542,41 @@ class SpecCompiler:
             raise CompileError(f"Cannot group by a {typed.type} column ({b.ref})")
         return typed, base
 
-    def _aggregation(self, a: Aggregation) -> tuple[_Typed, str]:
+    def _label(self, b: Breakout, typed: _Typed) -> tuple[_Typed, dict[str, str]] | None:
+        """M12: the related table's name for a breakout on a foreign key with "Show values as".
+
+        The related table is joined (LEFT, by its key) under an alias of its own and the group shows
+        its label - or the id as text where no row matches; the id stays in the GROUP BY.
+        """
+        link = self.labels.get(typed.source) if typed.source is not None else None
+        if link is None or b.bucket is not None or b.bin_width is not None or typed.type in ("date", "datetime"):
+            return None
+        if link.table not in self.schema_tables:
+            return None
+        cols = {c["name"]: c["type"] for c in self.schema_tables[link.table]}
+        if link.key not in cols or link.label not in cols:
+            return None
+        alias = f"ncode_label_{len(self._label_joins) + 1}"
+        clause = sa_table(link.table, column(link.key, cols[link.key]), column(link.label, cols[link.label]), schema=self.db_schema).alias(alias)
+        self._label_joins.append((clause, clause.c[link.key] == typed.expr))
+        label = clause.c[link.label] if link.label_type == "string" else cast(clause.c[link.label], String(255))
+        fallback = typed.expr if typed.type == "string" else cast(typed.expr, String(64))
+        shown = _Typed(func.coalesce(label, fallback, type_=String()), "string", typed.source)
+        return shown, {"table": link.table, "key": link.key, "label": link.label}
+
+    def _aggregation(self, a: Aggregation, outer: Any = None) -> tuple[_Typed, str]:
         if a.fn == "metric":
             raise CompileError(f"Metric {a.metric} is not available")  # expanded by the API before compiling
         condition = self._condition_tree(a.where) if a.where is not None and a.where.rules else None
+        if outer is not None:  # a ratio's own condition, for both of its sides
+            condition = outer if condition is None else and_(outer, condition)
+        if a.fn == "ratio":
+            # each side is its own total over the same rows of the group: SUM(a) / NULLIF(SUM(b), 0)
+            # stays right at every grouping, unlike an average of per-row shares (M12)
+            assert a.numerator is not None and a.denominator is not None
+            top, _ = self._aggregation(a.numerator, condition)
+            bottom, _ = self._aggregation(a.denominator, condition)
+            return _Typed(dialects.ratio(top.expr, bottom.expr, self.dialect), "number"), "ratio"
         if a.ref is None and a.expr is None:
             if condition is not None:  # count of the matching rows
                 return _Typed(func.count(case((condition, literal_column("1")))), "number"), "count"

@@ -30,6 +30,8 @@ import { sqlValues, syncSqlParams, valuesFromSearch, valuesToSearch } from '../l
 import type { ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
 import { TransformsEditor } from '../components/query/TransformsEditor';
+import { UndoButtons } from '../components/query/UndoButtons';
+import { useDraftHistory } from '../query/useDraftHistory';
 import type { Transform } from '../query/types';
 import { localDateText } from '../viz/format';
 import { t, tn } from '../i18n/index.ts';
@@ -86,6 +88,15 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
   const [showCalc, setShowCalc] = useState(() => (savedSpec?.transforms?.length ?? 0) > 0);
   const { state, run, cancel } = useQueryRun();
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
+  // M12: undo / redo of the draft as a whole when the focus is outside the editor (inside, its own text undo works)
+  const undoable = useDraftHistory({ sql: text, limit, viz, defs, transforms }, (v) => {
+    if (v.sql !== text) editor.current?.setText(v.sql); // the editor's own undo keeps only real changes
+    setText(v.sql);
+    setLimit(v.limit);
+    setViz(v.viz);
+    setDefs(v.defs);
+    setTransforms(v.transforms);
+  });
 
   // The SQL handed over from a question is consumed once (a reload keeps the draft instead).
   useEffect(() => {
@@ -281,7 +292,9 @@ export function SqlWorkbench({ connection, initialSql, saved = null }: { connect
           setDefs(q.parameters);
           setTransforms(spec.transforms ?? []);
         }}
-      />
+      >
+        <UndoButtons history={undoable} />
+      </QuestionHeader>
       <Box flex={1} minH={0}>
         {vertical ? (
           <VStack align="stretch" spacing={3}>

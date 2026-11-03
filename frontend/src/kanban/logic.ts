@@ -1,0 +1,485 @@
+/**
+ * Ncode - Kanban: the pure parts (no React), tested in tests/kanban.test.ts.
+ * Positions between neighbours, filters, progress, due dates, colours and readable history.
+ */
+import { locale, t, tn } from '../i18n/index.ts';
+import type { BoardEvent, CardSummary, Column, GroupRef, HistoryEntry, Label, Person, Priority, UserRef } from './types.ts';
+
+// ---------------------------------------------------------------- positions
+
+export const POSITION_STEP = 1024;
+
+/** A position between two neighbours (either may be missing: top / bottom / empty column). */
+export function positionBetween(before: number | null | undefined, after: number | null | undefined): number {
+  const hasBefore = before !== null && before !== undefined;
+  const hasAfter = after !== null && after !== undefined;
+  if (hasBefore && hasAfter) return (before + after) / 2;
+  if (hasBefore) return before + POSITION_STEP;
+  if (hasAfter) return after - POSITION_STEP;
+  return POSITION_STEP;
+}
+
+/**
+ * The position for a card dropped at `index` of a column's cards (sorted, top first). The moving
+ * card itself is left out, so moving it down by one in its own column works too.
+ */
+export function positionAt(sorted: { id: number; position: number }[], index: number, movingId?: number): number {
+  const others = sorted.filter((c) => c.id !== movingId);
+  const i = Math.max(0, Math.min(index, others.length));
+  return positionBetween(others[i - 1]?.position, others[i]?.position);
+}
+
+export const byPosition = <T extends { position: number; id: number }>(a: T, b: T): number => a.position - b.position || a.id - b.id;
+
+/** Cards per column id, each list sorted top first. */
+export function cardsByColumn<T extends CardSummary>(cards: T[], columns: Column[]): Map<number, T[]> {
+  const out = new Map<number, T[]>(columns.map((c) => [c.id, []]));
+  for (const card of cards) out.get(card.column_id)?.push(card);
+  for (const list of out.values()) list.sort(byPosition);
+  return out;
+}
+
+/** The cards after a move, as the server will have them (for showing a move before it answers). */
+export function applyMove<T extends CardSummary>(cards: T[], cardId: number, columnId: number, position: number, doneColumns: Set<number> = new Set()): T[] {
+  return cards.map((c) => {
+    if (c.id !== cardId) return c;
+    const done = doneColumns.has(columnId);
+    const completed_at = done ? (c.completed_at ?? Date.now() / 1000) : null;
+    return { ...c, column_id: columnId, position, completed_at };
+  });
+}
+
+// ---------------------------------------------------------------- dates
+
+/** Today as "2026-11-03" in the browser's time zone. */
+export function todayIso(now: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}
+
+const dayNumber = (iso: string): number => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
+};
+
+export type DueState = 'overdue' | 'today' | 'soon' | 'later' | 'done';
+
+/** How urgent a due date is: overdue (red), today, soon (within two days), later; done cards are calm. */
+export function dueState(due: string | null | undefined, today: string, done = false): DueState | null {
+  if (!due) return null;
+  if (done) return 'done';
+  const diff = dayNumber(due) - dayNumber(today);
+  if (diff < 0) return 'overdue';
+  if (diff === 0) return 'today';
+  if (diff <= 2) return 'soon';
+  return 'later';
+}
+
+export function isCardDone(card: Pick<CardSummary, 'column_id' | 'completed_at'>, doneColumns: Set<number>): boolean {
+  return doneColumns.has(card.column_id) || (card.completed_at !== null && card.completed_at !== undefined);
+}
+
+export function isOverdue(card: Pick<CardSummary, 'due_date' | 'column_id' | 'completed_at'>, today: string, doneColumns: Set<number>): boolean {
+  return dueState(card.due_date, today, isCardDone(card, doneColumns)) === 'overdue';
+}
+
+/** "3 Nov" / "3 нояб."; the year only when it is not this year. */
+export function shortDate(iso: string, today: string = todayIso()): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const sameYear = today.slice(0, 4) === iso.slice(0, 4);
+  return date.toLocaleDateString(locale(), { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+}
+
+/** "5 minutes ago", "yesterday", or a date (seconds since 1970 in, as the API sends). */
+export function timeAgo(seconds: number, now: number = Date.now() / 1000): string {
+  const s = Math.max(0, now - seconds);
+  if (s < 60) return t('just now');
+  if (s < 3600) return tn(Math.floor(s / 60), '{n} minute ago', '{n} minutes ago');
+  if (s < 86_400) return tn(Math.floor(s / 3600), '{n} hour ago', '{n} hours ago');
+  if (s < 2 * 86_400) return t('yesterday');
+  if (s < 7 * 86_400) return tn(Math.floor(s / 86_400), '{n} day ago', '{n} days ago');
+  return new Date(seconds * 1000).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export function fullTime(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleString(locale(), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ---------------------------------------------------------------- progress
+
+export interface Progress {
+  done: number;
+  total: number;
+  percent: number;
+}
+
+export function progressOf(checklist: { done: number; total: number } | null | undefined): Progress {
+  const total = Math.max(0, checklist?.total ?? 0);
+  const done = Math.min(total, Math.max(0, checklist?.done ?? 0));
+  return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
+}
+
+/** "3 of 5 steps done" */
+export function progressText(p: Progress): string {
+  return t('{done} of {total} steps done', { done: p.done, total: p.total });
+}
+
+/** The due date in plain words: "Due today", "Due tomorrow", "Due in 3 days", "3 days late", "Due 20 Nov". */
+export function dueText(due: string, today: string, done = false): string {
+  const diff = dayNumber(due) - dayNumber(today);
+  if (done) return t('Was due {date}', { date: shortDate(due, today) });
+  if (diff < 0) return tn(-diff, '{n} day late', '{n} days late');
+  if (diff === 0) return t('Due today');
+  if (diff === 1) return t('Due tomorrow');
+  if (diff <= 7) return tn(diff, 'Due in {n} day', 'Due in {n} days');
+  return t('Due {date}', { date: shortDate(due, today) });
+}
+
+export function boardProgress(board: { cards_open: number; cards_done: number }): Progress {
+  return progressOf({ done: board.cards_done, total: board.cards_open + board.cards_done });
+}
+
+// ---------------------------------------------------------------- people
+
+/** A readable name from whatever the API sent (an id, a username, {id, username}). */
+export function personName(ref: UserRef, people: Person[] = []): string {
+  if (ref === null || ref === undefined) return t('someone');
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'number') return people.find((p) => p.id === ref)?.username ?? `#${ref}`;
+  if (ref.username) return ref.username;
+  if (ref.name) return ref.name;
+  if (ref.id !== null && ref.id !== undefined) return personName(ref.id, people);
+  return t('someone');
+}
+
+export function personId(ref: UserRef, people: Person[] = []): number | null {
+  if (ref === null || ref === undefined) return null;
+  if (typeof ref === 'number') return ref;
+  if (typeof ref === 'string') return people.find((p) => p.username === ref)?.id ?? null;
+  if (ref.id !== null && ref.id !== undefined) return ref.id;
+  return ref.username ? personId(ref.username, people) : null;
+}
+
+export function groupName(ref: GroupRef): string {
+  if (ref === null || ref === undefined) return '';
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'number') return `#${ref}`;
+  return ref.name ?? (ref.id !== null && ref.id !== undefined ? `#${ref.id}` : '');
+}
+
+const AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#14b8a6', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#a855f7', '#64748b'];
+
+/** The same person always gets the same avatar colour. */
+export function avatarColor(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+// ---------------------------------------------------------------- colours
+
+/** Accent colours of boards, columns and labels (stored by name; a hex value works too). */
+export const PALETTE: { name: string; hex: string }[] = [
+  { name: 'indigo', hex: '#6366f1' },
+  { name: 'blue', hex: '#3b82f6' },
+  { name: 'cyan', hex: '#06b6d4' },
+  { name: 'teal', hex: '#14b8a6' },
+  { name: 'green', hex: '#22c55e' },
+  { name: 'lime', hex: '#84cc16' },
+  { name: 'amber', hex: '#f59e0b' },
+  { name: 'orange', hex: '#f97316' },
+  { name: 'red', hex: '#ef4444' },
+  { name: 'pink', hex: '#ec4899' },
+  { name: 'violet', hex: '#8b5cf6' },
+  { name: 'slate', hex: '#64748b' },
+];
+
+export function colorHex(color: string | null | undefined, fallback = '#6366f1'): string {
+  if (!color) return fallback;
+  if (/^#[0-9a-f]{3,8}$/i.test(color)) return color;
+  return PALETTE.find((p) => p.name === color)?.hex ?? fallback;
+}
+
+/** `#rrggbb` with an alpha (for soft backgrounds of chips). */
+export function withAlpha(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6);
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+export const PRIORITY_COLOR: Record<Priority, string> = {
+  low: '#64748b',
+  normal: '#3b82f6',
+  high: '#f59e0b',
+  urgent: '#ef4444',
+};
+
+export function priorityLabel(p: Priority): string {
+  if (p === 'low') return t('Low');
+  if (p === 'high') return t('High');
+  if (p === 'urgent') return t('Urgent');
+  return t('Normal');
+}
+
+// ---------------------------------------------------------------- filters
+
+export interface CardFilter {
+  mine: boolean;
+  person: number | null;
+  label: number | null;
+  priority: Priority | null;
+  overdue: boolean;
+  q: string;
+}
+
+export const NO_FILTER: CardFilter = { mine: false, person: null, label: null, priority: null, overdue: false, q: '' };
+
+export function filterActive(f: CardFilter): boolean {
+  return f.mine || f.person !== null || f.label !== null || f.priority !== null || f.overdue || f.q.trim() !== '';
+}
+
+export function filterCount(f: CardFilter): number {
+  return [f.mine, f.person !== null, f.label !== null, f.priority !== null, f.overdue, f.q.trim() !== ''].filter(Boolean).length;
+}
+
+export interface FilterContext {
+  me: number | null;
+  today: string;
+  doneColumns: Set<number>;
+  labels: Label[];
+}
+
+/** Whether a card passes every filter that is set (search: title and label names, any order of words). */
+export function matchesFilter(card: CardSummary, f: CardFilter, ctx: FilterContext): boolean {
+  if (f.mine && (ctx.me === null || !card.assignees.includes(ctx.me))) return false;
+  if (f.person !== null && !card.assignees.includes(f.person)) return false;
+  if (f.label !== null && !card.labels.includes(f.label)) return false;
+  if (f.priority !== null && card.priority !== f.priority) return false;
+  if (f.overdue && !isOverdue(card, ctx.today, ctx.doneColumns)) return false;
+  const words = f.q.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length) {
+    const labelNames = ctx.labels.filter((l) => card.labels.includes(l.id)).map((l) => l.name);
+    const haystack = [card.title, ...labelNames, `#${card.id}`].join(' ').toLocaleLowerCase();
+    if (!words.every((w) => haystack.includes(w))) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------- history
+
+type Details = Record<string, unknown>;
+
+function detailsOf(entry: { details: HistoryEntry['details'] }): Details {
+  const d = entry.details;
+  if (!d) return {};
+  if (typeof d === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(d);
+      return parsed && typeof parsed === 'object' ? (parsed as Details) : {};
+    } catch {
+      return {};
+    }
+  }
+  return d;
+}
+
+const str = (v: unknown): string => (v === null || v === undefined ? '' : typeof v === 'object' ? String((v as Details).name ?? (v as Details).title ?? (v as Details).username ?? '') : String(v));
+const list = (values: string[]): string => values.filter(Boolean).join(', ');
+const names = (v: unknown): string[] => (Array.isArray(v) ? v.map(str).filter(Boolean) : v ? [str(v)] : []);
+
+export interface HistoryContext {
+  people?: Person[];
+  columns?: Column[];
+  labels?: Label[];
+}
+
+/** [old, new] as the server writes a change; a bare value counts as the new one. */
+function pair(v: unknown): [unknown, unknown] {
+  return Array.isArray(v) && v.length === 2 ? [v[0], v[1]] : [undefined, v];
+}
+
+function addedRemoved(v: unknown, kind: 'people' | 'labels'): string {
+  const d = (v && typeof v === 'object' && !Array.isArray(v) ? v : {}) as Details;
+  const added = list(names(d.added));
+  const removed = list(names(d.removed));
+  if (kind === 'people') {
+    if (added && removed) return t('assigned {added} and unassigned {removed}', { added, removed });
+    if (added) return t('assigned {names}', { names: added });
+    if (removed) return t('unassigned {names}', { names: removed });
+    return t('changed the assignees');
+  }
+  if (added && removed) return t('added the label {added} and removed {removed}', { added, removed });
+  if (added) return t('added the label {names}', { names: added });
+  if (removed) return t('removed the label {names}', { names: removed });
+  return t('changed the labels');
+}
+
+/** One phrase per changed field of a card ("set the priority to High"). */
+function cardChange(field: string, value: unknown): string {
+  const [, next] = pair(value);
+  switch (field) {
+    case 'title':
+      return t('renamed the task to “{title}”', { title: str(next) });
+    case 'description':
+      return t('changed the description');
+    case 'priority':
+      return t('set the priority to {priority}', { priority: priorityLabel(str(next) as Priority) });
+    case 'due_date':
+      return next ? t('set the due date to {date}', { date: shortDate(str(next)) }) : t('removed the due date');
+    case 'start_date':
+      return next ? t('set the start date to {date}', { date: shortDate(str(next)) }) : t('removed the start date');
+    case 'assignees':
+      return addedRemoved(value, 'people');
+    case 'labels':
+      return addedRemoved(value, 'labels');
+    case 'name':
+      return t('renamed it to “{name}”', { name: str(next) });
+    case 'color':
+      return t('changed the colour');
+    case 'is_done':
+      return next ? t('made its tasks count as done') : t('made its tasks no longer count as done');
+    default:
+      return t('changed {field}', { field });
+  }
+}
+
+function changes(d: Details): string {
+  const c = (d.changes && typeof d.changes === 'object' ? d.changes : {}) as Details;
+  return list(Object.entries(c).map(([field, value]) => cardChange(field, value)));
+}
+
+/** "carol" + a phrase, as one sentence. */
+const said = (user: string, what: string): string => t('{user} {what}', { user, what });
+
+/**
+ * One readable sentence for a history row (actions and details as app/kanban/store.py writes them):
+ * "carol moved the card from To do to Done", "alice ticked off “Order parts”".
+ */
+export function historySentence(entry: Pick<HistoryEntry, 'user' | 'action' | 'details'>, ctx: HistoryContext = {}): string {
+  const user = personName(entry.user, ctx.people);
+  const d = detailsOf(entry);
+  const text = str(d.text);
+  switch (entry.action) {
+    case 'card_created':
+      return d.column ? said(user, t('created the task in {column}', { column: str(d.column) })) : said(user, t('created the task'));
+    case 'card_moved': {
+      const from = str(d.from);
+      const to = str(d.to);
+      if (from && to && from !== to) return said(user, t('moved the task from {from} to {to}', { from, to }));
+      return said(user, t('changed the order of the tasks'));
+    }
+    case 'card_updated':
+      return said(user, changes(d) || t('changed the task'));
+    case 'card_archived':
+      return said(user, t('hid the task'));
+    case 'card_restored':
+      return said(user, t('brought the task back'));
+    case 'card_deleted':
+      return said(user, t('deleted the task “{title}”', { title: str(d.title) }));
+    case 'item_added':
+      return said(user, t('added the step “{text}”', { text }));
+    case 'item_done':
+      return said(user, t('ticked off the step “{text}”', { text }));
+    case 'item_undone':
+      return said(user, t('unticked the step “{text}”', { text }));
+    case 'item_updated':
+      return d.before ? said(user, t('changed the step “{before}” to “{text}”', { before: str(d.before), text })) : said(user, t('edited the step “{text}”', { text }));
+    case 'item_moved':
+      return said(user, t('moved the step “{text}”', { text }));
+    case 'item_deleted':
+      return said(user, t('removed the step “{text}”', { text }));
+    case 'comment_added':
+      return d.excerpt ? said(user, t('commented: “{excerpt}”', { excerpt: str(d.excerpt) })) : said(user, t('commented'));
+    case 'comment_edited':
+      return said(user, t('edited a comment'));
+    case 'comment_deleted':
+      return said(user, t('deleted a comment'));
+    case 'attachment_added':
+      return said(user, t('attached {file}', { file: str(d.filename) || t('a file') }));
+    case 'attachment_deleted':
+      return said(user, t('removed the attachment {file}', { file: str(d.filename) }));
+    case 'board_created':
+      return said(user, t('created the board'));
+    case 'board_updated':
+      return said(user, t('changed the board: {what}', { what: changes(d) || t('details') }));
+    case 'board_archived':
+      return said(user, t('hid the board'));
+    case 'board_restored':
+      return said(user, t('brought the board back'));
+    case 'members_changed':
+      return said(user, t('changed the members'));
+    case 'column_created':
+      return said(user, t('added the stage {name}', { name: str(d.name) }));
+    case 'column_updated':
+      return said(user, t('changed the stage {name}: {what}', { name: str(d.column), what: changes(d) || t('details') }));
+    case 'column_moved':
+      return said(user, t('moved the stage {name}', { name: str(d.column) }));
+    case 'column_deleted':
+      return said(user, t('deleted the stage {name}', { name: str(d.name) }));
+    case 'label_created':
+      return said(user, t('added the label {names}', { names: str(d.name) }));
+    case 'label_updated':
+      return said(user, t('changed the label {name}', { name: str(d.label) }));
+    case 'label_deleted':
+      return said(user, t('deleted the label {name}', { name: str(d.name) }));
+    default:
+      return said(user, t('changed the task'));
+  }
+}
+
+/** The toast for a change made by someone else: "carol moved “Fix the pump”". */
+export function liveSentence(event: BoardEvent, cardTitle: string | null): string {
+  const user = event.by || t('someone');
+  const action = event.action ?? '';
+  const title = cardTitle ?? '';
+  if (!title) {
+    if (action.startsWith('column')) return t('{user} changed the stages', { user });
+    if (action.startsWith('label')) return t('{user} changed the labels', { user });
+    if (action.startsWith('member')) return t('{user} changed the members', { user });
+    return t('{user} changed the board', { user });
+  }
+  if (action === 'card_created') return t('{user} added “{title}”', { user, title });
+  if (action === 'card_moved') return t('{user} moved “{title}”', { user, title });
+  if (action.startsWith('comment')) return t('{user} commented on “{title}”', { user, title });
+  if (action === 'item_done') return t('{user} ticked off a step of “{title}”', { user, title });
+  if (action.startsWith('attachment')) return t('{user} attached a file to “{title}”', { user, title });
+  if (action === 'card_archived') return t('{user} hid “{title}”', { user, title });
+  if (action.startsWith('item')) return t('{user} changed the steps of “{title}”', { user, title });
+  return t('{user} changed “{title}”', { user, title });
+}
+
+// ---------------------------------------------------------------- files
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return t('{n} B', { n: bytes });
+  if (bytes < 1024 * 1024) return t('{n} KB', { n: (bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0) });
+  return t('{n} MB', { n: (bytes / 1024 / 1024).toFixed(1) });
+}
+
+export const isImage = (contentType: string): boolean => /^image\/(png|jpe?g|gif|webp|bmp|heic|heif|avif)$/i.test(contentType);
+
+/** Size of a thumbnail that fits in max × max and keeps the proportions (never larger than the image). */
+export function thumbSize(width: number, height: number, max = 400): { width: number; height: number } {
+  if (width <= 0 || height <= 0) return { width: 0, height: 0 };
+  const scale = Math.min(1, max / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+export const UPLOAD_ACCEPT = 'image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.txt,.csv';
+
+/** A content type for a file the browser did not type (e.g. some phones and .docx). */
+export function guessType(name: string, given: string): string {
+  if (given) return given;
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  const known: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic',
+    pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    odt: 'application/vnd.oasis.opendocument.text', ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  };
+  return known[ext] ?? 'application/octet-stream';
+}

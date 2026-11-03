@@ -187,9 +187,15 @@ def describe_schema(
     rels = relationships(merged, names)
     manual_rels = set(relationships(manual, names))
     fk_of: dict[tuple[str, str], dict[str, str]] = {}
+    suggested: dict[tuple[str, str], str | None] = {}  # M12: what "Show values as" suggests (app/semantic/labels.py)
+    from .semantic.labels import obvious_label
+
     for rel in rels:
         for a, b in zip(rel.from_columns, rel.to_columns):
-            fk_of.setdefault((rel.from_table, a), {"table": rel.to_table, "column": b})
+            if (rel.from_table, a) not in fk_of:
+                fk_of[(rel.from_table, a)] = {"table": rel.to_table, "column": b}
+                if len(rel.from_columns) == 1:
+                    suggested[(rel.from_table, a)] = obvious_label(columns[rel.to_table], fields.get(rel.to_table, {}), key=b)
 
     table_meta = table_meta or {}
     tables = []
@@ -199,7 +205,7 @@ def describe_schema(
             {
                 "name": name,
                 "primary_key": pk,
-                "columns": [_column_json(name, col, pk, fk_of, fields.get(name, {}).get(col["name"])) for col in columns[name]],
+                "columns": [_column_json(name, col, pk, fk_of, fields.get(name, {}).get(col["name"]), suggested) for col in columns[name]],
                 **(table_meta.get(name) or {}),
             }
         )
@@ -210,7 +216,9 @@ def describe_schema(
     }
 
 
-def _column_json(table: str, col: dict[str, Any], pk: list[str], fk_of: dict, meta: dict[str, Any] | None) -> dict[str, Any]:
+def _column_json(
+    table: str, col: dict[str, Any], pk: list[str], fk_of: dict, meta: dict[str, Any] | None, suggested: dict | None = None,
+) -> dict[str, Any]:
     out = {
         "name": col["name"],
         "type": normalize_type(col["type"]),
@@ -219,8 +227,10 @@ def _column_json(table: str, col: dict[str, Any], pk: list[str], fk_of: dict, me
         "primary_key": col["name"] in pk,
         "foreign_key": fk_of.get((table, col["name"])),
     }
+    if suggested and suggested.get((table, col["name"])):
+        out["suggested_label"] = suggested[(table, col["name"])]
     if meta:
-        out.update({k: meta.get(k) for k in ("display_name", "description", "semantic_type", "format", "hidden", "parse_as_date", "translations")})
+        out.update({k: meta.get(k) for k in ("display_name", "description", "semantic_type", "format", "hidden", "parse_as_date", "translations", "label_column")})
         if meta.get("parse_as_date"):
             out["type"] = "datetime"
     return out

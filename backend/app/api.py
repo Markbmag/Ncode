@@ -24,6 +24,7 @@
     GET    /api/search/{task_id}        -> progress (+ results when finished)
     DELETE /api/search/{task_id}        -> cancel
     WS     /ws/{task_id}                first client message: {"token": "...", "lang": "en" or "ru"}
+    /api/kanban/*, WS /ws/kanban/{board_id}   Ncode - Kanban, see app/kanban/routes.py
 
 Send the token as `Authorization: Bearer <token>`.
 """
@@ -56,6 +57,7 @@ from .i18n import localize, parse_language
 from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
 from .query.routes import register_query_routes
+from .query.values import register_value_routes
 from .analysis.routes import register_analysis_routes
 from .automation.engine import Engine as AutomationEngine
 from .automation.routes import register_automation_routes
@@ -68,6 +70,7 @@ from .admin_routes import register_admin_routes
 from .content.health import register_broken_content_routes
 from .demo import DEMO_KEY, SYSTEM as DEMO_SYSTEM_USER, DemoDatabase, register_demo_routes
 from .glossary import register_glossary_routes
+from .kanban.routes import register_kanban_routes
 from .demo_content import seed_demo_content
 from .home import Home, register_home_routes
 from .backup import AutoBackup
@@ -761,6 +764,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         semantic=semantic,
         rowsec=rowsec,
     )
+    register_value_routes(  # M12: value pickers, through the same compiler (permissions, row rules)
+        app, registry=registry, settings=settings, app_db=app_db, queries=queries, semantic=semantic, rowsec=rowsec,
+        current_user=current_user, require_connection=require_connection,
+    )
     register_semantic_routes(
         app, semantic=semantic, registry=registry, queries=queries, current_user=current_user,
         require_admin=require_admin, require_connection=require_connection,
@@ -804,6 +811,9 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     register_home_routes(  # M11: recently viewed, "Start here", the new-user checklist, personal settings
         app, app_db=app_db, content=content, current_user=current_user, require_admin=require_admin,
     )
+    register_kanban_routes(  # Ncode - Kanban (§8c): /api/kanban/*, WS /ws/kanban/{board_id}
+        app, app_db=app_db, settings=settings, current_user=current_user, user_from_token=user_from_token,
+    )
     if demo.registered():
         # M11: the demo's examples (a collection with questions and a dashboard), made once
         home = Home(app_db, content)
@@ -813,7 +823,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 home.set_start_here(content.snapshot(), cid, "ncode")
 
         seed_demo_content(app_db, content, app.state.content.dashboards, system=DEMO_SYSTEM_USER,
-                          language=settings.demo_language, set_start_here=start_here_if_unset)
+                          language=settings.demo_language, set_start_here=start_here_if_unset,
+                          metrics={m.name: m.id for m in semantic.metrics({DEMO_KEY})})
     register_demo_routes(  # M11: hide / show the demo database for everyone (Admin → Databases)
         app, demo=demo, require_admin=require_admin, on_change=lambda: runner.cache.drop_connection(DEMO_KEY),
     )

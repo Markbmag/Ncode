@@ -1,8 +1,10 @@
 """Ready-made content for the Factory demo (roadmap M11).
 
 A newcomer's first steps (home page checklist) start at a dashboard, so the demo brings one:
-a shared collection "Factory demo" with five questions and the dashboard "Production overview"
+a shared collection "Factory demo" with six questions and the dashboard "Production overview"
 (period and line filters), set as the home page's "Start here" collection when none is set.
+One question uses the demo's ratio metric "Scrap rate" (M12; installs that made the examples
+before keep theirs).
 
 Created once (app setting "demo_content"); afterwards it is ordinary content that admins may
 change, move or delete. The names follow NCODE_DEMO_LANGUAGE ("en" or "ru").
@@ -34,11 +36,12 @@ TEXTS = {
         "output": ("Good pieces per week", "Pieces reported as good, per week."),
         "downtime": ("Downtime by reason", "Where the lines lose the most time: the ten biggest reasons."),
         "scrap": ("Scrapped pieces per line", "Which line scraps the most pieces."),
+        "rate": ("Scrap rate per line", "The share of the pieces each line scraps: all scrap ÷ all pieces (the Scrap rate metric)."),
         "orders": ("Work orders", "How many work orders were produced."),
         "vehicles": ("Latest vehicles", "The last 50 cars built, with their VIN."),
         "period": "Period", "line": "Line",
         "columns": {"week": "Week", "good": "Good pieces", "reason": "Reason", "minutes": "Downtime, min",
-                    "line": "Line", "scrapped": "Scrapped pieces", "orders": "Work orders"},
+                    "line": "Line", "scrapped": "Scrapped pieces", "rate": "Scrap rate", "orders": "Work orders"},
         "intro": "**Production overview.** Change the *Period* or pick a *Line*: every card follows. "
                  "Click a card's title to open its question.",
     },
@@ -48,11 +51,12 @@ TEXTS = {
         "output": ("Годные детали по неделям", "Детали, отмеченные как годные, по неделям."),
         "downtime": ("Простои по причинам", "Где линии теряют больше всего времени: десять главных причин."),
         "scrap": ("Брак по линиям", "Какая линия бракует больше всего деталей."),
+        "rate": ("Доля брака по линиям", "Какую долю деталей бракует каждая линия: весь брак ÷ все детали (метрика «Доля брака»)."),
         "orders": ("Заказы-наряды", "Сколько заказов-нарядов выполнено."),
         "vehicles": ("Последние автомобили", "Последние 50 собранных машин с VIN."),
         "period": "Период", "line": "Линия",
         "columns": {"week": "Неделя", "good": "Годные детали", "reason": "Причина", "minutes": "Простой, мин",
-                    "line": "Линия", "scrapped": "Брак, шт.", "orders": "Заказы-наряды"},
+                    "line": "Линия", "scrapped": "Брак, шт.", "rate": "Доля брака", "orders": "Заказы-наряды"},
         "intro": "**Обзор производства.** Измените *Период* или выберите *Линию* — все карточки обновятся. "
                  "Нажмите на заголовок карточки, чтобы открыть вопрос.",
     },
@@ -63,9 +67,10 @@ def _spec(**parts: Any) -> dict[str, Any]:
     return {"version": 1, "connection": "demo", **parts}
 
 
-def questions(c: dict[str, str]) -> dict[str, tuple[dict[str, Any], dict[str, Any] | None]]:
+def questions(c: dict[str, str], metrics: dict[str, int] | None = None) -> dict[str, tuple[dict[str, Any], dict[str, Any] | None]]:
     """(spec, chart) of each example; result columns carry readable names in the content's language.
-    Saved as the editors save it: {"mode": "chart", "spec": <VizSpec>}."""
+    Saved as the editors save it: {"mode": "chart", "spec": <VizSpec>}. metrics: demo metric ids by name."""
+    rate = (metrics or {}).get("Scrap rate")
     return {
         "output": (_spec(
             source={"table": "production_output"},
@@ -88,6 +93,13 @@ def questions(c: dict[str, str]) -> dict[str, tuple[dict[str, Any], dict[str, An
             breakouts=[{"ref": "production_lines.name", "alias": c["line"]}],
             order=[{"ref": c["scrapped"], "dir": "desc"}],
         ), {"version": 1, "type": "bar", "x": c["line"], "series": [{"y": c["scrapped"]}]}),
+        **({"rate": (_spec(
+            source={"table": "production_output"},
+            joins=[{"table": "work_orders"}, {"table": "production_lines"}],
+            aggregations=[{"fn": "metric", "metric": rate, "alias": c["rate"]}],
+            breakouts=[{"ref": "production_lines.name", "alias": c["line"]}],
+            order=[{"ref": c["rate"], "dir": "desc"}],
+        ), {"version": 1, "type": "bar", "x": c["line"], "series": [{"y": c["rate"]}]})} if rate else {}),
         "orders": (_spec(
             source={"table": "work_orders"},
             joins=[{"table": "production_lines"}],
@@ -104,12 +116,12 @@ def questions(c: dict[str, str]) -> dict[str, tuple[dict[str, Any], dict[str, An
 
 # the dashboard: which date column the period filter narrows, and the line name for the line filter
 DATES = {"output": "production_output.reported_at", "downtime": "downtime_events.started_at",
-         "scrap": "scrap_records.recorded_at", "orders": "work_orders.production_date"}
+         "scrap": "scrap_records.recorded_at", "rate": "production_output.reported_at", "orders": "work_orders.production_date"}
 LINES = {"output": "production_lines.name", "downtime": "production_lines.name",
-         "scrap": "production_lines.name", "orders": "production_lines.name"}
+         "scrap": "production_lines.name", "rate": "production_lines.name", "orders": "production_lines.name"}
 LAYOUT = {  # 12 columns
     "intro": (0, 0, 12, 2), "orders": (0, 2, 3, 6), "output": (3, 2, 9, 6),
-    "downtime": (0, 8, 6, 8), "scrap": (6, 8, 6, 8), "vehicles": (0, 16, 12, 8),
+    "downtime": (0, 8, 6, 8), "scrap": (6, 8, 3, 8), "rate": (9, 8, 3, 8), "vehicles": (0, 16, 12, 8),
 }
 
 
@@ -131,9 +143,10 @@ def _put(app_db: AppDB, key: str, value: Any) -> None:
 
 def seed_demo_content(
     app_db: AppDB, store: ContentStore, dashboards: DashboardStore, *, system: User, language: str = "en",
-    set_start_here: Any = None,
+    set_start_here: Any = None, metrics: dict[str, int] | None = None,
 ) -> int | None:
-    """Creates the demo collection once; returns its id (None when it was made before or failed)."""
+    """Creates the demo collection once; returns its id (None when it was made before or failed).
+    metrics: the demo's metric ids by name (an example without its metric is left out)."""
     if _setting(app_db, CONTENT_SETTING) == CONTENT_VERSION:
         return None
     texts = TEXTS.get(language, TEXTS["en"])
@@ -142,7 +155,7 @@ def seed_demo_content(
         col = store.create_collection(system, name, description)
         store.set_grants(system, col.id, [{"role": "all", "level": "view"}])
         ids: dict[str, int] = {}
-        for key, (spec, chart) in questions(texts["columns"]).items():
+        for key, (spec, chart) in questions(texts["columns"], metrics).items():
             qname, qdesc = texts[key]
             ids[key] = store.create_question(
                 system, name=qname, description=qdesc, collection_id=col.id, connection="demo", kind="builder",

@@ -192,6 +192,24 @@ function aggregate(values: number[], agg: AggregateFn): number | null {
   return Math.max(...values);
 }
 
+/**
+ * Keys of several columns in the order their values first appear (the query's ORDER BY), one level
+ * after the other: rows of the same line stay together under it, whatever order the result had.
+ */
+function grouped(keys: Map<string, string[]>): [string, string[]][] {
+  const entries = [...keys.entries()];
+  const depth = entries[0]?.[1].length ?? 0;
+  if (depth < 2) return entries;
+  const rank = Array.from({ length: depth }, () => new Map<string, number>());
+  for (const [, parts] of entries) parts.forEach((part, i) => rank[i].has(part) || rank[i].set(part, rank[i].size));
+  const order = (parts: string[]) => parts.map((part, i) => rank[i].get(part)!);
+  return entries.sort(([, a], [, b]) => {
+    const ra = order(a), rb = order(b);
+    const i = ra.findIndex((r, k) => r !== rb[k]);
+    return i < 0 ? 0 : ra[i] - rb[i];
+  });
+}
+
 export function pivot(t: Table, spec: PivotSpec): PivotResult {
   const ri = spec.rows.map((r) => colIndex(t, r)).filter((i) => i >= 0);
   const ci = spec.columns.map((c) => colIndex(t, c)).filter((i) => i >= 0);
@@ -219,15 +237,17 @@ export function pivot(t: Table, spec: PivotSpec): PivotResult {
     add(`*|${cks}`, row);
     add('*|*', row);
   }
-  const rList = [...rowKeys.keys()];
-  const cList = [...colKeys.keys()];
+  const rows = grouped(rowKeys);
+  const cols = grouped(colKeys);
+  const rList = rows.map(([k]) => k);
+  const cList = cols.map(([k]) => k);
   const get = (k: string, v: number) => {
     const b = buckets.get(k);
     return b ? aggregate(b[v], spec.values[v].agg) : null;
   };
   return {
-    rowKeys: [...rowKeys.values()],
-    colKeys: [...colKeys.values()],
+    rowKeys: rows.map(([, parts]) => parts),
+    colKeys: cols.map(([, parts]) => parts),
     valueLabels: spec.values.map((v) => tr('{agg} of {column}', { agg: tr(v.agg), column: titleOf(t.columns, v.column) })),
     cell: (r, c, v) => get(`${rList[r]}|${cList[c]}`, v),
     rowTotal: (r, v) => get(`${rList[r]}|*`, v),

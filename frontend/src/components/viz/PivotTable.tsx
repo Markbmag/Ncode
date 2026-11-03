@@ -1,70 +1,98 @@
+import { useMemo } from 'react';
 import { Box, Table as CTable, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
-import { pivot } from '../../viz/data';
 import type { Table } from '../../viz/data';
 import { formatCell, formatNumber } from '../../viz/format';
+import { withColumnFormats } from '../../viz/options';
+import { effectivePivot, pivotGrid } from '../../viz/pivot';
+import type { GridCell } from '../../viz/pivot';
 import type { VizSpec } from '../../viz/types';
-import { titleOf } from '../../viz/labels';
 import { t } from '../../i18n/index.ts';
 
 const MAX_COLS = 60;
 const MAX_ROWS = 500;
 
-/** Rows x columns with sums (or other aggregates) and totals, computed in the browser. */
+/**
+ * Rows × columns with sums (or other totals) and totals, computed in the browser, laid out like
+ * Excel (src/viz/pivot.ts; the Excel export writes the same grid). Without a layout of its own it
+ * starts from the default one: choosing "Pivot table" shows something at once.
+ */
 export function PivotTable({ table, viz }: { table: Table; viz: VizSpec }) {
-  const spec = viz.pivot;
-  if (!spec || spec.values.length === 0) {
+  const spec = useMemo(() => effectivePivot(viz, table.columns), [viz, table.columns]);
+  const formats = useMemo(() => withColumnFormats(viz, table).format ?? {}, [viz, table]);
+  const grid = useMemo(() => pivotGrid(table, spec, { maxRows: MAX_ROWS, maxCols: MAX_COLS }), [table, spec]);
+  if (spec.values.length === 0) {
     return (
       <Text p={4} fontSize="sm" color="mutedText">
         {t('Choose rows, columns and values in the chart settings.')}
       </Text>
     );
   }
-  const p = pivot(table, spec);
-  const totals = spec.totals !== false;
-  const cols = p.colKeys.slice(0, MAX_COLS);
-  const rows = p.rowKeys.slice(0, MAX_ROWS);
-  const multi = spec.values.length > 1;
+  if (table.rows.length === 0) {
+    return (
+      <Text p={4} fontSize="sm" color="mutedText">
+        {t('No rows to put into the pivot table.')}
+      </Text>
+    );
+  }
   const typeOf = (name: string) => table.columns.find((c) => c.name === name)?.type ?? 'string';
-  const label = (names: string[], values: string[]) => values.map((v, i) => formatCell(v, typeOf(names[i]), names[i])).join(' · ') || t('All');
-  const fmtValue = (v: number | null, k: number) => (v === null ? '' : formatNumber(v, viz.format?.[spec.values[k].column] ?? {}));
+  const text = (cell: GridCell): string => {
+    if (cell.kind === 'title') return cell.text;
+    if (cell.kind === 'key') return formatCell(cell.raw, typeOf(cell.field), cell.field, formats[cell.field]);
+    if (cell.kind === 'number') {
+      const v = spec.values[cell.v];
+      return cell.value === null ? '' : formatNumber(cell.value, v.agg === 'count' ? {} : (formats[v.column] ?? {}));
+    }
+    return '';
+  };
+  const lastBody = grid.body.length - 1;
 
   return (
     <Box h="100%" overflow="auto" data-testid="pivot">
       <CTable size="sm" sx={{ fontVariantNumeric: 'tabular-nums' }}>
         <Thead position="sticky" top={0} bg="chipBg" zIndex={1}>
-          <Tr>
-            <Th>{spec.rows.map((r) => titleOf(table.columns, r)).join(' · ') || ''}</Th>
-            {cols.map((ck, c) =>
-              spec.values.map((_v, k) => (
-                <Th key={`${c}-${k}`} isNumeric>
-                  {label(spec.columns, ck)}
-                  {multi && <Text as="span" color="faintText" textTransform="none"> {p.valueLabels[k]}</Text>}
-                </Th>
-              )),
-            )}
-            {totals && spec.values.map((_, k) => <Th key={`t${k}`} isNumeric>{t('Total')}{multi ? ` ${p.valueLabels[k]}` : ''}</Th>)}
-          </Tr>
-        </Thead>
-        <Tbody>
-          {rows.map((rk, r) => (
+          {grid.header.map((row, r) => (
             <Tr key={r}>
-              <Td fontWeight={600}>{label(spec.rows, rk)}</Td>
-              {cols.map((_, c) => spec.values.map((__, k) => <Td key={`${c}-${k}`} isNumeric>{fmtValue(p.cell(r, c, k), k)}</Td>))}
-              {totals && spec.values.map((_, k) => <Td key={`t${k}`} isNumeric fontWeight={600}>{fmtValue(p.rowTotal(r, k), k)}</Td>)}
+              {row.map((cell, c) => (
+                <Th
+                  key={c}
+                  colSpan={'span' in cell ? cell.span : undefined}
+                  isNumeric={c >= grid.left && cell.kind !== 'title'}
+                  textAlign={c >= grid.left && cell.kind === 'title' && r > 0 ? 'right' : undefined}
+                  textTransform="none"
+                  color={cell.kind === 'key' ? 'bodyText' : undefined}
+                  whiteSpace="nowrap"
+                >
+                  {text(cell)}
+                </Th>
+              ))}
             </Tr>
           ))}
-          {totals && (
-            <Tr>
-              <Td fontWeight={700}>{t('Total')}</Td>
-              {cols.map((_, c) => spec.values.map((__, k) => <Td key={`${c}-${k}`} isNumeric fontWeight={700}>{fmtValue(p.colTotal(c, k), k)}</Td>))}
-              {spec.values.map((_, k) => <Td key={`g${k}`} isNumeric fontWeight={700}>{fmtValue(p.grandTotal(k), k)}</Td>)}
-            </Tr>
-          )}
+        </Thead>
+        <Tbody>
+          {grid.body.map((row, r) => {
+            const totals = grid.totalRow && r === lastBody;
+            return (
+              <Tr key={r} data-testid={totals ? 'pivot-total-row' : undefined}>
+                {row.map((cell, c) => (
+                  <Td
+                    key={c}
+                    isNumeric={cell.kind === 'number'}
+                    fontWeight={totals || c < grid.left ? (totals ? 700 : 600) : cell.kind === 'number' && cell.total ? 600 : undefined}
+                    whiteSpace="nowrap"
+                  >
+                    {text(cell)}
+                  </Td>
+                ))}
+              </Tr>
+            );
+          })}
         </Tbody>
       </CTable>
-      {(p.colKeys.length > MAX_COLS || p.rowKeys.length > MAX_ROWS) && (
+      {(grid.cols > MAX_COLS || grid.rows > MAX_ROWS) && (
         <Text p={2} fontSize="xs" color="faintText">
-          {t('Showing {rows} of {rowTotal} rows and {cols} of {colTotal} columns.', { rows: rows.length, rowTotal: p.rowKeys.length, cols: cols.length, colTotal: p.colKeys.length })}
+          {t('Showing {rows} of {rowTotal} rows and {cols} of {colTotal} columns.', {
+            rows: Math.min(grid.rows, MAX_ROWS), rowTotal: grid.rows, cols: Math.min(grid.cols, MAX_COLS), colTotal: grid.cols,
+          })}
         </Text>
       )}
     </Box>

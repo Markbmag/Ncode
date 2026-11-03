@@ -4,6 +4,7 @@ A backup is one zip file:
 
     ncode.sqlite      a consistent copy of the app database (SQLite's online backup, safe while running)
     datasets/...      the uploaded files (Parquet)
+    kanban/...        files attached to Kanban cards (kanban/<board id>/<name>)
     manifest.json     when, which schema version, what is inside
 
 The encryption key (backend/data/secret.key or NCODE_SECRET_KEY) is NOT in it: keep it apart.
@@ -47,6 +48,14 @@ def datasets_dir(app_db_path: Path) -> Path:
     return app_db_path.parent / "datasets"
 
 
+def kanban_dir(app_db_path: Path) -> Path:
+    return app_db_path.parent / "kanban"
+
+
+# folders of files next to the app database that a backup carries: (name in the zip, where they live)
+FILE_FOLDERS = (("datasets", datasets_dir), ("kanban", kanban_dir))
+
+
 def _side_files(db: Path) -> list[Path]:
     return [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm", "-journal")]
 
@@ -79,18 +88,21 @@ def make_backup(app_db_path: Path, *, auto: bool = False, out_dir: Path | None =
         finally:
             dst.close()
             src.close()
-        files = 0
+        counts = {name: 0 for name, _where in FILE_FOLDERS}
         partial = target.with_suffix(".zip.part")
         with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.write(copy, "ncode.sqlite")
-            data = datasets_dir(app_db_path)
-            if data.is_dir():
+            for name, where in FILE_FOLDERS:
+                data = where(app_db_path)
+                if not data.is_dir():
+                    continue
                 for f in sorted(data.rglob("*")):
-                    if f.is_file():
-                        zf.write(f, f"datasets/{f.relative_to(data).as_posix()}")
-                        files += 1
+                    if f.is_file() and not f.name.endswith(".part"):  # not an upload being written right now
+                        zf.write(f, f"{name}/{f.relative_to(data).as_posix()}")
+                        counts[name] += 1
             zf.writestr("manifest.json", json.dumps({
-                "created_at": time.time(), "schema_revision": revision, "datasets": files, "auto": auto,
+                "created_at": time.time(), "schema_revision": revision, "datasets": counts["datasets"],
+                "kanban_files": counts["kanban"], "auto": auto,
                 "note": "The encryption key (secret.key / NCODE_SECRET_KEY) is not included: keep it apart.",
             }, indent=2))
         os.replace(partial, target)
@@ -167,12 +179,13 @@ def restore(zip_path: Path, app_db_path: Path) -> dict[str, Any]:
             for side in _side_files(app_db_path):
                 side.unlink(missing_ok=True)
             shutil.copy2(restored_db, app_db_path)
-            data = datasets_dir(app_db_path)
-            if data.exists():
-                shutil.move(str(data), f"{data}.before-restore-{stamp}")
-            src = Path(tmp) / "datasets"
-            if src.is_dir():
-                shutil.copytree(src, data)
+            for name, where in FILE_FOLDERS:
+                data = where(app_db_path)
+                if data.exists():
+                    shutil.move(str(data), f"{data}.before-restore-{stamp}")
+                src = Path(tmp) / name
+                if src.is_dir():
+                    shutil.copytree(src, data)
     return manifest
 
 

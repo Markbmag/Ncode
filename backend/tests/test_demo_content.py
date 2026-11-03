@@ -53,3 +53,22 @@ def test_russian_names(tmp_path):
     with _client(tmp_path, demo_language="ru") as client:
         carol = auth(client, "carol", "carol-pass-1")
         assert client.get("/api/home", headers=carol).json()["start_here"]["name"] == "Демо: завод"
+
+
+def test_the_scrap_rate_example_uses_the_ratio_metric(tmp_path):
+    """M12: "Scrap rate per line" on the dashboard, a true ratio (all scrap ÷ all pieces), shown as percent."""
+    with _client(tmp_path) as client:
+        carol = auth(client, "carol", "carol-pass-1")
+        board_id = client.get("/api/dashboards", headers=carol).json()["dashboards"][0]["id"]
+        board = client.get(f"/api/dashboards/{board_id}", headers=carol).json()
+        card = next(c for c in board["cards"] if c.get("key") == "rate")
+        assert card["question"]["name"] == "Scrap rate per line"
+        assert card["question"]["viz"]["spec"]["type"] == "bar"
+        res = client.post(f"/api/dashboards/{board_id}/cards/rate/run", headers=carol, json={"wait_ms": 5000}).json()
+        if res["status"] == "running":
+            res = wait_done(client, carol, res["task_id"])
+        result = res["result"]
+        assert [c["name"] for c in result["columns"]] == ["Line", "Scrap rate"]
+        assert result["columns"][1]["format"]["style"] == "percent"
+        rates = dict(result["rows"])
+        assert max(rates, key=rates.get) == "Paint line" and all(0 < v < 0.2 for v in rates.values())

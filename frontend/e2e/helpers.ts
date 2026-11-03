@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
-export const API = 'http://127.0.0.1:8765';
+export const API = process.env.NCODE_E2E_API || 'http://127.0.0.1:8765';
 
 export const USERS: Record<string, string> = {
   admin: 'admin-pass-1',
@@ -28,6 +28,7 @@ export async function signIn(page: Page, who: Who, path = '/', lang: 'en' | 'ru'
     sessionStorage.setItem('e2e_init', '1');
     localStorage.setItem('ncode_token', value);
     localStorage.setItem('ncode_lang', language);
+    localStorage.setItem('ncode_service', '"bi"'); // the BI tests skip the launcher (e2e/kanban.spec.ts tests it)
     if (db) localStorage.setItem('ncode_active', JSON.stringify(db));
   }, [t, lang, database] as const);
   await page.goto(path);

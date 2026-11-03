@@ -303,9 +303,11 @@ class AppDB:
             conn.execute(delete(users_table).where(users_table.c.id == uid))
             from .automation.store import forget_recipient  # both import this module
             from .content.store import forget_user
+            from .kanban.store import forget_user as forget_kanban_user
 
             forget_user(conn, uid, username)
             forget_recipient(conn, username)
+            forget_kanban_user(conn, uid, username)  # cards and comments stay with the name; assignments go
         return True
 
     # -- groups (M9) ---------------------------------------------------------
@@ -355,6 +357,9 @@ class AppDB:
             conn.execute(delete(group_members_table).where(group_members_table.c.group_id == gid))
             conn.execute(delete(row_rules_table).where(row_rules_table.c.group_id == gid))
             conn.execute(delete(permissions_table).where(permissions_table.c.group_id == gid))
+            from .kanban.store import forget_group
+
+            forget_group(conn, gid)  # board memberships of the group
         return True
 
     def set_group_members(self, gid: int, user_ids: list[int]) -> None:

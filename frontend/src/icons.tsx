@@ -320,6 +320,28 @@ export const BadgeCheckIcon = make(
   </>,
 );
 
+// undo / redo and the per-step preview (M12)
+export const UndoIcon = make(
+  <>
+    <path d="M9 14 4 9l5-5" />
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+  </>,
+);
+
+export const RedoIcon = make(
+  <>
+    <path d="m15 14 5-5-5-5" />
+    <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+  </>,
+);
+
+export const EyeIcon = make(
+  <>
+    <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" />
+    <circle cx="12" cy="12" r="3" />
+  </>,
+);
+
 export const PanelLeftIcon = make(
   <>
     <rect x="3" y="3" width="18" height="18" rx="2" />

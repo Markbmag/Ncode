@@ -453,6 +453,7 @@ RU: dict[str, str] = {
     "Give a value for {', '.join(('{{' + m + '}}' for m in missing))}":
         "Укажите значение для {', '.join(('{{' + m + '}}' for m in missing))}",
     "The query has no finished result to export": "У запроса нет готового результата для выгрузки",
+    "The pivot table layout of the export is not valid": "Макет сводной таблицы для выгрузки неверен",
     "The query took longer than {self.timeout_sec} seconds and was stopped":
         "Запрос выполнялся дольше {self.timeout_sec} с и был остановлен",
     "The statement returned no rows": "Запрос не вернул строк",
@@ -460,6 +461,11 @@ RU: dict[str, str] = {
     "a field needs either ref or expr": "полю нужен либо ref, либо expr",
     "a metric aggregation names only the metric": "в агрегации-метрике указывается только метрика",
     "metric goes with fn 'metric'": "metric указывается вместе с fn 'metric'",
+    "a ratio needs a numerator and a denominator": "для отношения нужны числитель и знаменатель",
+    "a ratio names only its numerator and denominator": "в отношении указываются только числитель и знаменатель",
+    "each side of a ratio is a plain total (count, sum, average, minimum or maximum)":
+        "числитель и знаменатель отношения — простые итоги (количество, сумма, среднее, минимум или максимум)",
+    "numerator and denominator go with fn 'ratio'": "numerator и denominator указываются вместе с fn 'ratio'",
     "an aggregation takes ref or expr, not both": "агрегация принимает ref или expr, но не оба сразу",
     "{self.fn} needs a column (ref) or an expression": "{self.fn} нужен столбец (ref) или выражение",
     "a breakout needs either ref or expr": "группировке нужен либо ref, либо expr",
@@ -516,7 +522,16 @@ RU: dict[str, str] = {
     "give as many columns on each side": "укажите одинаковое число столбцов с каждой стороны",
     "a metric cannot be built from another metric": "метрику нельзя построить из другой метрики",
     "a metric takes ref or expr, not both": "метрика принимает ref или expr, но не оба сразу",
-    "{self.fn} needs a column": "{self.fn} нужен столбец",
+    "{total.fn} needs a column": "{total.fn} нужен столбец",
+    "{column!r} does not refer to another table; add a relationship first":
+        "{column!r} не ссылается на другую таблицу; сначала добавьте связь",
+    "{to_table!r} has no column {label!r} to show": "В {to_table!r} нет столбца {label!r}, который можно показать",
+    # ---------------------------------------------------------------- app/query/values.py (M12)
+    "Values are listed for text, number and yes/no columns; {name!r} is {kind}":
+        "Список значений есть у текстовых, числовых столбцов и столбцов «да/нет»; {name!r} имеет тип {kind}",
+    "Listing the values took too long; type a few letters to search instead":
+        "Список значений собирается слишком долго; введите несколько букв для поиска",
+    "Could not list the values: {detail}": "Не удалось получить список значений: {detail}",
     # ---------------------------------------------------------------- app/sharing
     "No such {target_type}": "{target_type} не найден",
     "Public links are switched off: Admin → Sharing": "Публичные ссылки отключены: Администрирование → Общий доступ",
@@ -548,6 +563,43 @@ RU: dict[str, str] = {
     "The embedding token needs an expiry (\"exp\")": "Токену встраивания нужен срок действия (\"exp\")",
     "The embedding token has expired": "Срок действия токена встраивания истёк",
     "The embedding token may live at most 30 days": "Токен встраивания может действовать не больше 30 дней",
+    # ---------------------------------------------------------------- app/kanban (Ncode - Kanban)
+    "Board not found": "Доска не найдена",
+    "Card not found": "Карточка не найдена",
+    "Column not found": "Колонка не найдена",
+    "Label not found": "Метка не найдена",
+    "Step not found": "Шаг плана действий не найден",
+    "Comment not found": "Комментарий не найден",
+    "Attachment not found": "Вложение не найдено",
+    "Only members of this board can change it": "Изменять доску могут только её участники",
+    "Only the board's owners can do this": "Это могут сделать только владельцы доски",
+    "The board is archived: restore it first": "Доска в архиве: сначала восстановите её",
+    "Archive the board first": "Сначала отправьте доску в архив",
+    "Archive the card first": "Сначала отправьте карточку в архив",
+    "The column is not on this board": "Этой колонки нет на доске",
+    "The start date is after the due date": "Дата начала позже срока",
+    "Each member is either a user or a group": "Участник — это либо пользователь, либо группа",
+    "Unknown user id {uid}": "Неизвестный пользователь (id {uid})",
+    "Unknown group id {gid}": "Неизвестная группа (id {gid})",
+    "Unknown label id {lid}": "Неизвестная метка (id {lid})",
+    "A board needs at least one owner": "У доски должен быть хотя бы один владелец",
+    "Move its cards first": "Сначала перенесите её карточки",
+    "A board needs at least one column": "На доске должна быть хотя бы одна колонка",
+    "Only the author can edit a comment": "Изменить комментарий может только его автор",
+    "Only the author or the board's owners can delete a comment":
+        "Удалить комментарий может только его автор или владелец доски",
+    "Only images have a preview": "Миниатюра бывает только у изображений",
+    "This attachment has no preview": "У этого вложения нет миниатюры",
+    "Give the file's name (filename)": "Укажите имя файла (filename)",
+    "Files of this type cannot be attached ({extension(name) or name}). Allowed: images, PDF, office documents and text files":
+        "Файлы такого типа нельзя прикрепить ({extension(name) or name}). Можно: изображения, PDF, офисные документы "
+        "и текстовые файлы",
+    "The file is larger than {mb} MB": "Файл больше {mb} МБ",
+    "The file's content does not match its type ({extension(name)})":
+        "Содержимое файла не соответствует его типу ({extension(name)})",
+    "The preview is too large": "Миниатюра слишком большая",
+    "The preview must be a JPEG, PNG or WebP image": "Миниатюра должна быть изображением JPEG, PNG или WebP",
+    "The file is missing on the server": "Файл отсутствует на сервере",
 }
 
 # Single words that fill a {placeholder} of another message ("Someone else saved this {what} ...").

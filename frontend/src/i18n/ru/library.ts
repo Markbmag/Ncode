@@ -336,6 +336,29 @@ export const LIBRARY: Record<string, string> = {
   'No dashboards yet. A dashboard puts saved questions on one page that everyone reads the same way.': 'Дашбордов пока нет. Дашборд собирает сохранённые вопросы на одной странице, которую все читают одинаково.',
   '“Line output this week”: three saved questions side by side, with one date filter on top.': '«Выпуск линий за неделю»: три сохранённых вопроса рядом и один фильтр по дате сверху.',
   'To move it, make a new collection: choose “A new collection…”.': 'Чтобы переместить, создайте новую коллекцию: выберите «Новая коллекция…».',
+  // M12: a saved question opens as its result
+  'Duplicate to edit': 'Изменить копию',
+  'You can only view this question. A copy of your own can be changed.': 'Этот вопрос можно только просматривать. Свою копию можно менять.',
+  'Fill in the values above to see the result.': 'Заполните значения выше, чтобы увидеть результат.',
+  'Close the editor and show the result': 'Закрыть редактор и показать результат',
+  'Save your changes?': 'Сохранить изменения?',
+  'You changed “{name}”. Save it before going back to the result?': 'Вы изменили «{name}». Сохранить перед возвратом к результату?',
+  'Keep editing': 'Продолжить редактирование',
+  'Save the chart': 'Сохранить график',
+  'Back to the saved chart': 'Вернуть сохранённый график',
+  // M12: dashboard filters connect themselves
+  "This card is not connected to {filters} and shows all its rows.": "Эта карточка не подключена к фильтрам: {filters}, поэтому показывает все свои строки.",
+  "not filtered by {filters}": "без фильтра: {filters}",
+  "Connects the cards that are not connected yet to their obvious column; the others stay as they are.":
+    "Подключает ещё не подключённые карточки к подходящему столбцу; остальные остаются как есть.",
+  "Connect the other cards": "Подключить остальные карточки",
+  "Connected by itself to {n} of {total} cards (the matching column of each). Check them and change any below.":
+    "Подключён сам к {n} из {total} карточек (к подходящему столбцу каждой). Проверьте и при необходимости измените ниже.",
+  "Name the filter like the column it narrows (e.g. Line) and the cards with that column connect by themselves, or connect them below.":
+    "Назовите фильтр как столбец, который он ограничивает (например, «Линия»), — карточки с этим столбцом подключатся сами; или подключите их ниже.",
+  "No card has a column for this filter: connect them below.": "Ни в одной карточке нет подходящего столбца для этого фильтра: подключите их ниже.",
+  "Connected by itself: the column of the same type and name. Change it if it is not the right one.":
+    "Подключено само: столбец того же типа и с тем же названием. Измените, если это не тот столбец.",
   'Change how this chart looks on the dashboard': 'Изменить вид графика на этом дашборде',
   'For this card on this dashboard; the saved question keeps its own chart.': 'Для этой карточки на этом дашборде; у сохранённого вопроса остаётся свой график.',
 };

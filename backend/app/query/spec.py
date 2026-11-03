@@ -121,7 +121,7 @@ class FilterGroup(_Model):
 # ---------------------------------------------------------------- the question
 
 JoinType = Literal["inner", "left", "full"]
-AggregateFn = Literal["count", "count_distinct", "sum", "avg", "min", "max", "metric"]
+AggregateFn = Literal["count", "count_distinct", "sum", "avg", "min", "max", "metric", "ratio"]
 Bucket = Literal["minute", "hour", "day", "week", "month", "quarter", "year"]
 
 
@@ -168,9 +168,25 @@ class Aggregation(_Model):
     where: "FilterGroup | None" = None
     # {"fn": "metric", "metric": 3}: a saved metric (app/semantic), expanded before compiling
     metric: int | None = Field(default=None, ge=1)
+    # {"fn": "ratio", "numerator": {...}, "denominator": {...}} (M12): one total divided by another,
+    # e.g. scrap rate = sum of scrap ÷ sum of all pieces, so it stays right in every group; "where"
+    # then applies to both. Usually a saved metric's definition (app/semantic), expanded before compiling.
+    numerator: "Aggregation | None" = None
+    denominator: "Aggregation | None" = None
 
     @model_validator(mode="after")
     def _target(self) -> "Aggregation":
+        if self.fn == "ratio":
+            if self.numerator is None or self.denominator is None:
+                raise ValueError("a ratio needs a numerator and a denominator")
+            if self.ref is not None or self.expr is not None or self.metric is not None:
+                raise ValueError("a ratio names only its numerator and denominator")
+            for part in (self.numerator, self.denominator):
+                if part.fn in ("metric", "ratio"):
+                    raise ValueError("each side of a ratio is a plain total (count, sum, average, minimum or maximum)")
+            return self
+        if self.numerator is not None or self.denominator is not None:
+            raise ValueError("numerator and denominator go with fn 'ratio'")
         if self.fn == "metric":
             if self.metric is None or self.ref is not None or self.expr is not None:
                 raise ValueError("a metric aggregation names only the metric")

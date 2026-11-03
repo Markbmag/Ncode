@@ -6,9 +6,12 @@ import type { ReactNode } from 'react';
 import type { ResultColumn } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
 import { CATEGORICAL, MAX_SERIES } from '../../viz/palette';
+import { chartFit, vizReason } from '../../viz/autoViz';
+import { effectivePivot } from '../../viz/pivot';
 import { CHART_TYPES } from '../../viz/types';
-import type { AggregateFn, ChartType, ColumnFormat, NumberStyle, VizSpec } from '../../viz/types';
+import type { ChartType, ColumnFormat, NumberStyle, VizSpec } from '../../viz/types';
 import { columnDescription, columnTitle, titleOf } from '../../viz/labels';
+import { PivotEditor } from './PivotEditor';
 import { t as tr } from '../../i18n/index.ts';
 
 interface VizSettingsProps {
@@ -16,9 +19,8 @@ interface VizSettingsProps {
   columns: ResultColumn[];
   onChange: (spec: VizSpec) => void;
   seriesNames?: string[]; // for highlight / colours (breakout values)
+  rowCount?: number; // how many rows the result has (chart types that need more are greyed out)
 }
-
-const AGGS: AggregateFn[] = ['sum', 'avg', 'count', 'min', 'max'];
 
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
@@ -53,7 +55,7 @@ function ColumnPick({ columns, value, onChange, numeric, allowNone, label }: {
 }
 
 /** The chart settings drawer. Every change produces a new VizSpec (JSON, saved with the question in M4). */
-export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSettingsProps) {
+export function VizSettings({ spec, columns, onChange, seriesNames = [], rowCount = 2 }: VizSettingsProps) {
   const set = (patch: Partial<VizSpec>) => onChange({ ...spec, ...patch });
   const t = spec.type;
   const cartesian = ['bar', 'line', 'area', 'combo'].includes(t);
@@ -64,14 +66,32 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [] }: VizSe
     <VStack align="stretch" spacing={4} data-testid="viz-settings">
       <Field label={tr('Chart type')}>
         <SimpleGrid columns={3} spacing={1.5}>
-          {CHART_TYPES.map((c) => (
-            <Tooltip key={c.type} label={c.hint} hasArrow openDelay={300}>
-              <Button size="xs" variant={t === c.type ? 'brand' : 'subtle'} onClick={() => set({ type: c.type as ChartType })} data-testid={`viz-type-${c.type}`}>
-                {c.label}
-              </Button>
-            </Tooltip>
-          ))}
+          {CHART_TYPES.map((c) => {
+            // M12: a type that cannot show this result is greyed out and says why
+            const blocked = t === c.type ? null : chartFit(c.type, columns, rowCount);
+            return (
+              <Tooltip key={c.type} label={blocked ?? c.hint} hasArrow openDelay={300}>
+                <Button
+                  size="xs"
+                  variant={t === c.type ? 'brand' : 'subtle'}
+                  onClick={() => !blocked && set({ type: c.type as ChartType })}
+                  aria-disabled={!!blocked}
+                  opacity={blocked ? 0.4 : 1}
+                  cursor={blocked ? 'not-allowed' : undefined}
+                  data-testid={`viz-type-${c.type}`}
+                  data-blocked={blocked ? true : undefined}
+                >
+                  {c.label}
+                </Button>
+              </Tooltip>
+            );
+          })}
         </SimpleGrid>
+        {vizReason(spec, columns) && (
+          <Text fontSize="xs" color="mutedText" mt={1.5} data-testid="viz-reason">
+            {vizReason(spec, columns)}
+          </Text>
+        )}
       </Field>
 
       {(cartesian || ['pie', 'funnel', 'heatmap', 'scatter', 'histogram'].includes(t)) && (
@@ -283,35 +303,6 @@ function FormatRow({ name, title, fmt, onChange }: { name: string; title: string
 }
 
 function PivotFields({ spec, columns, set }: { spec: VizSpec; columns: ResultColumn[]; set: (p: Partial<VizSpec>) => void }) {
-  const p = spec.pivot ?? { rows: [], columns: [], values: [], totals: true };
-  const update = (patch: Partial<typeof p>) => set({ pivot: { ...p, ...patch } });
-  const dims = columns.filter((c) => c.type !== 'number' || c.role === 'dimension');
-  const toggle = (list: string[], name: string) => (list.includes(name) ? list.filter((x) => x !== name) : [...list, name]);
-  return (
-    <VStack align="stretch" spacing={3}>
-      <Field label={tr('Rows')}>
-        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.rows.includes(c.name)} onChange={() => update({ rows: toggle(p.rows, c.name) })}><Text fontSize="xs">{columnTitle(c)}</Text></Checkbox>)}</Flex>
-      </Field>
-      <Field label={tr('Columns')}>
-        <Flex gap={2} wrap="wrap">{dims.map((c) => <Checkbox key={c.name} size="sm" isChecked={p.columns.includes(c.name)} onChange={() => update({ columns: toggle(p.columns, c.name) })}><Text fontSize="xs">{columnTitle(c)}</Text></Checkbox>)}</Flex>
-      </Field>
-      <Field label={tr('Values')}>
-        <VStack align="stretch" spacing={1.5}>
-          {p.values.map((v, i) => (
-            <HStack key={i} spacing={1.5}>
-              <Select size="sm" maxW="90px" value={v.agg} onChange={(e) => update({ values: p.values.map((x, k) => (k === i ? { ...x, agg: e.target.value as AggregateFn } : x)) })} aria-label={tr('Aggregate')}>
-                {AGGS.map((a) => <option key={a} value={a}>{tr(a)}</option>)}
-              </Select>
-              <ColumnPick columns={columns} value={v.column} onChange={(column) => column && update({ values: p.values.map((x, k) => (k === i ? { ...x, column } : x)) })} label={tr('Value column')} />
-              <IconButton aria-label={tr('Remove value')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => update({ values: p.values.filter((_, k) => k !== i) })} />
-            </HStack>
-          ))}
-          <Button size="xs" variant="subtle" leftIcon={<PlusIcon boxSize={3} />} alignSelf="flex-start" onClick={() => update({ values: [...p.values, { column: columns.find((c) => c.type === 'number')?.name ?? columns[0].name, agg: 'sum' }] })}>
-            {tr('Value')}
-          </Button>
-        </VStack>
-      </Field>
-      <Checkbox size="sm" isChecked={p.totals !== false} onChange={(e) => update({ totals: e.target.checked })}>{tr('Totals')}</Checkbox>
-    </VStack>
-  );
+  // the layout shown (the default one until it is changed): Rows / Columns / Values like Excel (M12)
+  return <PivotEditor spec={effectivePivot(spec, columns)} columns={columns} onChange={(pivot) => set({ pivot })} />;
 }

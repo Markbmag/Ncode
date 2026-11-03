@@ -1,25 +1,32 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Text,
   Textarea, Tooltip, VStack, useToast,
 } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
-import { apiErrorMessage } from '../api';
-import type { SchemaColumn, SchemaTable, SchemaV2 } from '../api';
+import { apiErrorMessage, http } from '../api';
+import type { ColumnType, SchemaColumn, SchemaTable, SchemaV2 } from '../api';
 import { FriendlyName } from '../components/FriendlyName';
 import { FilterEditor } from '../components/query/FilterEditor';
 import { ColumnSelect } from '../components/query/ColumnSelect';
+import type { PickOption } from '../components/query/ColumnSelect';
 import { t } from '../i18n/index.ts';
-import { PencilIcon, PlusIcon, TrashIcon } from '../icons';
+import { PencilIcon, PlusIcon, TrashIcon, XIcon } from '../icons';
 import { GlossaryLinks } from '../glossary/GlossaryLinks';
 import { ConfirmDialog, DialogShell } from '../library/dialogs';
 import { AGGREGATES } from '../query/draft';
 import { byLabel, descriptionOf, differsFromTechnical, nameOf, prettify, setTranslation } from '../lib/names';
 import type { Translations } from '../lib/names';
 import type { FilterGroup } from '../query/types';
+import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
+import type { TaskSnapshot } from '../query/useQueryRun';
+import { formatNumber } from '../viz/format';
 import type { ColumnFormat, NumberStyle } from '../viz/types';
 import { SEMANTIC_TYPES, semantic, useMetrics } from './api';
-import type { FieldMeta, Metric, MetricDefinition } from './api';
+import { LabelColumnField } from './LabelColumnField';
+import type { FieldMeta, Metric, MetricDefinition, MetricPart, TotalFn } from './api';
+import { ADDABLE, definitionOf, definitionReady, draftOf, draftReady, emptyGroup, exampleSpec, exampleValues, needsColumn } from './ratio';
+import type { TotalDraft } from './ratio';
 
 // ---------------------------------------------------------------- translations (M11)
 
@@ -158,6 +165,7 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
     hidden: !!column.hidden,
     parse_as_date: !!column.parse_as_date,
     translations: column.translations ?? null,
+    label_column: column.label_column ?? null,
   });
   const [format, setFormat] = useState<ColumnFormat>((column.format as ColumnFormat) ?? {});
   const text = /char|text|string|clob/i.test(column.db_type) || column.parse_as_date;
@@ -197,6 +205,7 @@ function FieldForm({ connection, table, column, onClose }: { connection: string;
       </FormControl>
       <RussianFields translations={meta.translations ?? null} onChange={(translations) => set({ translations })} testId="field-ru" />
       <FormatFields format={format} onChange={setFormat} />
+      <LabelColumnField connection={connection} column={column} value={meta.label_column} onChange={(label_column) => set({ label_column })} />
       <VStack align="stretch" spacing={2}>
         <Checkbox size="sm" isChecked={!!meta.hidden} onChange={(e) => set({ hidden: e.target.checked })} data-testid="field-hidden">
           {t('Hidden — not offered in the question builder and left out of “all columns” (still usable by name; not a permission)')}
@@ -246,6 +255,13 @@ export function EditableColumns({ connection, table, columns, onEdit }: { connec
           {col.parse_as_date && <Badge fontSize="0.6rem" colorScheme="teal">{t('as date')}</Badge>}
           {col.hidden && <Badge fontSize="0.6rem">{t('hidden')}</Badge>}
           {col.semantic_type && <Badge fontSize="0.6rem" colorScheme="purple" textTransform="none">{col.semantic_type}</Badge>}
+          {col.label_column && (
+            <Tooltip label={t('Shown as {column} of {table}', { column: col.label_column, table: col.foreign_key?.table ?? '' })} hasArrow>
+              <Badge fontSize="0.6rem" colorScheme="teal" textTransform="none" data-testid="model-label-column">
+                → {col.label_column}
+              </Badge>
+            </Tooltip>
+          )}
           <Tooltip label={col.db_type} hasArrow>
             <Badge fontSize="0.6rem" bg="chipBg" color="mutedText" textTransform="none">
               {col.type}
@@ -349,6 +365,13 @@ function RelationshipDialog({ connection, schema, onClose }: { connection: strin
 
 // ---------------------------------------------------------------- metrics
 
+/** "Sum of total", "Count of rows"; a ratio: "Sum of scrap_qty ÷ Sum of a formula". */
+function metricSummary(d: MetricDefinition): string {
+  const one = (p: MetricPart) => `${AGGREGATES.find((a) => a.fn === p.fn)?.label ?? p.fn} ${p.ref ?? (p.expr ? t('a formula') : '')}`.trim();
+  if (d.fn === 'ratio' && d.numerator && d.denominator) return `${one(d.numerator)} ÷ ${one(d.denominator)}`;
+  return one(d as MetricPart);
+}
+
 export function MetricsPanel({ connection, schema }: { connection: string; schema: SchemaV2 }) {
   const metrics = useMetrics(connection);
   const [editing, setEditing] = useState<Metric | 'new' | null>(null);
@@ -382,7 +405,7 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
                   )}
                 </Text>
                 <Text fontSize="xs" color="mutedText" noOfLines={1}>
-                  {AGGREGATES.find((a) => a.fn === m.definition.fn)?.label ?? m.definition.fn} {m.definition.ref ?? (m.definition.expr ? t('a formula') : '')} · {m.table}
+                  {metricSummary(m.definition)} · {m.table}
                   {m.definition.where ? t(' · with a condition') : ''}
                   {m.description ? ` · ${m.description}` : ''}
                 </Text>
@@ -409,13 +432,121 @@ export function MetricsPanel({ connection, schema }: { connection: string; schem
   );
 }
 
+const NUMERIC_FNS: TotalFn[] = ['sum', 'avg'];
+
+/** The column(s) of one total: one column, or for sums and averages several added up (good + scrapped pieces). */
+function TotalColumns({ draft, onChange, options, testId }: { draft: TotalDraft; onChange: (d: TotalDraft) => void; options: PickOption[]; testId: string }) {
+  if (!needsColumn(draft.fn)) return null;
+  const columns = draft.columns.length ? draft.columns : [''];
+  const addable = ADDABLE.includes(draft.fn);
+  const types = NUMERIC_FNS.includes(draft.fn) ? (['number'] as ColumnType[]) : undefined;
+  const set = (i: number, ref: string | null) => {
+    const next = [...columns];
+    if (ref === null) next.splice(i, 1);
+    else next[i] = ref;
+    onChange({ ...draft, columns: next, formula: undefined });
+  };
+  return (
+    <Flex gap={1.5} align="center" wrap="wrap" flex={1} minW="200px">
+      {(addable ? columns : columns.slice(0, 1)).map((c, i) => (
+        <Fragment key={i}>
+          {i > 0 && <Text fontSize="sm" color="mutedText">+</Text>}
+          <ColumnSelect options={options} value={c || undefined} onChange={(ref) => set(i, ref)} types={types} maxW="220px"
+            aria-label={t('Column')} data-testid={i === 0 ? testId : `${testId}-${i + 1}`} />
+          {i > 0 && <IconButton aria-label={t('Remove this column')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => set(i, null)} />}
+        </Fragment>
+      ))}
+      {addable && columns[0] !== '' && columns.length < 6 && (
+        <Tooltip label={t('Add another column to it, row by row (e.g. good + scrapped pieces)')} hasArrow openDelay={300}>
+          <IconButton aria-label={t('Add a column')} size="xs" variant="ghost" icon={<PlusIcon boxSize={3} />} onClick={() => onChange({ ...draft, columns: [...columns, ''], formula: undefined })} data-testid={`${testId}-add`} />
+        </Tooltip>
+      )}
+      {draft.formula && !draft.columns.length && (
+        <Text fontSize="xs" color="mutedText" w="100%">
+          {t('Calculated with a formula; pick a column to replace it.')}
+        </Text>
+      )}
+    </Flex>
+  );
+}
+
+/** One side of a ratio: "Divide [Sum of] [Scrapped pieces]", with its own optional condition. */
+function RatioSide({ label, draft, onChange, options, testId }: { label: string; draft: TotalDraft; onChange: (d: TotalDraft) => void; options: PickOption[]; testId: string }) {
+  const [conditions, setConditions] = useState(draft.where.rules.length > 0);
+  return (
+    <Box>
+      <Flex gap={2} align="center" wrap="wrap">
+        <Text fontSize="sm" fontWeight={600} minW="64px">
+          {label}
+        </Text>
+        <Select size="sm" w="auto" value={draft.fn} onChange={(e) => onChange({ ...draft, fn: e.target.value as TotalFn })} aria-label={t('Calculation')} data-testid={`${testId}-fn`}>
+          {AGGREGATES.map((a) => (
+            <option key={a.fn} value={a.fn}>
+              {a.label}
+            </option>
+          ))}
+        </Select>
+        <TotalColumns draft={draft} onChange={onChange} options={options} testId={`${testId}-column`} />
+        {!conditions && (
+          <Button size="xs" variant="link" onClick={() => setConditions(true)} data-testid={`${testId}-only`}>
+            {t('Only some rows…')}
+          </Button>
+        )}
+      </Flex>
+      {conditions && (
+        <Box pl={{ base: 0, sm: '72px' }} mt={1.5}>
+          <FilterEditor group={draft.where} onChange={(where) => onChange({ ...draft, where })} options={options} emptyText={t('Every row counts.')} testId={`${testId}-where`} />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+/** The metric on all rows of its table, run like a question while the dialog changes (M12). */
+function MetricExample({ spec, format, ratio }: { spec: Record<string, unknown> | null; format: ColumnFormat; ratio: boolean }) {
+  const { state, run } = useQueryRun();
+  const json = spec ? JSON.stringify(spec) : '';
+  useEffect(() => {
+    if (!json) return;
+    const timer = window.setTimeout(
+      () => void run(async () => (await http.post<TaskSnapshot>('/api/query', { spec: JSON.parse(json), wait_ms: START_WAIT_MS })).data),
+      400,
+    );
+    return () => window.clearTimeout(timer);
+  }, [json, run]);
+  if (!json) return null;
+  let text: string;
+  let color = 'mutedText';
+  if (state.error && (state.status === 'error' || state.status === 'failed')) {
+    text = state.error;
+    color = 'orange.400';
+  } else if (!state.result || state.phase === 'running') {
+    text = t('Working out an example…');
+  } else {
+    const { value, top, bottom } = exampleValues(state.result.rows[0]);
+    const plain = (v: number | null) => (v === null ? '—' : formatNumber(v, {}));
+    if (value !== null && ratio) text = t('On all rows of the table now: {value} = {top} ÷ {bottom}', { value: formatNumber(value, format), top: plain(top), bottom: plain(bottom) });
+    else if (value !== null) text = t('On all rows of the table now: {value}', { value: formatNumber(value, format) });
+    else if (ratio && bottom === 0) text = t('On all rows of the table now: no value, because the second total is 0');
+    else text = t('On all rows of the table now: no value (no row counts)');
+  }
+  return (
+    <Text fontSize="sm" color={color} data-testid="metric-example">
+      {text}
+    </Text>
+  );
+}
+
 function MetricDialog({ connection, schema, metric, onClose }: { connection: string; schema: SchemaV2; metric: Metric | null; onClose: () => void }) {
+  const def = metric?.definition;
   const [name, setName] = useState(metric?.name ?? '');
   const [description, setDescription] = useState(metric?.description ?? '');
   const [table, setTable] = useState(metric?.table ?? '');
-  const [fn, setFn] = useState<MetricDefinition['fn']>(metric?.definition.fn ?? 'sum');
-  const [ref, setRef] = useState<string | undefined>(metric?.definition.ref ? (metric.definition.ref.includes('.') ? metric.definition.ref : `${metric.table}.${metric.definition.ref}`) : undefined);
-  const [where, setWhere] = useState<FilterGroup>(metric?.definition.where ?? { op: 'and', rules: [] });
+  const [kind, setKind] = useState<'total' | 'ratio'>(def?.fn === 'ratio' ? 'ratio' : 'total');
+  const [total, setTotal] = useState<TotalDraft>(() => (def && def.fn !== 'ratio' ? draftOf(def as MetricPart, metric!.table) : draftOf(undefined, '', 'sum')));
+  const [numerator, setNumerator] = useState<TotalDraft>(() => draftOf(def?.numerator, metric?.table ?? '', 'sum'));
+  const [denominator, setDenominator] = useState<TotalDraft>(() => draftOf(def?.denominator, metric?.table ?? '', 'sum'));
+  const [where, setWhere] = useState<FilterGroup>(def?.where ?? emptyGroup());
   const [format, setFormat] = useState<ColumnFormat>(metric?.format ?? {});
   const [translations, setTranslations] = useState<Translations | null>(metric?.translations ?? null);
   const options = useMemo(
@@ -426,12 +557,27 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
     [schema, table],
   );
   const tables = useMemo(() => byLabel(schema.tables), [schema]);
-  const needsColumn = AGGREGATES.find((a) => a.fn === fn)?.needsColumn ?? true;
-  // a formula set up outside this dialog (the demo's "Scrap rate") is kept until a column is picked
-  const formula = !ref && metric?.definition.expr && table === metric.table ? metric.definition.expr : undefined;
-  const cleanWhere = (g: FilterGroup): FilterGroup | null => {
-    const rules = g.rules.filter((r) => ('rules' in r ? r.rules.length > 0 : !!r.ref));
-    return rules.length ? { ...g, rules } : null;
+  const ready = !!table && definitionReady(kind, total, numerator, denominator);
+  const definition = definitionOf(kind, total, numerator, denominator, where);
+  const example = ready ? exampleSpec(connection, table, definition) : null;
+  const pickTable = (next: string) => {
+    setTable(next);
+    const reset = (d: TotalDraft) => ({ ...d, columns: [], formula: undefined, where: emptyGroup() });
+    setTotal(reset);
+    setNumerator(reset);
+    setDenominator(reset);
+    setWhere(emptyGroup());
+  };
+  const pickCalculation = (value: string) => {
+    if (value !== 'ratio') {
+      setKind('total');
+      setTotal((d) => ({ ...d, fn: value as TotalFn }));
+      return;
+    }
+    setKind('ratio');
+    // a share is the usual ratio (scrap rate, % on time): shown as percent unless a format was chosen
+    if (!format.style || format.style === 'auto') setFormat((f) => ({ ...f, style: 'percent' }));
+    if (!draftReady(numerator) && total.columns.length) setNumerator({ ...total, where: emptyGroup() });
   };
   return (
     <DialogShell
@@ -440,18 +586,10 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
       title={metric ? t('Change “{name}”', { name: metric.name }) : t('New metric')}
       submitLabel={t('Save')}
       size="xl"
-      canSubmit={!!name.trim() && !!table && (!needsColumn || !!ref || !!formula)}
+      canSubmit={!!name.trim() && ready}
       onSubmit={() =>
         semantic.saveMetric(
-          {
-            name: name.trim(),
-            description: description.trim() || null,
-            connection,
-            table,
-            definition: { fn, ...(needsColumn && ref ? { ref } : needsColumn && formula ? { expr: formula } : {}), where: cleanWhere(where) },
-            format: cleanFormat(format),
-            translations,
-          },
+          { name: name.trim(), description: description.trim() || null, connection, table, definition, format: cleanFormat(format), translations },
           metric?.id,
         )
       }
@@ -463,7 +601,7 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
         </FormControl>
         <FormControl isRequired>
           <FormLabel fontSize="sm">{t('Table')}</FormLabel>
-          <Select size="sm" value={table} placeholder={t('Pick a table…')} onChange={(e) => { setTable(e.target.value); setRef(undefined); setWhere({ op: 'and', rules: [] }); }} data-testid="metric-table">
+          <Select size="sm" value={table} placeholder={t('Pick a table…')} onChange={(e) => pickTable(e.target.value)} data-testid="metric-table">
             {tables.map((tb) => (
               <option key={tb.name} value={tb.name}>
                 {tb.showTechnical ? `${tb.label} (${tb.name})` : tb.name}
@@ -472,33 +610,39 @@ function MetricDialog({ connection, schema, metric, onClose }: { connection: str
           </Select>
         </FormControl>
       </SimpleGrid>
-      <HStack align="flex-end">
-        <FormControl maxW="200px">
+      <Flex align="flex-end" gap={2} wrap="wrap">
+        <FormControl maxW="260px">
           <FormLabel fontSize="sm">{t('Calculation')}</FormLabel>
-          <Select size="sm" value={fn} onChange={(e) => setFn(e.target.value as MetricDefinition['fn'])} data-testid="metric-fn">
+          <Select size="sm" value={kind === 'ratio' ? 'ratio' : total.fn} onChange={(e) => pickCalculation(e.target.value)} data-testid="metric-fn">
             {AGGREGATES.map((a) => (
               <option key={a.fn} value={a.fn}>
                 {a.label}
               </option>
             ))}
+            <option value="ratio">{t('Divide one total by another')}</option>
           </Select>
         </FormControl>
-        {needsColumn && (
-          <FormControl>
+        {kind === 'total' && needsColumn(total.fn) && (
+          <FormControl flex={1} minW="220px">
             <FormLabel fontSize="sm">{t('Column')}</FormLabel>
-            <ColumnSelect options={options} value={ref} onChange={setRef} types={fn === 'sum' || fn === 'avg' ? ['number'] : undefined} data-testid="metric-column" />
-            {formula && (
-              <Text fontSize="xs" color="mutedText" mt={1}>
-                {t('Calculated with a formula; pick a column to replace it.')}
-              </Text>
-            )}
+            <TotalColumns draft={total} onChange={setTotal} options={options} testId="metric-column" />
           </FormControl>
         )}
-      </HStack>
+      </Flex>
+      {kind === 'ratio' && (
+        <VStack align="stretch" spacing={2} border="1px solid" borderColor="lineColor" borderRadius="md" p={3} data-testid="metric-ratio">
+          <RatioSide label={t('Divide')} draft={numerator} onChange={setNumerator} options={options} testId="metric-num" />
+          <RatioSide label={t('by')} draft={denominator} onChange={setDenominator} options={options} testId="metric-den" />
+          <Text fontSize="xs" color="mutedText">
+            {t('Both totals are worked out over the same rows of each group (each line, each month …), so the result stays right however a question splits it. Example: scrap rate = sum of scrapped pieces ÷ sum of good + scrapped pieces.')}
+          </Text>
+        </VStack>
+      )}
+      <MetricExample spec={example} format={cleanFormat(format) ?? {}} ratio={kind === 'ratio'} />
       {table && (
         <Box>
           <Text fontSize="sm" fontWeight={500} mb={1}>
-            {t('Only rows where…')}
+            {kind === 'ratio' ? t('Only rows where… (for both totals)') : t('Only rows where…')}
           </Text>
           <FilterEditor group={where} onChange={setWhere} options={options} emptyText={t('Every row counts.')} testId="metric-where" />
         </Box>

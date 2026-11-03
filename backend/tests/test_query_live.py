@@ -318,3 +318,52 @@ def test_number_parameter_out_of_range_has_a_clear_message(ncode_engine):
         sql(ncode_engine, "SELECT {{n}} AS n", {"n": 10**30})
     quoted = "SELECT '{{x}}' AS q, {{n}} AS n -- {{y}}"
     assert sql(ncode_engine, quoted, {"n": 5}).rows == [["{{x}}", 5]]
+
+
+# ---------------------------------------------------------------- M12: names in place of ids, value lists
+
+def test_names_in_place_of_ids_live(live):
+    """The label join and its GROUP BY / ORDER BY on every server (ids keep their order; NULL keeps its group)."""
+    from app.query.values import value_spec
+    from app.semantic.labels import LabelLink
+
+    engine, tables, rels = live
+    labels = {("q_orders", "customer_id"): LabelLink("q_customers", "id", "name", "string", True),
+              ("q_order_items", "sku"): LabelLink("q_products", "sku", "title", "string", True)}
+
+    def run(spec, **extra):
+        compiled = compile_spec(QuerySpec.model_validate({"connection": "live", **spec}), dialect=engine.dialect, tables=tables,
+                                relationships=rels, now=NOW, labels=labels, **extra)
+        with engine.connect() as conn:
+            return norm_rows(conn.execute(compiled.limited(1)).all())
+
+    by_customer = {"source": {"table": "q_orders"}, "breakouts": [{"ref": "q_orders.customer_id"}],
+                   "aggregations": [{"fn": "count", "alias": "n"}, {"fn": "sum", "ref": "q_orders.total", "alias": "total"}]}
+    got = run(by_customer)
+    named = [r for r in got if r[0] is not None]
+    assert named == [("Anna", 2, 150.0), ("Bob", 2, 230.0), ("Chen", 1, 0.0), ("50% Club", 1, 75.5)]
+    assert (None, 1, 10.0) in got
+    desc = run({**by_customer, "order": [{"ref": "customer_id", "dir": "desc"}]})
+    assert [r[0] for r in desc if r[0] is not None] == ["50% Club", "Chen", "Bob", "Anna"]
+    having = run({**by_customer, "having": {"rules": [{"ref": "customer_id", "op": "<=", "value": 2}]}})
+    assert [r[0] for r in having] == ["Anna", "Bob"]
+    # two breakouts (a month and a name), a text key, a join the question made itself
+    monthly = run({"source": {"table": "q_orders"}, "filters": {"rules": [{"ref": "q_orders.customer_id", "op": "in", "value": [1, 2]}]},
+                   "breakouts": [{"ref": "q_orders.created_at", "bucket": "month"}, {"ref": "q_orders.customer_id"}],
+                   "aggregations": [{"fn": "count", "alias": "n"}]})
+    assert [(r[1], r[2]) for r in monthly] == [("Anna", 2), ("Bob", 2)]
+    items = run({"source": {"table": "q_order_items"}, "joins": [{"table": "q_orders"}],
+                 "breakouts": [{"ref": "q_order_items.sku"}], "aggregations": [{"fn": "sum", "ref": "q_order_items.qty", "alias": "qty"}]})
+    assert items == [("Apple", 12), ("Bread", 4), ("Cheese", 1)]
+
+    # the value list behind a picker: the most frequent first, with the labels
+    link = labels[("q_orders", "customer_id")]
+    spec = value_spec("live", "q_orders", "customer_id", "number", link, "", 200)
+    compiled = compile_spec(spec, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
+    with engine.connect() as conn:
+        listed = norm_rows(conn.execute(compiled.limited(1)).all())
+    assert listed == [(1, "Anna", 2), (2, "Bob", 2), (3, "Chen", 1), (4, "50% Club", 1)]
+    searched = value_spec("live", "q_orders", "customer_id", "number", link, "club", 200)
+    compiled = compile_spec(searched, dialect=engine.dialect, tables=tables, relationships=rels, now=NOW)
+    with engine.connect() as conn:
+        assert norm_rows(conn.execute(compiled.limited(1)).all()) == [(4, "50% Club", 1)]

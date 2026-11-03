@@ -12,16 +12,17 @@ import type { EChartHandle } from '../components/viz/EChart';
 import { AlertIcon, ChartIcon, CodeIcon, DownloadIcon, MoreIcon, PencilIcon, RefreshIcon, SettingsIcon, TableIcon, XIcon } from '../icons';
 import { buildCsvFromArrays, downloadText, safeFilename, saveBlob } from '../lib/csv';
 import { chartTheme } from '../viz/palette';
+import { xlsxExportParams } from '../viz/pivot';
 import { DEFAULT_VIZ, effectiveViz } from '../viz/state';
 import { labelColumns } from '../query/outputs';
 import { useQuestionCaption } from '../query/useCaption';
 import type { VizSpec } from '../viz/types';
 import { CardEndpointsContext, useCardRun } from './api';
-import { activeMappings, editorParams } from './logic';
+import { activeMappings, editorParams, unreachedFilters } from './logic';
 import type { FilterValues } from './logic';
 import { Markdown } from './Markdown';
 import type { DashCard, DashFilter } from './types';
-import { t, tn } from '../i18n/index.ts';
+import { lang, t, tn } from '../i18n/index.ts';
 
 interface Props {
   dashboardId: number;
@@ -157,11 +158,14 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   const title = card.title || q?.name || (q?.state === 'hidden' ? t('Not shared with you') : t('Question'));
   const name = safeFilename(title);
   const filtering = activeMappings(card, filters, values);
+  const unreached = unreachedFilters(card, filters, values); // M12: say so instead of looking filtered
 
   const exportXlsx = async () => {
     if (!run.taskId) return;
     try {
-      const res = await http.get<Blob>(`${tasks}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers: endpoints?.headers });
+      // shown as a pivot table: the workbook keeps that layout (M12)
+      const params = xlsxExportParams(spec, result, lang());
+      const res = await http.get<Blob>(`${tasks}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers: endpoints?.headers, params });
       saveBlob(`${name}.xlsx`, res.data);
     } catch (error) {
       toast({ status: 'error', title: t('Excel export failed'), description: await apiErrorMessageAsync(error, t('Refresh the card and retry')) });
@@ -188,6 +192,13 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
         <Tooltip label={t('Filtered by {filters}', { filters: filtering.map((f) => f.label).join(', ') })} hasArrow>
           <Badge fontSize="2xs" colorScheme="purple" variant="subtle">
             {tn(filtering.length, '{n} filter', '{n} filters')}
+          </Badge>
+        </Tooltip>
+      )}
+      {unreached.length > 0 && runnable && (
+        <Tooltip label={t('This card is not connected to {filters} and shows all its rows.', { filters: unreached.map((f) => f.label).join(', ') })} hasArrow>
+          <Badge fontSize="2xs" variant="outline" colorScheme="gray" textTransform="none" fontWeight={500} maxW="160px" isTruncated data-testid="card-not-filtered">
+            {t('not filtered by {filters}', { filters: unreached.map((f) => f.label).join(', ') })}
           </Badge>
         </Tooltip>
       )}

@@ -14,6 +14,7 @@ import { EngineBadge } from './EngineBadge';
 import { engineMeta } from '../lib/engines';
 import { isDemo } from '../lib/names';
 import { useWorkspace } from '../workspace/useWorkspace';
+import { ServiceSwitcher } from '../launcher/ServiceSwitcher';
 import { loadJson, saveJson } from '../lib/storage';
 import { LANGUAGES, lang, setLang, t } from '../i18n/index.ts';
 
@@ -373,7 +374,7 @@ export function Sidebar({ connections, activeKey, onSelect, isAdmin, onAdd, onEd
       {/* top: logo, menu width, the database (always visible) */}
       <Flex px={collapsed ? 2 : 4} pt={4} pb={3} align="center" justify={collapsed ? 'center' : 'space-between'} direction={collapsed ? 'column' : 'row'} gap={2} flexShrink={0}>
         <Logo markOnly={collapsed} />
-        {toggleButton}
+        <Flex gap={0.5} direction={collapsed ? 'column' : 'row'}><ServiceSwitcher placement={collapsed ? 'right-start' : 'bottom-start'} />{toggleButton}</Flex>
       </Flex>
       <Box px={collapsed ? 2 : 3} pb={3} flexShrink={0}>
         <DatabaseSwitcher connections={connections} activeKey={activeKey} onSelect={onSelect} isAdmin={isAdmin} onAdd={onAdd} onEdit={onEdit} collapsed={collapsed} />
