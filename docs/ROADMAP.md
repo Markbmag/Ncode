@@ -556,6 +556,62 @@ flowchart LR
 
 ---
 
+## 8c. Ncode Kanban (K1–K3)
+
+A task service next to the BI workspace, for giving the team work: Mark chooses on the home page
+between **Ncode Search & BI** and **Ncode - Kanban**. Inspired by board tools in general, with its own
+design and code (no copying).
+
+**Separate code, same ecosystem.** Own backend package (`app/kanban/`, routes `/api/kanban/*`, own
+tables in one migration), own frontend area (`/kanban`, its own menu and pages, lazy-loaded). Shared
+with BI only: sign-in, users and groups, the EN / RU switch, the theme, deployment. A card may link to
+a BI dashboard or question; nothing else is mixed.
+
+**Decisions (Mark, 2026-11-03):** boards are visible to **everyone** signed in (members edit);
+**several assignees** per card; **EN / RU**, same users; **no notifications yet**; priorities,
+labels and attachments (photos from the phone) are in.
+
+### K1 · Boards — L
+
+- **Launcher** after sign-in: two tiles (Search & BI, Kanban); remembers the last choice.
+- **Boards:** anyone creates one; visible to everyone, members (people or groups) edit, the owner
+  manages members; archive / restore.
+- **Columns:** new boards start with *To do · In progress · Done*; rename, add, reorder, colour; a
+  column can count as "done".
+- **Cards:** title, description (simple formatting), several assignees, start and due date (overdue
+  in red), priority (low / normal / high / urgent), labels (per board, coloured), **action plan** = a
+  checklist of steps with done / not done and who ticked it, completion shown as "3 of 5 · 60 %" and
+  a bar on the card; **attachments** (photos from the phone camera, files; size-limited, thumbnails);
+  comments; **history** of who changed what and when.
+- **Board view:** drag and drop between and within columns, filters (my cards, person, label,
+  priority, overdue), search; live updates (WebSocket) when someone else changes the board.
+- **Visually appealing:** a polished board design (cards with avatars, labels, progress, due chips,
+  smooth dragging, dark and light), which also starts the shared visual polish of Ncode.
+- **Done when:** three people work on one board at the same time from two browsers and a phone,
+  and every move, tick and comment shows up for the others with its author and time.
+
+### K2 · Phone — M
+
+- Installable on iPhone / Android home screens (web app manifest, icons, full screen, offline shell).
+- Phone layout: one column at a time with swiping, long-press to move a card, big touch targets,
+  camera upload straight into a card.
+- **Done when:** a card is created, photographed, moved and ticked off from an iPhone home-screen
+  app without zooming.
+
+### K3 · Extras — M
+
+- Calendar / timeline view of due dates, board templates (e.g. "Weekly production meeting"),
+  recurring cards, links to BI dashboards and questions, my-tasks page across boards; notifications
+  (email, Telegram, phone push) once wanted.
+
+### Order after M12
+
+**K1 → M15 → K2 → M16 → K3 / M13 / M14.** M16 (self-hosted AI) runs on Mark's own MSI graphics card
+with Ollama; a short wait per answer is acceptable. The model size is chosen from the card's memory
+(8 GB → ~7–8B models, 12–16 GB → ~14B).
+
+---
+
 ## 9. Working agreement
 
 1. **One milestone at a time.** We start the next only when the previous one passes the checklist.
@@ -634,6 +690,7 @@ mobile layout (M15), chart images in emails (M15), translated server messages (M
 
 | Date | Change |
 |---|---|
+| 2026-11-03 | Plan: **Ncode Kanban** (§8c, K1–K3) added as a separate service in the same ecosystem: launcher on the home page, boards visible to everyone, several assignees, EN / RU, priorities, labels, attachments, no notifications yet. Order: K1 → M15 → K2 → M16 → K3 / M13 / M14; M16 on Mark's own MSI graphics card with Ollama |
 | 2026-11-03 | M12 delivered. Decisions: (1) **value lists** are small builder questions (group by the column, count) run through the compiler, so permissions and row rules apply; foreign keys carry the related table's name; (2) **names in place of ids** = a data-model setting per foreign key ("Show values as", stored in the field's format, no migration): breakouts join the related name for display while grouping, sorting and filters keep the id, so saved questions keep their meaning; skipped when the viewer has row rules on the related table; (3) **ratio metrics** = `{"fn": "ratio", "numerator", "denominator"}`, compiled as `CAST(num AS float) / NULLIF(den, 0)` (MySQL/MariaDB `* 1E0`), correct at every grouping; the demo gets a true Scrap rate; (4) the **quick question** is the default for *New question* (one screen, plain choices, date presets, Top N, ready suggestions) and is lossless into the full editor; the done-when path took 6 clicks; (5) the automatic chart says why it was chosen, impossible types are greyed out with the reason; (6) **pivot** editor with Rows / Columns / Values over the existing pivot chart; Excel export writes the same grid; (7) saved questions open as a result with Edit / Done; undo/redo is a bounded history of whole drafts (text fields keep their own undo); destructive changes ask first and offer Undo; per-step preview runs the question up to that step for 10 rows; (8) during M12, on request: the sidebar fits any window (database switcher on top, scrolling menu, narrow icon mode below 1200 px), themed scrollbars and drop-down lists, chart *Customize* easy to find and per-card chart settings on dashboards. Verified: 800 backend tests incl. live databases, 257 frontend tests, 38 browser tests |
 | 2026-10-29 | M11 delivered. Decisions: (1) one migration (0009) written before the work was split, so the four parts built on the same tables: table display names, **translations** (JSON per language) for tables, columns and metrics, recently viewed, personal settings, glossary, verified; (2) the **Factory demo** is generated with a fixed seed on first start (lines, shifts, parts, work orders, output, downtime, scrap, vehicles with valid VINs, inspections, dated up to the day it is made). It comes with English/Russian names, three metrics and **examples**: a shared collection with five charted questions and a *Production overview* dashboard (period and line filters), used as *Start here* until an admin picks another. Created once, then ordinary content; `NCODE_DEMO`, `NCODE_DEMO_LANGUAGE`, and an admin switch hides it for everyone; (3) the new-user checklist ticks itself from what the server sees (views, audit, owned questions) plus a browser mark for filter changes, and hides when done; (4) the builder shows Data · Filter · Summarise first, the rest under *More steps*. Plain words lead, the SQL term is a hint. Generated result names are readable. A **caption** sentence is built from the question in both languages; (5) **verified** = an admin's badge, cleared when the query changes, first in searches and collections; the plain "recently changed" list stays newest first; (6) the glossary search folds case and ё/е in Python, and its links are checked when saved; (7) the menu is grouped (Look up / Answer questions / Saved and shared / Admin); Share is offered to everyone and explains moving and access; (8) found by the newcomer walk and fixed: the demo charts were saved in the wrong format, a filter typed while leaving the dashboard pulled the person back, and the record panel showed technical names. The demo metric is named for what it computes (average per report); true ratio metrics moved to M12. Verified: 751 backend tests incl. live databases, 180 frontend tests, 14 browser tests including the five first steps on the demo in English and Russian (17 actions, no errors) |
 | 2026-10-28 | M10 delivered. Decisions: (1) **security first**: result-cache keys now hold the statement as sent with every bound value (`fingerprint`), so a cached profile, X-ray or multi-source result run under one person's row rules is never served to someone with other rules. A Stop only reaches the connection the task still holds; before, it could cancel another person's query on a pooled connection; (2) **values**: NaN/infinity → empty, JSON as JSON, numbers beyond 15 significant digits or 2^53 as exact text, TIME/intervals as `H:MM:SS`, `infinity` dates as text. On SQLite, Unicode-aware `lower`/`upper` and a 100 MB value cap; ISO text typed as dates in SQL mode; `{{name}}` ignored inside strings and comments; (3) **edit conflicts** use the existing `updated_at` (client sends `base_updated_at`, server answers 409) rather than a revision column: no migration, old clients unchecked; (4) **errors**: unexpected errors answer JSON with CORS headers and an error id. About 25 rules turn driver messages into a sentence with cause and fix, keeping the original as *details*. Server messages are translated in one middleware from a catalog of English templates (`app/i18n_ru.py`, ~350 messages; a test fails on any message without Russian); subscription emails stay English; (5) **uploads**: encoding *auto* (UTF-16 BOM, UTF-8, Windows-1251 when it looks Cyrillic, else 1252), decimal-comma numbers, retry without the parallel reader for multi-line cells, readable errors without paths; (6) the CSV formula guard follows OWASP (also `+7…` phone numbers get a `'`); (7) the **app database runs in WAL mode** (synchronous NORMAL). A restore merges the old log first and removes stale log files, so no old log is replayed onto the restored file; (8) **password hashing on 4 threads of its own**: each scrypt needs 16 MB, and with every request thread hashing, the allocator kept that per thread (875 MB after 50 parallel sign-ins; now 172 MB); (9) audit retention `NCODE_AUDIT_KEEP_DAYS` (365) and entries ≤ 4 KB; **Admin → Broken content** (questions, cards, subscriptions pointing at missing tables, columns, questions, files or connections; unreachable databases are *couldn't check*); app-DB indexes (0008); `python -m app.manage check`; an upgrade guide; (10) a **browser test suite** (Playwright, 12 tests, desktop and phone) against a throw-away backend runs in CI. Verified: 701 backend tests incl. live PostgreSQL 16 / MariaDB 10.11 / SQL Server 2022, 124 frontend tests, the browser suite, CI, and a 50-user dashboard load test (median 4.2 s, no errors). Not verified: Windows itself, the real databases |
