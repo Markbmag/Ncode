@@ -22,7 +22,8 @@ import { VizSettings } from '../viz/VizSettings';
 import { ResultsTable } from './ResultsTable';
 import { resultNotes } from './notes';
 import { ResultProfileDrawer } from '../../analysis/ResultProfileDrawer';
-import { locale, t, tn } from '../../i18n/index.ts';
+import { lang, locale, t, tn } from '../../i18n/index.ts';
+import { xlsxExportParams } from '../../viz/pivot';
 
 interface ResultViewProps {
   state: RunState;
@@ -78,7 +79,8 @@ export function ResultView({ state, onCancel, smartDates, onSmartDates, filename
   const exportXlsx = async () => {
     if (!state.taskId) return;
     try {
-      const res = await http.get<Blob>(`/api/query/tasks/${state.taskId}/export.xlsx`, { responseType: 'blob' });
+      // a pivot keeps its layout in the workbook
+      const res = await http.get<Blob>(`/api/query/tasks/${state.taskId}/export.xlsx`, { responseType: 'blob', params: xlsxExportParams(showChart ? spec : null, result, lang()) });
       saveBlob(`${name}.xlsx`, res.data);
     } catch (error) {
       toast({ title: t('Excel export failed'), description: await apiErrorMessageAsync(error, t('Run the query again and retry')), status: 'error' });
