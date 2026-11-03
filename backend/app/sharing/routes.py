@@ -48,7 +48,7 @@ from ..config import Settings
 from ..content.store import ContentError
 from ..query.routes import MAX_WAIT_MS
 from ..query.runner import QueryRunner, QueryTask
-from ..query.xlsx import xlsx_stream
+from ..query.xlsx import pivot_layout, xlsx_stream
 from ..security import LoginThrottle, verify_password
 from .store import EmbedIn, Link, PublicLinkIn, PublicLinkPatch, ShareStore
 from .tokens import AccessSigner, TokenError, new_embedding_key, sign_jwt, verify_jwt
@@ -425,7 +425,7 @@ def register_sharing_routes(
             task.done.wait(wait_ms / 1000)
         return clean(task.snapshot())
 
-    def export(shared: Shared, task_id: str, fmt: str) -> Response:
+    def export(shared: Shared, task_id: str, fmt: str, pivot: str | None = None) -> Response:
         if shared.kind != "public" or not shared.link.allow_download:
             raise HTTPException(status_code=403, detail="Downloads are not allowed on this link")
         task = own_task(shared, task_id)
@@ -435,7 +435,11 @@ def register_sharing_routes(
         if fmt == "csv":
             return Response(csv_bytes(task.result), media_type="text/csv; charset=utf-8",
                             headers={"Content-Disposition": 'attachment; filename="result.csv"'})
-        return StreamingResponse(xlsx_stream(task.result),
+        try:
+            layout = pivot_layout(pivot)  # shown as a pivot table (M12)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return StreamingResponse(xlsx_stream(task.result, layout),
                                  media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                  headers={"Content-Disposition": 'attachment; filename="result.xlsx"'})
 
@@ -481,10 +485,11 @@ def register_sharing_routes(
         return {"status": "cancelling"}
 
     @public.get("/tasks/{task_id}/export.{fmt}")
-    def public_export(token: str, task_id: str, fmt: str, access: str | None = Access):
+    def public_export(token: str, task_id: str, fmt: str, access: str | None = Access,
+                      pivot: str | None = Query(None, max_length=20_000)):
         if fmt not in ("csv", "xlsx"):
             raise HTTPException(status_code=404, detail="Not found")
-        return export(resolve_public(token, access), task_id, fmt)
+        return export(resolve_public(token, access), task_id, fmt, pivot)
 
     embed = APIRouter(prefix="/api/embed/{jwt}", tags=["embed"], dependencies=[Depends(limited)])
 

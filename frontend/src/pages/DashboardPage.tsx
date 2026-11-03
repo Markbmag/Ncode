@@ -374,7 +374,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       {/* filters */}
       {def.filters.length > 0 && (
         <Box mb={3}>
-          <FilterBar filters={def.filters} values={values} onChange={setValues} />
+          <FilterBar filters={def.filters} values={values} onChange={setValues} cards={def.cards} />
         </Box>
       )}
 

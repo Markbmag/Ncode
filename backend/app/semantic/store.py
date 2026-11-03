@@ -2,7 +2,8 @@
 
 * Column metadata, per connection / table / column: display name, description,
   semantic type (currency, percent, category ...), number/date format, hidden, and
-  "parse as date" for text columns that hold dates in several formats.
+  "parse as date" for text columns that hold dates in several formats; for foreign keys (M12)
+  the column of the related table shown instead of the id (app/semantic/labels.py).
 * Table metadata (M11): display name and description of a table.
 * Translations (M11) of those names and of metrics, per UI language:
   {"ru": {"display_name": "...", "description": "..."}} (metrics: "name" / "description").
@@ -10,7 +11,8 @@
 * Manual relationships, for databases without foreign keys: the builder then joins
   and suggests joins as if they were real foreign keys.
 * Metrics: a named aggregation on a table ("Revenue" = sum of total where status is
-  paid), used in questions like any other summary.
+  paid), or one total divided by another ("Scrap rate" = sum of scrap ÷ sum of all pieces,
+  M12), used in questions like any other summary.
 
 Admins maintain all three (Admin -> Data model); everyone who may use a connection
 sees them. Small tables, read on every compile: cached until the next change.
@@ -46,6 +48,18 @@ class _Model(BaseModel):
 
 
 _LANGUAGE = re.compile(r"^[a-z]{2}(-[A-Za-z]{2,4})?$")
+# "Show values as" (M12) is kept in the JSON of the format column under this key - no migration
+# needed; the API shows it as a setting of its own ("label_column") and the format without it.
+_LABEL_KEY = "label_column"
+
+
+def _split_format(raw: str | None) -> tuple[dict[str, Any] | None, str | None]:
+    """The stored format JSON -> (the format, the label column)."""
+    fmt = _loads(raw, None)
+    if not isinstance(fmt, dict):
+        return fmt, None
+    label = fmt.pop(_LABEL_KEY, None)
+    return fmt or None, label if isinstance(label, str) and label else None
 NAME_TEXTS = {"display_name": 200, "description": 5000}  # translatable texts of tables and columns
 METRIC_TEXTS = {"name": 120, "description": 5000}
 
@@ -96,6 +110,11 @@ class _Named(_Model):
         return self
 
 
+def _join_format(values: "FieldIn") -> str | None:
+    stored = {**(values.format or {}), **({_LABEL_KEY: values.label_column} if values.label_column else {})}
+    return json.dumps(stored) if stored else None
+
+
 class TableIn(_Named):
     def empty(self) -> bool:
         return not (self.display_name or "").strip() and not (self.description or "").strip() and not self.translations
@@ -106,11 +125,17 @@ class FieldIn(_Named):
     format: dict[str, Any] | None = None
     hidden: bool = False
     parse_as_date: bool = False
+    # M12, foreign-key columns: the column of the related table shown instead of the id
+    # ("Show values as: Line -> name", app/semantic/labels.py)
+    label_column: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _small(self) -> "FieldIn":
+        if self.format is not None:
+            self.format = {k: v for k, v in self.format.items() if k != _LABEL_KEY} or None
         if self.format is not None and len(json.dumps(self.format)) > 2000:
             raise ValueError("the format is too large")
+        self.label_column = (self.label_column or "").strip() or None
         return self
 
     def empty(self) -> bool:
@@ -130,8 +155,8 @@ class RelationshipIn(_Model):
         return self
 
 
-class MetricDefinition(_Model):
-    """An aggregation of the metric's table: {"fn": "sum", "ref": "orders.total", "where": {...}}."""
+class MetricPart(_Model):
+    """One total of the metric's table: {"fn": "sum", "ref": "orders.total", "where": {...}}."""
 
     fn: AggregateFn
     ref: str | None = Field(default=None, min_length=1, max_length=300)
@@ -139,13 +164,45 @@ class MetricDefinition(_Model):
     where: FilterGroup | None = None
 
     @model_validator(mode="after")
+    def _shape(self) -> "MetricPart":
+        if self.fn in ("metric", "ratio"):
+            raise ValueError("each side of a ratio is a plain total (count, sum, average, minimum or maximum)")
+        _check_total(self)
+        return self
+
+
+def _check_total(total: Any) -> None:
+    if total.ref is not None and total.expr is not None:
+        raise ValueError("a metric takes ref or expr, not both")
+    if total.ref is None and total.expr is None and total.fn != "count":
+        raise ValueError(f"{total.fn} needs a column")
+
+
+class MetricDefinition(_Model):
+    """An aggregation of the metric's table: {"fn": "sum", "ref": "orders.total", "where": {...}},
+    or one total divided by another (M12): {"fn": "ratio", "numerator": {...}, "denominator": {...}},
+    e.g. scrap rate = sum of scrap ÷ sum of all pieces; "where" then counts for both sides."""
+
+    fn: AggregateFn
+    ref: str | None = Field(default=None, min_length=1, max_length=300)
+    expr: Expr | None = None
+    where: FilterGroup | None = None
+    numerator: MetricPart | None = None
+    denominator: MetricPart | None = None
+
+    @model_validator(mode="after")
     def _shape(self) -> "MetricDefinition":
         if self.fn == "metric":
             raise ValueError("a metric cannot be built from another metric")
-        if self.ref is not None and self.expr is not None:
-            raise ValueError("a metric takes ref or expr, not both")
-        if self.ref is None and self.expr is None and self.fn != "count":
-            raise ValueError(f"{self.fn} needs a column")
+        if self.fn == "ratio":
+            if self.numerator is None or self.denominator is None:
+                raise ValueError("a ratio needs a numerator and a denominator")
+            if self.ref is not None or self.expr is not None:
+                raise ValueError("a ratio names only its numerator and denominator")
+            return self
+        if self.numerator is not None or self.denominator is not None:
+            raise ValueError("numerator and denominator go with fn 'ratio'")
+        _check_total(self)
         return self
 
 
@@ -221,10 +278,11 @@ class SemanticStore:
         cache = _Cache()
         with self.engine.connect() as conn:
             for r in conn.execute(select(field_metadata_table)).all():
+                fmt, label = _split_format(r.format)
                 cache.fields.setdefault(r.connection, {}).setdefault(r.table_name, {})[r.column_name] = {
                     "display_name": r.display_name, "description": r.description, "semantic_type": r.semantic_type,
-                    "format": _loads(r.format, None), "hidden": bool(r.hidden), "parse_as_date": bool(r.parse_as_date),
-                    "translations": _loads(r.translations, None),
+                    "format": fmt, "hidden": bool(r.hidden), "parse_as_date": bool(r.parse_as_date),
+                    "translations": _loads(r.translations, None), "label_column": label,
                 }
             for r in conn.execute(select(table_metadata_table)).all():
                 cache.tables.setdefault(r.connection, {})[r.table_name] = {
@@ -285,7 +343,7 @@ class SemanticStore:
                     connection=connection, table_name=table, column_name=column,
                     display_name=(values.display_name or "").strip() or None,
                     description=(values.description or "").strip() or None,
-                    semantic_type=values.semantic_type, format=json.dumps(values.format) if values.format else None,
+                    semantic_type=values.semantic_type, format=_join_format(values),
                     hidden=values.hidden, parse_as_date=values.parse_as_date,
                     translations=json.dumps(values.translations, ensure_ascii=False) if values.translations else None,
                     updated_at=time.time(), updated_by=user.username,
@@ -377,11 +435,20 @@ class SemanticStore:
             if m is None or m.connection != spec.connection:
                 raise ContentError(f"Metric {a.get('metric')} does not exist (any more) for this database")
             alias = a.get("alias") or m.slug
-            entry = dict(m.definition)
-            ref = entry.get("ref")
-            if ref and "." not in ref:
-                entry["ref"] = f"{m.table}.{ref}"
+            entry = _qualified(m.definition, m.table)
+            for side in ("numerator", "denominator"):  # a ratio (M12)
+                if isinstance(entry.get(side), dict):
+                    entry[side] = _qualified(entry[side], m.table)
             out.append({**entry, "alias": alias})
             formats[alias] = m.format
         data["aggregations"] = out
         return QuerySpec.model_validate(data), formats
+
+
+def _qualified(definition: dict[str, Any], table: str) -> dict[str, Any]:
+    """A bare column name of a metric means the metric's own table."""
+    entry = dict(definition)
+    ref = entry.get("ref")
+    if ref and "." not in ref:
+        entry["ref"] = f"{table}.{ref}"
+    return entry

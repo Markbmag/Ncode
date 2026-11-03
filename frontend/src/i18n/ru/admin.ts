@@ -313,6 +313,22 @@ export const ADMIN: Record<string, string> = {
   'People see this name in table lists and pickers; the technical name stays next to it and still finds the table.':
     'Это название видно в списках таблиц и при выборе таблицы; техническое имя остаётся рядом, и по нему таблицу тоже можно найти.',
   'Calculated with a formula; pick a column to replace it.': 'Считается по формуле; выберите столбец, чтобы заменить её.',
+  // ratio metrics (M12)
+  'Divide one total by another': 'Разделить один итог на другой',
+  'Divide': 'Разделить',
+  'by': 'на',
+  'Only some rows…': 'Только часть строк…',
+  'Only rows where… (for both totals)': 'Только строки, где… (для обоих итогов)',
+  'Add a column': 'Добавить столбец',
+  'Remove this column': 'Убрать этот столбец',
+  'Add another column to it, row by row (e.g. good + scrapped pieces)': 'Прибавить ещё один столбец, построчно (например, годные + бракованные штуки)',
+  'Both totals are worked out over the same rows of each group (each line, each month …), so the result stays right however a question splits it. Example: scrap rate = sum of scrapped pieces ÷ sum of good + scrapped pieces.':
+    'Оба итога считаются по одним и тем же строкам каждой группы (каждой линии, каждого месяца …), поэтому результат верен при любой разбивке вопроса. Пример: доля брака = сумма бракованных штук ÷ сумма годных и бракованных штук.',
+  'Working out an example…': 'Считаем пример…',
+  'On all rows of the table now: {value} = {top} ÷ {bottom}': 'Сейчас по всем строкам таблицы: {value} = {top} ÷ {bottom}',
+  'On all rows of the table now: {value}': 'Сейчас по всем строкам таблицы: {value}',
+  'On all rows of the table now: no value, because the second total is 0': 'Сейчас по всем строкам таблицы: значения нет, потому что второй итог равен 0',
+  'On all rows of the table now: no value (no row counts)': 'Сейчас по всем строкам таблицы: значения нет (не учитывается ни одна строка)',
   'a formula': 'формула',
   'demo': 'демо',
   'Demo database': 'Демо-база',

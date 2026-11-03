@@ -32,6 +32,7 @@ GOLDEN_CASES = [
     "relative_last_month", "having_and_order_by_aggregate_alias", "avg_of_integers_is_not_truncated",
     "three_hop_join_via_foreign_keys", "explicit_join_with_aliases", "custom_expressions",
     "group_by_custom_expression_with_a_text_constant", "group_by_case_expression_with_a_threshold",
+    "ratio_of_integer_sums_is_not_truncated", "ratio_with_a_condition_for_both_sides",
 ]
 
 

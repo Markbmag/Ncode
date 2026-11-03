@@ -281,3 +281,39 @@ CASES: list[Case] = [
 ]
 
 ITEMS_TOTAL = sum(i["qty"] for i in ORDER_ITEMS)
+
+
+# ---------------------------------------------------------------- ratio metrics (M12)
+# SUM(a) / NULLIF(SUM(b), 0) per group, never integer division, NULL where the denominator is 0.
+
+def _ratio(num: dict, den: dict, alias: str, **extra: Any) -> dict:
+    return {"fn": "ratio", "numerator": num, "denominator": den, "alias": alias, **extra}
+
+
+_PAID = {"op": "and", "rules": [{"ref": "status", "op": "=", "value": "paid"}]}
+
+CASES += [
+    Case(
+        "ratio_share_of_paid_orders_per_customer",  # count where ... ÷ count: 1 of 2 is 0.5, not 0
+        {"source": {"table": "q_orders"},
+         "aggregations": [_ratio({"fn": "count", "where": _PAID}, {"fn": "count"}, "paid_share")],
+         "breakouts": [{"ref": "customer_id"}]},
+        [(None, 1.0), (1, 1.0), (2, 0.5), (3, 1.0), (4, 0.0)],
+    ),
+    Case(
+        "ratio_of_integer_sums_is_not_truncated",
+        {"source": {"table": "q_orders"},
+         "aggregations": [_ratio({"fn": "sum", "ref": "qty"}, {"fn": "count"}, "pieces_per_order"),
+                          _ratio({"fn": "count"}, {"fn": "sum", "ref": "qty"}, "orders_per_piece")],
+         "breakouts": [{"ref": "status"}]},
+        # paid: 17 pieces in 5 orders; refunded: 0 pieces (÷ 0 is empty); no status: 2 pieces in 1 order
+        [(None, 2.0, 0.5), ("paid", 3.4, round(5 / 17, 4)), ("refunded", 0.0, None)],
+    ),
+    Case(
+        "ratio_with_a_condition_for_both_sides",  # money per piece of the paid orders, decimal ÷ integer
+        {"source": {"table": "q_orders"},
+         "aggregations": [_ratio({"fn": "sum", "ref": "total"}, {"fn": "sum", "ref": "qty"}, "per_piece", where=_PAID),
+                          {"fn": "count", "alias": "n"}]},
+        [(round(360 / 17, 4), 7)],
+    ),
+]

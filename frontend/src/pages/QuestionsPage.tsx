@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
   Alert, AlertIcon, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
@@ -15,6 +16,9 @@ import { JoinEditor } from '../components/query/JoinEditor';
 import { SortEditor } from '../components/query/SortEditor';
 import { SqlPreviewModal } from '../components/query/SqlPreviewModal';
 import { Step } from '../components/query/Step';
+import { StepPreview } from '../components/query/StepPreview';
+import { UndoButtons } from '../components/query/UndoButtons';
+import { useConfirmChange, useUndoToast } from '../components/query/useConfirmChange';
 import { SummarizeEditor } from '../components/query/SummarizeEditor';
 import { TransformsEditor } from '../components/query/TransformsEditor';
 import { useMetrics } from '../semantic/api';
@@ -23,10 +27,15 @@ import { loadJson, saveJson } from '../lib/storage';
 import { columnOptions, isSummarised, newSpec, prepareSpec, queryTables, summaryOutputs } from '../query/draft';
 import { byLabel, labelIn, metricDescription, metricName } from '../lib/names';
 import type { SchemaInfo } from '../query/draft';
+import { valueSourceOf } from '../query/valuePicker';
 import { questionCaption } from '../query/caption';
 import { labelColumns, namerFromOptions, outputLabels } from '../query/outputs';
 import type { Namer } from '../query/outputs';
 import { applicableSteps, usedSteps } from '../query/steps';
+import { lossText, stepLoss, tableChangeLoss, withoutStep } from '../query/loss';
+import { previewRequest } from '../query/preview';
+import type { PreviewStep } from '../query/preview';
+import { useDraftHistory } from '../query/useDraftHistory';
 import type { ExtraStep } from '../query/steps';
 import type { FilterGroup, QuerySpec } from '../query/types';
 import { START_WAIT_MS, useQueryRun } from '../query/useQueryRun';
@@ -41,6 +50,8 @@ import { ParametersBar } from '../library/ParametersBar';
 import { bindSpec, shapeOf, specParams, syncBuilderParams, valuesFromSearch, valuesToSearch } from '../library/params';
 import type { ParamShape, ParamValues, ParameterDef } from '../library/params';
 import { QuestionHeader } from '../library/QuestionHeader';
+import { NewQuestion } from '../quick/NewQuestion';
+import { QuestionSuggestions } from '../quick/Suggestions';
 import { locale, t, tn } from '../i18n/index.ts';
 
 const EMPTY_GROUP: FilterGroup = { op: 'and', rules: [] };
@@ -57,16 +68,16 @@ const STEP_TEXT = (): Record<ExtraStep, { title: string; add: string; hint: stri
   limit: { title: t('Row limit'), add: t('Row limit'), hint: t('For example only the first 10 rows') },
 });
 
-/** Questions: the notebook-style builder (one draft per database, kept in this browser tab). */
+/** Questions: the quick question (M12) or the notebook-style builder (one draft per database, kept in this browser tab). */
 export default function QuestionsPage() {
   const ws = useWorkspace();
   if (!ws.loaded) return <Skeleton h="400px" borderRadius="2xl" />;
   if (!ws.active) return <NoConnections />;
-  return <Builder key={ws.activeKey} connection={ws.activeKey} />;
+  return <NewQuestion key={ws.activeKey} connection={ws.activeKey} full={(modeSwitch) => <Builder connection={ws.activeKey} modeSwitch={modeSwitch} />} />;
 }
 
-/** The builder, for a new question or (with `saved`) a saved one. */
-export function Builder({ connection, saved = null }: { connection: string; saved?: SavedQuestion | null }) {
+/** The builder, for a new question or (with `saved`) a saved one. `modeSwitch`: the "Full editor" switch of a new question. */
+export function Builder({ connection, saved = null, modeSwitch }: { connection: string; saved?: SavedQuestion | null; modeSwitch?: ReactNode }) {
   const ws = useWorkspace();
   const navigate = useNavigate();
   const schemaQuery = useSchema(connection);
@@ -100,6 +111,14 @@ export function Builder({ connection, saved = null }: { connection: string; save
     setSearchParams((prev) => valuesToSearch(values, prev), { replace: true }); // shareable link with the values
   };
   const sqlModal = useDisclosure();
+  // M12: undo / redo of the draft as a whole (query, parameters, chart); destructive changes ask first
+  const history = useDraftHistory({ draft, viz, defs }, (v) => {
+    setDraft(v.draft);
+    setViz(v.viz);
+    setDefs(v.defs);
+  });
+  const confirm = useConfirmChange();
+  const undoToast = useUndoToast();
   const { state, run, cancel } = useQueryRun();
   const metricsQuery = useMetrics(connection);
   const vertical = useBreakpointValue({ base: true, lg: false }) ?? false;
@@ -247,7 +266,39 @@ export function Builder({ connection, saved = null }: { connection: string; save
     );
 
   const update = (patch: Partial<QuerySpec>) => setDraft((d) => (d ? { ...d, ...patch } : d));
-  const pickSource = (table: string) => setDraft(table ? { ...newSpec(connection, table), limit: draft?.limit } : null);
+  const pickSource = (table: string) => {
+    const change = () => setDraft(table ? { ...newSpec(connection, table), limit: draft?.limit } : null);
+    const lost = validDraft && table !== validDraft.source.table ? lossText(tableChangeLoss(validDraft)) : null;
+    if (!lost) return change();
+    confirm.ask({
+      title: t('Change the table?'),
+      body: t('Changing the table removes {what}. Change anyway?', { what: lost }),
+      confirmLabel: t('Change the table'),
+      onConfirm: () => {
+        change();
+        undoToast(t('Table changed'), history.undo);
+      },
+    });
+  };
+  const startOver = () =>
+    confirm.ask({
+      title: t('Start over?'),
+      body: t('This clears the table and every step of the question.'),
+      confirmLabel: t('Start over'),
+      onConfirm: () => {
+        setDraft(null);
+        undoToast(t('The question was cleared'), history.undo);
+      },
+    });
+  // the first rows after one step (M12), with readable names like the result
+  const previewOf = (step: PreviewStep) => {
+    if (!validDraft) return undefined;
+    return () => {
+      const request = previewRequest(validDraft, step, schema, paramDefs, paramValues);
+      const opts = columnOptions(request.spec, schema);
+      return <StepPreview request={request} labels={outputLabels(request.spec, namerFromOptions(opts, namerExtra), opts)} smartDates={smartDates} />;
+    };
+  };
 
   const options = validDraft ? columnOptions(validDraft, schema) : [];
   const summarised = validDraft ? isSummarised(validDraft) : false;
@@ -281,18 +332,34 @@ export function Builder({ connection, saved = null }: { connection: string; save
       next.delete(step);
       return next;
     });
+  // a used step can be removed (asking first when that loses something, M12)
+  const removeStep = (step: ExtraStep) => {
+    if (!validDraft) return;
+    const remove = () => {
+      setDraft(withoutStep(validDraft, step));
+      hideStep(step);
+      undoToast(t('Step removed'), history.undo);
+    };
+    const lost = lossText(stepLoss(validDraft, step));
+    if (!lost) return remove();
+    confirm.ask({ title: t('Remove the step “{name}”?', { name: steps[step].title }), body: t('This removes {what}.', { what: lost }), confirmLabel: t('Remove the step'), onConfirm: remove });
+  };
   // an opened step nobody used can go back under "More steps"
   const hideAction = (step: ExtraStep) =>
     opened.has(step) && !used.has(step) ? (
       <Button size="xs" variant="ghost" onClick={() => hideStep(step)} data-testid={`hide-${step}`}>
         {t('Hide')}
       </Button>
+    ) : used.has(step) ? (
+      <Button size="xs" variant="ghost" color="mutedText" onClick={() => removeStep(step)} data-testid={`remove-${step}`}>
+        {t('Remove')}
+      </Button>
     ) : undefined;
 
   const builder = (
     <Box h="100%" overflowY="auto" pr={{ base: 0, lg: 3 }} pb={6} data-testid="builder">
       <VStack align="stretch" spacing={4}>
-        <Step title={t('Data')} color="brand.300" testId="step-data">
+        <Step title={t('Data')} color="brand.300" testId="step-data" preview={previewOf('data')}>
           <Select size="sm" value={validDraft?.source.table ?? ''} onChange={(e) => pickSource(e.target.value)} placeholder={t('Pick a table…')} aria-label={t('Table')}>
             {tablePicks.map((p) => (
               <option key={p.name} value={p.name} title={[p.showTechnical ? p.name : null, p.description].filter(Boolean).join(' — ') || undefined}>
@@ -301,32 +368,44 @@ export function Builder({ connection, saved = null }: { connection: string; save
             ))}
           </Select>
           {!saved && <ModelPicker onPick={(id) => navigate(`/combine?question=${id}`)} />}
+          {validDraft && !summarised && !used.size && !validDraft.filters?.rules.length && (
+            <QuestionSuggestions
+              connection={connection}
+              schema={schema}
+              table={validDraft.source.table}
+              onPick={(s) => {
+                setDraft(s.spec);
+                setViz(s.viz);
+              }}
+            />
+          )}
         </Step>
 
         {validDraft && (
           <>
             {isShown('join') && (
-              <Step title={steps.join.title} color="teal.300" testId="step-join" anchor="join" hint={t('Like VLOOKUP in Excel: rows are matched on a shared column (a join in SQL).')} actions={hideAction('join')}>
+              <Step title={steps.join.title} color="teal.300" testId="step-join" anchor="join" hint={t('Like VLOOKUP in Excel: rows are matched on a shared column (a join in SQL).')} actions={hideAction('join')} preview={previewOf('join')}>
                 <JoinEditor spec={validDraft} schema={schema} onChange={(joins) => update({ joins })} openMenu={justOpened === 'join'} />
               </Step>
             )}
 
             {isShown('custom') && (
-              <Step title={steps.custom.title} color="cyan.300" anchor="custom" hint={t('Formulas such as [total] - [discount] or round([total] / [qty], 2).')} actions={hideAction('custom')}>
-                <CustomColumnsEditor columns={validDraft.expressions ?? []} onChange={(expressions) => update({ expressions })} options={baseOptions} />
+              <Step title={steps.custom.title} color="cyan.300" anchor="custom" hint={t('Formulas such as [total] - [discount] or round([total] / [qty], 2).')} actions={hideAction('custom')} preview={previewOf('custom')}>
+                <CustomColumnsEditor key={history.revision} columns={validDraft.expressions ?? []} onChange={(expressions) => update({ expressions })} options={baseOptions} />
               </Step>
             )}
 
-            <Step title={t('Filter')} color="purple.300" testId="step-filter">
+            <Step title={t('Filter')} color="purple.300" testId="step-filter" preview={previewOf('filter')}>
               <FilterEditor
                 group={validDraft.filters ?? EMPTY_GROUP}
                 onChange={(filters) => update({ filters })}
                 options={options}
                 params={{ names: paramDefs.map((d) => d.name), label: (name) => paramDefs.find((d) => d.name === name)?.label || name }}
+                valueSource={(ref) => valueSourceOf(validDraft, schema, ref)}
               />
             </Step>
 
-            <Step title={t('Summarise')} color="green.300" testId="step-summarise">
+            <Step title={t('Summarise')} color="green.300" testId="step-summarise" preview={previewOf('summarise')}>
               <SummarizeEditor
                 aggregations={validDraft.aggregations ?? []}
                 breakouts={validDraft.breakouts ?? []}
@@ -334,11 +413,12 @@ export function Builder({ connection, saved = null }: { connection: string; save
                 metrics={metrics}
                 namer={namerFromOptions(options, namerExtra)}
                 onChange={(aggregations, breakouts) => update({ aggregations, breakouts, ...(isSummarised({ ...validDraft, aggregations, breakouts }) ? {} : { having: null }) })}
+                top={{ order: validDraft.order ?? [], limit: validDraft.limit ?? null, onChange: (order, limit) => update({ order, limit }) }}
               />
             </Step>
 
             {summarised && isShown('having') && (
-              <Step title={steps.having.title} color="pink.300" anchor="having" hint={t('Keeps only some groups, e.g. those whose total is above 1000 (HAVING in SQL).')} actions={hideAction('having')}>
+              <Step title={steps.having.title} color="pink.300" anchor="having" hint={t('Keeps only some groups, e.g. those whose total is above 1000 (HAVING in SQL).')} actions={hideAction('having')} preview={previewOf('having')}>
                 <FilterEditor group={validDraft.having ?? EMPTY_GROUP} onChange={(having) => update({ having })} options={outputOptions} emptyText={t('Every group is shown.')} />
               </Step>
             )}
@@ -347,6 +427,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
                 title={steps.columns.title}
                 color="blue.300"
                 anchor="columns"
+                preview={previewOf('columns')}
                 actions={
                   <HStack spacing={0}>
                     <Button size="xs" variant="ghost" onClick={() => setShowFields((v) => !v)}>
@@ -385,19 +466,19 @@ export function Builder({ connection, saved = null }: { connection: string; save
             )}
 
             {isShown('sort') && (
-              <Step title={steps.sort.title} color="orange.300" anchor="sort" actions={hideAction('sort')}>
+              <Step title={steps.sort.title} color="orange.300" anchor="sort" actions={hideAction('sort')} preview={previewOf('sort')}>
                 <SortEditor order={validDraft.order ?? []} options={summarised ? outputOptions : options} onChange={(order) => update({ order })} />
               </Step>
             )}
 
             {isShown('calculate') && (
-              <Step title={steps.calculate.title} color="teal.200" testId="step-calculate" anchor="calculate" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')} actions={hideAction('calculate')}>
+              <Step title={steps.calculate.title} color="teal.200" testId="step-calculate" anchor="calculate" hint={t('On the rows returned: vs. last year, running totals, shares, ranks, outliers.')} actions={hideAction('calculate')} preview={previewOf('calculate')}>
                 <TransformsEditor transforms={validDraft.transforms ?? []} columns={shownState.result?.columns ?? []} onChange={(transforms) => update({ transforms })} />
               </Step>
             )}
 
             {isShown('limit') && (
-              <Step title={steps.limit.title} color="gray.400" anchor="limit" actions={hideAction('limit')}>
+              <Step title={steps.limit.title} color="gray.400" anchor="limit" actions={hideAction('limit')} preview={previewOf('limit')}>
                 <HStack>
                   <Input
                     size="sm"
@@ -515,6 +596,8 @@ export function Builder({ connection, saved = null }: { connection: string; save
           }
         }}
       >
+        {modeSwitch}
+        <UndoButtons history={history} />
         <Tooltip label={t('Run automatically after each change')} hasArrow>
           <HStack spacing={1.5}>
             <Switch size="sm" id="auto-preview" isChecked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
@@ -530,7 +613,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
           {t('Run')}
         </Button>
         {!saved && (
-          <Button size="sm" variant="ghost" onClick={() => setDraft(null)} isDisabled={!draft}>
+          <Button size="sm" variant="ghost" onClick={startOver} isDisabled={!draft} data-testid="start-over">
             {t('Start over')}
           </Button>
         )}
@@ -556,6 +639,7 @@ export function Builder({ connection, saved = null }: { connection: string; save
           onOpenInEditor={(sql) => navigate('/sql', { state: { connection, sql } })}
         />
       )}
+      {confirm.dialog}
     </Flex>
   );
 }

@@ -36,6 +36,9 @@ class ResultColumn(BaseModel):
     format: dict[str, Any] | None = None
     translations: dict[str, Any] | None = None  # M11: {"ru": {"display_name", "description"}}
     generated: bool = False  # added by a transform (running total ...)
+    # M12: a group shows the names of a related table in place of the ids it holds:
+    # {"table": "production_lines", "key": "id", "label": "name"} (filters and drill-down still use the id)
+    remapped: dict[str, str] | None = None
 
 
 class ResultStats(BaseModel):

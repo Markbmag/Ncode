@@ -4,7 +4,8 @@ import { PlusIcon, XIcon } from '../../icons';
 import { AGGREGATES, BUCKETS } from '../../query/draft';
 import { aggregationLabel, plainNamer } from '../../query/outputs';
 import type { Namer } from '../../query/outputs';
-import type { Aggregation, Breakout, Bucket } from '../../query/types';
+import type { Aggregation, Breakout, Bucket, OrderBy } from '../../query/types';
+import { rankable, topNOf, withTopN } from '../../quick/quick';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
 import { cleanResultName } from './names';
@@ -45,9 +46,11 @@ interface SummarizeEditorProps {
   onChange: (aggregations: Aggregation[], breakouts: Breakout[]) => void;
   metrics?: MetricOption[];
   namer?: Namer; // readable names of the result columns ("Sum of Total") for the name placeholders
+  /** "Top N by …" (M12): one control for the sort (biggest first) and the row limit it is made of */
+  top?: { order: OrderBy[]; limit: number | null; onChange: (order: OrderBy[], limit: number | null) => void };
 }
 
-export function SummarizeEditor({ aggregations, breakouts, options, onChange, metrics = [], namer = plainNamer }: SummarizeEditorProps) {
+export function SummarizeEditor({ aggregations, breakouts, options, onChange, metrics = [], namer = plainNamer, top }: SummarizeEditorProps) {
   const typeOf = (ref?: string) => options.find((o) => o.ref === ref)?.type ?? 'unknown';
   const setAgg = (i: number, a: Aggregation | null) => onChange(a === null ? aggregations.filter((_, k) => k !== i) : aggregations.map((x, k) => (k === i ? a : x)), breakouts);
   const setBrk = (i: number, b: Breakout | null) => onChange(aggregations, b === null ? breakouts.filter((_, k) => k !== i) : breakouts.map((x, k) => (k === i ? b : x)));
@@ -164,6 +167,7 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
           {t('Group by')}
         </Button>
       </VStack>
+      {top && <TopN aggregations={aggregations} breakouts={breakouts} options={options} namer={namer} top={top} />}
       {aggregations.length === 0 && breakouts.length === 0 && (
         <Box gridColumn="1 / -1">
           <Text fontSize="sm" color="faintText">
@@ -172,5 +176,44 @@ export function SummarizeEditor({ aggregations, breakouts, options, onChange, me
         </Box>
       )}
     </SimpleGrid>
+  );
+}
+
+/** "Top N by …": only the N biggest groups, ranked by one of the values (sorted biggest first + a row limit). */
+function TopN({ aggregations, breakouts, options, namer, top }: Pick<SummarizeEditorProps, 'aggregations' | 'breakouts' | 'options'> & { namer: Namer; top: NonNullable<SummarizeEditorProps['top']> }) {
+  const ranks = rankable({ aggregations, breakouts }, options);
+  if (ranks.length === 0 || !breakouts.some((b) => b.ref)) return null;
+  const current = topNOf({ aggregations, breakouts, order: top.order, limit: top.limit }, options);
+  const set = (n: number | null, by: string | null) => {
+    const next = withTopN({ order: top.order, limit: top.limit }, n, by);
+    top.onChange(next.order, next.limit);
+  };
+  return (
+    <Box gridColumn="1 / -1" data-testid="top-n">
+      {current ? (
+        <Flex gap={2} align="center" wrap="wrap">
+          <Text fontSize="sm">{t('Only the biggest')}</Text>
+          <Input size="sm" type="number" min={1} maxW="80px" value={current.n} onChange={(e) => set(Math.max(1, Number(e.target.value) || 1), current.by)} aria-label={t('How many')} data-testid="top-n-count" />
+          <Text fontSize="sm">{t('ranked by')}</Text>
+          <Select size="sm" w="auto" maxW="220px" value={current.by} onChange={(e) => set(current.n, e.target.value)} aria-label={t('Ranked by')} data-testid="top-n-by">
+            {ranks.map((r) => (
+              <option key={r.name} value={r.name}>
+                {aggregationLabel(aggregations[r.index], namer).label}
+              </option>
+            ))}
+          </Select>
+          <IconButton aria-label={t('Show every group')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => set(null, null)} />
+        </Flex>
+      ) : (
+        <Flex gap={3} align="center" wrap="wrap">
+          <Button size="xs" variant="subtle" onClick={() => set(10, ranks[0].name)} data-testid="add-top-n">
+            {t('Top N by…')}
+          </Button>
+          <Text fontSize="xs" color="faintText">
+            {t('Only the biggest groups, for example the top 10 parts by scrap')}
+          </Text>
+        </Flex>
+      )}
+    </Box>
   );
 }

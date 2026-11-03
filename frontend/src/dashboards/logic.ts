@@ -185,6 +185,22 @@ export function filterId(label: string, taken: string[]): string {
 export const activeMappings = (card: DashCard, filters: DashFilter[], values: FilterValues): DashFilter[] =>
   filters.filter((f) => card.mappings?.[f.id] && !blank(shownValue(f, values)));
 
+/** Filters with a value that a card is not connected to: it shows all its rows ("not filtered by Period", M12). */
+export const unreachedFilters = (card: DashCard, filters: DashFilter[], values: FilterValues): DashFilter[] =>
+  card.kind === 'question' ? filters.filter((f) => !card.mappings?.[f.id] && !blank(shownValue(f, values))) : [];
+
+/** Where a filter's values to pick come from (M12): the column of the first card connected to it by a column. */
+export function pickerColumn(filter: DashFilter, cards: DashCard[]): { connection: string; spec: Record<string, unknown>; ref: string } | null {
+  if (filter.type !== 'category' && filter.type !== 'text') return null;
+  for (const c of cards) {
+    const field = c.mappings?.[filter.id]?.field;
+    const q = c.question;
+    if (field && q?.kind === 'builder' && q.connection && q.spec && (q.state === 'ok' || q.state === 'archived'))
+      return { connection: q.connection, spec: q.spec, ref: field };
+  }
+  return null;
+}
+
 /** Parameter values to open a card's question with, from the filters mapped to parameters. */
 export function editorParams(card: DashCard, filters: DashFilter[], values: FilterValues): URLSearchParams {
   const search = new URLSearchParams();

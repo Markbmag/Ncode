@@ -453,6 +453,7 @@ RU: dict[str, str] = {
     "Give a value for {', '.join(('{{' + m + '}}' for m in missing))}":
         "Укажите значение для {', '.join(('{{' + m + '}}' for m in missing))}",
     "The query has no finished result to export": "У запроса нет готового результата для выгрузки",
+    "The pivot table layout of the export is not valid": "Макет сводной таблицы для выгрузки неверен",
     "The query took longer than {self.timeout_sec} seconds and was stopped":
         "Запрос выполнялся дольше {self.timeout_sec} с и был остановлен",
     "The statement returned no rows": "Запрос не вернул строк",
@@ -460,6 +461,11 @@ RU: dict[str, str] = {
     "a field needs either ref or expr": "полю нужен либо ref, либо expr",
     "a metric aggregation names only the metric": "в агрегации-метрике указывается только метрика",
     "metric goes with fn 'metric'": "metric указывается вместе с fn 'metric'",
+    "a ratio needs a numerator and a denominator": "для отношения нужны числитель и знаменатель",
+    "a ratio names only its numerator and denominator": "в отношении указываются только числитель и знаменатель",
+    "each side of a ratio is a plain total (count, sum, average, minimum or maximum)":
+        "числитель и знаменатель отношения — простые итоги (количество, сумма, среднее, минимум или максимум)",
+    "numerator and denominator go with fn 'ratio'": "numerator и denominator указываются вместе с fn 'ratio'",
     "an aggregation takes ref or expr, not both": "агрегация принимает ref или expr, но не оба сразу",
     "{self.fn} needs a column (ref) or an expression": "{self.fn} нужен столбец (ref) или выражение",
     "a breakout needs either ref or expr": "группировке нужен либо ref, либо expr",
@@ -516,7 +522,16 @@ RU: dict[str, str] = {
     "give as many columns on each side": "укажите одинаковое число столбцов с каждой стороны",
     "a metric cannot be built from another metric": "метрику нельзя построить из другой метрики",
     "a metric takes ref or expr, not both": "метрика принимает ref или expr, но не оба сразу",
-    "{self.fn} needs a column": "{self.fn} нужен столбец",
+    "{total.fn} needs a column": "{total.fn} нужен столбец",
+    "{column!r} does not refer to another table; add a relationship first":
+        "{column!r} не ссылается на другую таблицу; сначала добавьте связь",
+    "{to_table!r} has no column {label!r} to show": "В {to_table!r} нет столбца {label!r}, который можно показать",
+    # ---------------------------------------------------------------- app/query/values.py (M12)
+    "Values are listed for text, number and yes/no columns; {name!r} is {kind}":
+        "Список значений есть у текстовых, числовых столбцов и столбцов «да/нет»; {name!r} имеет тип {kind}",
+    "Listing the values took too long; type a few letters to search instead":
+        "Список значений собирается слишком долго; введите несколько букв для поиска",
+    "Could not list the values: {detail}": "Не удалось получить список значений: {detail}",
     # ---------------------------------------------------------------- app/sharing
     "No such {target_type}": "{target_type} не найден",
     "Public links are switched off: Admin → Sharing": "Публичные ссылки отключены: Администрирование → Общий доступ",

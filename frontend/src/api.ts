@@ -251,6 +251,8 @@ export interface SchemaColumn {
   hidden?: boolean;
   parse_as_date?: boolean;
   translations?: Translations | null; // M11: {"ru": {"display_name", "description"}}
+  label_column?: string | null; // M12, foreign keys: the related table's column shown in place of the id
+  suggested_label?: string | null; // M12: an obvious such column, offered in the data model editor
 }
 
 export interface SchemaTable {
@@ -291,6 +293,7 @@ export interface ResultColumn {
   format?: Record<string, unknown> | null;
   translations?: Translations | null; // M11: show with nameOf(col.name, col) from lib/names
   generated?: boolean; // added by a calculation (running total ...)
+  remapped?: { table: string; key: string; label: string } | null; // M12: names of a related table in place of its ids
 }
 
 export interface ResultEnvelope {

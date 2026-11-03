@@ -56,6 +56,7 @@ from .i18n import localize, parse_language
 from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
 from .query.routes import register_query_routes
+from .query.values import register_value_routes
 from .analysis.routes import register_analysis_routes
 from .automation.engine import Engine as AutomationEngine
 from .automation.routes import register_automation_routes
@@ -761,6 +762,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         semantic=semantic,
         rowsec=rowsec,
     )
+    register_value_routes(  # M12: value pickers, through the same compiler (permissions, row rules)
+        app, registry=registry, settings=settings, app_db=app_db, queries=queries, semantic=semantic, rowsec=rowsec,
+        current_user=current_user, require_connection=require_connection,
+    )
     register_semantic_routes(
         app, semantic=semantic, registry=registry, queries=queries, current_user=current_user,
         require_admin=require_admin, require_connection=require_connection,
@@ -813,7 +818,8 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
                 home.set_start_here(content.snapshot(), cid, "ncode")
 
         seed_demo_content(app_db, content, app.state.content.dashboards, system=DEMO_SYSTEM_USER,
-                          language=settings.demo_language, set_start_here=start_here_if_unset)
+                          language=settings.demo_language, set_start_here=start_here_if_unset,
+                          metrics={m.name: m.id for m in semantic.metrics({DEMO_KEY})})
     register_demo_routes(  # M11: hide / show the demo database for everyone (Admin → Databases)
         app, demo=demo, require_admin=require_admin, on_change=lambda: runner.cache.drop_connection(DEMO_KEY),
     )

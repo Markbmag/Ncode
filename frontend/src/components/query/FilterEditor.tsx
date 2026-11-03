@@ -7,6 +7,9 @@ import type { Condition, DateUnit, FilterGroup, FilterNode, FilterOp, RelativeDa
 import { isGroup } from '../../query/types';
 import { ColumnSelect } from './ColumnSelect';
 import type { PickOption } from './ColumnSelect';
+import { ValuePicker } from './ValuePicker';
+import { PICKER_OPS, canPick } from '../../query/valuePicker';
+import type { ValueSource } from '../../query/valuePicker';
 import { t } from '../../i18n/index.ts';
 
 const UNITS: DateUnit[] = ['day', 'week', 'month', 'quarter', 'year'];
@@ -28,6 +31,8 @@ interface FilterEditorProps {
   testId?: string;
   /** set = a filter's value can be asked for when the question runs (a parameter) */
   params?: FilterParams;
+  /** set = values are offered from the column (M12): the table and column a reference names */
+  valueSource?: (ref: string) => ValueSource | null;
 }
 
 export interface FilterParams {
@@ -35,7 +40,7 @@ export interface FilterParams {
   label: (name: string) => string;
 }
 
-export function FilterEditor({ group, onChange, options, depth = 0, emptyText = t('No filters: every row is used.'), testId, params }: FilterEditorProps) {
+export function FilterEditor({ group, onChange, options, depth = 0, emptyText = t('No filters: every row is used.'), testId, params, valueSource }: FilterEditorProps) {
   const typeOf = (ref?: string): ColumnType => options.find((o) => o.ref === ref)?.type ?? 'unknown';
 
   const setRule = (index: number, rule: FilterNode | null) => {
@@ -77,7 +82,7 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
         isGroup(rule) ? (
           <Flex key={i} gap={2} align="flex-start">
             <Box flex={1} border="1px dashed" borderColor="lineColor" borderRadius="lg" p={2}>
-              <FilterEditor group={rule} onChange={(g) => setRule(i, g)} options={options} depth={depth + 1} params={params} />
+              <FilterEditor group={rule} onChange={(g) => setRule(i, g)} options={options} depth={depth + 1} params={params} valueSource={valueSource} />
             </Box>
             <IconButton aria-label={t('Remove group')} size="xs" variant="ghost" icon={<XIcon boxSize={3} />} onClick={() => setRule(i, null)} />
           </Flex>
@@ -91,6 +96,7 @@ export function FilterEditor({ group, onChange, options, depth = 0, emptyText = 
             onRemove={() => setRule(i, null)}
             joiner={i > 0 ? (group.op === 'and' ? 'and' : 'or') : null}
             params={params}
+            valueSource={valueSource}
           />
         ),
       )}
@@ -123,9 +129,10 @@ interface ConditionRowProps {
   onRemove: () => void;
   joiner: string | null;
   params?: FilterParams;
+  valueSource?: (ref: string) => ValueSource | null;
 }
 
-function ConditionRow({ condition, type, options, onChange, onRemove, joiner, params }: ConditionRowProps) {
+function ConditionRow({ condition, type, options, onChange, onRemove, joiner, params, valueSource }: ConditionRowProps) {
   const ops = operatorsFor(type);
   const info = operatorInfo(type, condition.op);
 
@@ -177,7 +184,15 @@ function ConditionRow({ condition, type, options, onChange, onRemove, joiner, pa
           {t('asks “{name}”', { name: params.label(condition.param) })}
         </Badge>
       ) : (
-        condition.ref && <ValueInput kind={info.value} type={type} value={condition.value} onChange={(value) => onChange({ ...condition, value })} />
+        condition.ref && (
+          <ValueInput
+            kind={info.value}
+            type={type}
+            value={condition.value}
+            onChange={(value) => onChange({ ...condition, value })}
+            source={PICKER_OPS.includes(condition.op) && canPick(type) ? valueSource?.(condition.ref) ?? null : null}
+          />
+        )
       )}
       <HStack spacing={0} ml="auto">
         {canAsk && (
@@ -211,11 +226,27 @@ interface ValueInputProps {
   type: ColumnType;
   value: unknown;
   onChange: (value: unknown) => void;
+  source?: ValueSource | null; // the column's values to pick from (M12)
 }
 
-function ValueInput({ kind, type, value, onChange }: ValueInputProps) {
+function ValueInput({ kind, type, value, onChange, source }: ValueInputProps) {
   const htmlType = inputType(type);
   if (kind === 'none') return null;
+  if (source && (kind === 'single' || kind === 'list')) {
+    return (
+      <ValuePicker
+        connection={source.connection}
+        table={source.table}
+        column={source.column}
+        type={type}
+        value={value}
+        onChange={onChange}
+        multiple={kind === 'list'}
+        maxW={kind === 'list' ? '260px' : '200px'}
+        testId="filter-value"
+      />
+    );
+  }
   if (kind === 'single') {
     return <Input size="sm" type={htmlType} maxW="200px" value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} placeholder={t('value')} aria-label={t('Value')} />;
   }

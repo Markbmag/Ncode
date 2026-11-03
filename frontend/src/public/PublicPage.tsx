@@ -9,7 +9,7 @@ import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import axios from 'axios';
 import { apiErrorMessage, http } from '../api';
-import { t } from '../i18n/index.ts';
+import { lang, t } from '../i18n/index.ts';
 import { Visualization } from '../components/viz/Visualization';
 import { CardEndpointsContext, useCardRun } from '../dashboards/api';
 import type { CardEndpoints } from '../dashboards/api';
@@ -22,6 +22,7 @@ import { LockIcon } from '../icons';
 import { ParametersBar } from '../library/ParametersBar';
 import type { ParameterDef, ParamValues } from '../library/params';
 import { buildCsvFromArrays, downloadText, safeFilename, saveBlob } from '../lib/csv';
+import { xlsxExportParams } from '../viz/pivot';
 import { DEFAULT_VIZ, effectiveViz } from '../viz/state';
 import type { VizState } from '../viz/state';
 
@@ -278,7 +279,8 @@ function SharedQuestionView({ base, q, headers, titled }: { base: string; q: Sha
   const name = safeFilename(q.name);
   const xlsx = async () => {
     if (!run.taskId) return;
-    const res = await http.get<Blob>(`${base}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers });
+    const params = xlsxExportParams(spec, run.result, lang()); // a pivot table keeps its layout (M12)
+    const res = await http.get<Blob>(`${base}/tasks/${run.taskId}/export.xlsx`, { responseType: 'blob', headers, params });
     saveBlob(`${name}.xlsx`, res.data);
   };
   return (

@@ -27,12 +27,10 @@ for (const lang of ['en', 'ru'] as const) {
     await box.press('Enter');
     await page.getByText(vin, { exact: true }).filter({ visible: true }).first().click();
     await page.keyboard.press('Escape');
-    // 4. ask a question: count downtime events per line, no SQL
+    // 4. ask a question: count downtime events per line, no SQL (the quick question, M12)
     await page.getByRole('link', { name: L.newq, exact: true }).first().click();
-    await page.getByLabel(lang === 'ru' ? 'Таблица' : 'Table').first().selectOption({ label: L.table });
-    await page.getByTestId('add-metric').click();
-    await page.getByTestId('add-group').click();
-    await page.getByTestId('group-row').first().getByRole('combobox').first().selectOption({ label: L.line });
+    await page.getByTestId('quick-question').getByRole('button', { name: L.table, exact: true }).click();
+    await page.getByTestId('quick-split').getByRole('button', { name: L.line, exact: true }).click();
     await expect(page.getByTestId('result-stats').or(page.getByRole('columnheader').first()).first()).toBeVisible();
     // 5. save it
     await page.getByTestId('save-question').click();

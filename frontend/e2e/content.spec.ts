@@ -9,7 +9,7 @@ const COUNT_BY_STATUS = {
 test('build a question without SQL, chart it, save it and find it in the library', async ({ page }) => {
   const errors = watchErrors(page);
   const name = unique('Orders by status');
-  await signIn(page, 'carol', '/questions');
+  await signIn(page, 'carol', '/questions?editor=full'); // the full builder (New question opens the quick question, M12)
   await page.getByLabel('Table').selectOption({ label: 'Q orders' });
   await page.getByTestId('add-metric').click();
   await page.getByTestId('add-group').click();
@@ -52,6 +52,7 @@ test('saving over someone else\'s newer save asks first', async ({ page }) => {
   const q = await api(page.request, 'carol', 'POST', '/api/questions', { name: unique('Shared draft'), kind: 'builder', spec: COUNT_BY_STATUS });
   await signIn(page, 'carol', `/questions/${q.id}`);
   await expect(page.getByTestId('question-title')).toBeVisible();
+  await page.getByTestId('edit-question').click(); // M12: a saved question opens as its result
   // meanwhile, in another browser, the same question is renamed
   await api(page.request, 'carol', 'PATCH', `/api/questions/${q.id}`, { name: 'Renamed elsewhere' });
   await page.getByTestId('view-chart').click();

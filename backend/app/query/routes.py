@@ -6,7 +6,7 @@
     POST   /api/query/sql/check       {"connection", "sql"}                  guard verdict, {{params}}, tables
     GET    /api/query/tasks/{id}?wait_ms=0
     DELETE /api/query/tasks/{id}      cancel
-    GET    /api/query/tasks/{id}/export.xlsx   the finished result as an Excel workbook
+    GET    /api/query/tasks/{id}/export.xlsx   the finished result as an Excel workbook (?pivot=: as that pivot table, M12)
 
 A run answers with {"task_id", "status", "result", "error", "elapsed_ms"}. When the
 query finishes within wait_ms the result (a result envelope) is right there;
@@ -32,6 +32,7 @@ from ..db import ConnectionRegistry
 from ..dberrors import db_http_error
 from ..rowsec import RowSecurityError
 from ..schema_graph import relationships
+from ..semantic.labels import breakout_labels
 from .compiler import CompileError, compile_spec, fingerprint, render_sql
 from ..content.store import ContentError
 from ..results import ResultEnvelope
@@ -39,7 +40,7 @@ from .runner import QueryRunner, QueryTask, ResultCache, run_sql, run_statement
 from .spec import QuerySpec, Transform
 from .sqlguard import GuardError, check_sql
 from .transforms import TransformError, apply_transforms
-from .xlsx import xlsx_stream
+from .xlsx import pivot_layout, xlsx_stream
 
 MAX_WAIT_MS = 15_000
 slow_log = logging.getLogger("ncode.slow")
@@ -70,7 +71,7 @@ def finish_envelope(env: ResultEnvelope, meta: list[dict[str, Any] | None], tran
     """Column metadata from the data model, then the transforms (running totals ...)."""
     for col, m in zip(env.columns, meta):
         if m:
-            for key in ("display_name", "description", "semantic_type", "format", "translations"):
+            for key in ("display_name", "description", "semantic_type", "format", "translations", "remapped"):
                 if m.get(key) is not None:
                     setattr(col, key, m[key])
     if transforms:
@@ -107,12 +108,14 @@ def column_meta(compiled: Any, fields: dict[str, Any], metric_formats: dict[str,
             out.append(None)
             continue
         same = col.name.lower() == col.source[1].lower()  # the column itself, not e.g. its sum
+        remapped = getattr(col, "remapped", None)  # names in place of ids (M12): text, not the id's format
         out.append({
             "display_name": info.get("display_name") if same else None,
             "description": info.get("description") if same else None,
             "translations": info.get("translations") if same else None,
-            "semantic_type": info.get("semantic_type"),
-            "format": info.get("format"),
+            "semantic_type": None if remapped else info.get("semantic_type"),
+            "format": None if remapped else info.get("format"),
+            "remapped": remapped,
         })
     return out
 
@@ -164,7 +167,11 @@ def register_query_routes(
                 "Wait for one to finish or cancel it.",
             )
 
-    def compile_for(spec: QuerySpec, *, user: User, default_limit: int | None = None, max_limit: int | None = None):
+    def compile_for(
+        spec: QuerySpec, *, user: User, default_limit: int | None = None, max_limit: int | None = None, labels: bool = True,
+    ):
+        """`labels`: show names in place of ids where the data model says so (M12); off where the ids
+        themselves are needed (value lists, the sources of multi-source questions that join on them)."""
         key = spec.connection
         try:
             columns = registry.get_schema(key)
@@ -188,6 +195,10 @@ def register_query_routes(
                 spec = rowsec.apply_to_spec(spec, user, columns)
             except RowSecurityError as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
+        shown = (
+            breakout_labels(columns, foreign, fields, set(rowsec.for_user(user, key)) if rowsec is not None else set())
+            if labels and spec.breakouts and fields else {}
+        )
         try:
             compiled = compile_spec(
                 spec,
@@ -198,6 +209,7 @@ def register_query_routes(
                 default_limit=default_limit or settings.query_default_rows,
                 max_limit=max_limit or settings.query_max_rows,
                 fields=fields,
+                labels=shown,
             )
         except CompileError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -357,14 +369,19 @@ def register_query_routes(
         return {"status": "cancelling" if not task.is_final else task.status}
 
     @router.get("/tasks/{task_id}/export.xlsx")
-    def export_xlsx(task_id: str, user: User = Depends(current_user)):
-        """The rows the user already sees, as .xlsx (re-running the query is not needed)."""
+    def export_xlsx(task_id: str, pivot: str | None = Query(None, max_length=20_000), user: User = Depends(current_user)):
+        """The rows the user already sees, as .xlsx (re-running the query is not needed).
+        `pivot`: the layout of a result shown as a pivot table (M12, JSON): written as that pivot."""
         task = task_for(task_id, user)
         if task.status != "completed" or task.result is None:
             raise HTTPException(status_code=409, detail="The query has no finished result to export")
+        try:
+            layout = pivot_layout(pivot)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         app_db.audit(user.username, "export_xlsx", connection=task.connection, phrase=(task.result.sql or "")[:200], status="ok")
         return StreamingResponse(
-            xlsx_stream(task.result),
+            xlsx_stream(task.result, layout),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": 'attachment; filename="result.xlsx"'},
         )

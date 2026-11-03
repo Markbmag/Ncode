@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList,
-  Text, Textarea, Tooltip, useDisclosure, useToast,
+  Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea, Tooltip, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
@@ -11,6 +11,7 @@ import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIco
 import { library } from './api';
 import { withBase } from './conflict';
 import { useEditConflict } from './ConflictDialog';
+import { useEditorMode } from './editorMode';
 import { VerifiedBadge, VerifyMenuItem } from './VerifiedBadge';
 import { queryChanged } from './verified.ts';
 import type { QuestionPayload, SavedQuestion } from './api';
@@ -35,10 +36,13 @@ interface Props {
   onRevert?: (to?: SavedQuestion) => void;
   onSaved?: () => void;
   children?: ReactNode;
+  /** M12: the saved question shown as its result - nothing to save; `primary` (Edit / Duplicate to edit) instead */
+  viewing?: boolean;
+  primary?: ReactNode;
 }
 
 /** Title, path and save / save-as / move / archive for the builder and the SQL editor. */
-export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload, defaultName, onRevert, onSaved, children }: Props) {
+export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload, defaultName, onRevert, onSaved, children, viewing = false, primary }: Props) {
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const toast = useToast();
@@ -46,6 +50,8 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   const move = useDisclosure();
   const details = useDisclosure();
   const share = useDisclosure();
+  const leave = useDisclosure();
+  const editorMode = useEditorMode(); // editing a saved question opened as its result (M12)
   const ws = useWorkspace();
   // ?subscriptions=1 (from the Subscriptions page) opens the drawer
   const [subsOpen, setSubsOpen] = useState<null | 'list' | 'alert'>(() => (search.get('subscriptions') === '1' ? 'list' : null));
@@ -69,14 +75,15 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
     navigate(`/questions/${q.id}`, { replace: !saved });
   };
 
-  const saveChanges = async (overwrite = false) => {
+  const saveChanges = async (overwrite = false): Promise<boolean> => {
     const body = payload();
-    if (!saved || !body) return;
+    if (!saved || !body) return false;
     setSaving(true);
     try {
       await library.updateQuestion(saved.id, withBase(body, base, overwrite));
       onSaved?.();
       toast({ status: 'success', title: t('Saved'), duration: 1500 });
+      return true;
     } catch (e) {
       const offered = conflict.offer(e, {
         reload: async () => {
@@ -87,10 +94,13 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
         overwrite: () => saveChanges(true),
       });
       if (!offered) fail(e, t('Could not save'));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  // back to the result: unsaved changes are saved or dropped first
+  const done = () => (dirty ? leave.onOpen() : editorMode?.onDone());
 
   const archive = async () => {
     if (!saved) return;
@@ -180,7 +190,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
           {saved && <VerifiedBadge verified={saved.verified} />}
           {saved && !canEdit && <Badge>{t('view only')}</Badge>}
           {saved?.model && <Badge colorScheme="teal">{t('model')}</Badge>}
-          {saved && dirty && <Badge colorScheme="orange">{t('edited')}</Badge>}
+          {saved && dirty && !viewing && <Badge colorScheme="orange">{t('edited')}</Badge>}
         </HStack>
         {subtitle && (
           <Text fontSize="xs" color="mutedText" noOfLines={1}>
@@ -209,7 +219,8 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             {t('Saving removes the Verified badge')}
           </Text>
         )}
-        {(!saved || canEdit) && (
+        {viewing && primary}
+        {!viewing && (!saved || canEdit) && (
           <Button
             size="sm"
             variant="brand"
@@ -222,16 +233,23 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
             {t('Save')}
           </Button>
         )}
-        {saved && !canEdit && (
+        {!viewing && saved && !canEdit && (
           <Button size="sm" variant="brand" leftIcon={<SaveIcon boxSize={4} />} isDisabled={!ready} onClick={saveNew.onOpen}>
             {t('Save as new…')}
           </Button>
+        )}
+        {!viewing && saved && editorMode && (
+          <Tooltip label={t('Close the editor and show the result')} hasArrow openDelay={300}>
+            <Button size="sm" variant="subtle" onClick={done} data-testid="done-editing">
+              {t('Done')}
+            </Button>
+          </Tooltip>
         )}
         {saved && (
           <Menu isLazy placement="bottom-end">
             <MenuButton as={IconButton} aria-label={t('More actions')} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="question-menu" />
             <MenuList fontSize="sm">
-              {canEdit && (
+              {canEdit && !viewing && (
                 <MenuItem icon={<SaveIcon boxSize={4} />} onClick={saveNew.onOpen} isDisabled={!ready}>
                   {t('Save as new question…')}
                 </MenuItem>
@@ -292,6 +310,54 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       </HStack>
 
       {conflict.dialog}
+      {saved && editorMode && (
+        <Modal isOpen={leave.isOpen} onClose={leave.onClose} isCentered>
+          <ModalOverlay />
+          <ModalContent data-testid="leave-editor">
+            <ModalHeader fontSize="md">{t('Save your changes?')}</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody fontSize="sm">
+              {t('You changed “{name}”. Save it before going back to the result?', { name: saved.name })}
+              {losesBadge && (
+                <Text mt={2} color="orange.400">
+                  {t('Saving removes the Verified badge')}
+                </Text>
+              )}
+            </ModalBody>
+            <ModalFooter gap={2} flexWrap="wrap">
+              <Button size="sm" variant="ghost" onClick={leave.onClose}>
+                {t('Keep editing')}
+              </Button>
+              <Button
+                size="sm"
+                variant="subtle"
+                colorScheme="red"
+                onClick={() => {
+                  leave.onClose();
+                  editorMode.onDone();
+                }}
+                data-testid="leave-discard"
+              >
+                {t('Discard changes')}
+              </Button>
+              <Button
+                size="sm"
+                variant="brand"
+                isDisabled={!ready}
+                isLoading={saving}
+                onClick={async () => {
+                  const ok = await saveChanges();
+                  leave.onClose();
+                  if (ok) editorMode.onDone();
+                }}
+                data-testid="leave-save"
+              >
+                {t('Save')}
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+      )}
       <SaveQuestionDialog
         isOpen={saveNew.isOpen}
         onClose={saveNew.onClose}

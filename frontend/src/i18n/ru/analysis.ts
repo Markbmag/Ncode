@@ -271,4 +271,11 @@ export const ANALYSIS: Record<string, string> = {
   'planned quantities from an uploaded spreadsheet next to the built quantities from a database, matched by part number.': 'плановые количества из загруженной таблицы рядом с фактическим выпуском из базы данных, сопоставленные по номеру детали.',
   'No files yet. Upload a CSV or Excel file: it becomes a table you can ask questions about and combine with a database.': 'Файлов пока нет. Загрузите файл CSV или Excel — он станет таблицей, к которой можно задавать вопросы и объединять с базой данных.',
   'a spreadsheet of planned quantities per part, compared with what the database says was built.': 'таблица с планом по деталям, которую сравнивают с фактическим выпуском из базы данных.',
+  // M12: "Show values as" in the data model
+  "Show values as": "Показывать значения как",
+  "The value itself ({column})": "Само значение ({column})",
+  "Use {column}": "Взять {column}",
+  "Questions grouped by this column show the name from {table} instead of the id; filters, sorting and links still use the id. Value pickers show both.":
+    "Вопросы с группировкой по этому столбцу показывают название из «{table}» вместо идентификатора; фильтры, сортировка и ссылки по-прежнему работают с идентификатором. В списках значений видно и то и другое.",
+  "Shown as {column} of {table}": "Показывается как {column} из {table}",
 };

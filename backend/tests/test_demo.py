@@ -107,16 +107,25 @@ def test_everyone_may_use_the_demo(env):
             "manual": False} in schema["relationships"]
 
     metrics = {m["name"]: m for m in call(env, "bob", "GET", "/api/metrics", params={"connection": DEMO_KEY})["metrics"]}
-    assert set(metrics) == {"Output", "Average scrap rate per report", "Downtime hours"}
-    assert metrics["Average scrap rate per report"]["translations"]["ru"]["name"] == "Средняя доля брака по отчётам"
+    assert set(metrics) == {"Output", "Scrap rate", "Downtime hours"}
+    assert metrics["Scrap rate"]["translations"]["ru"]["name"] == "Доля брака"
     spec = {"connection": DEMO_KEY, "source": {"table": "downtime_events"}, "joins": [{"table": "production_lines"}],
             "breakouts": [{"ref": "production_lines.name", "alias": "line"}],
             "aggregations": [{"fn": "metric", "metric": metrics["Downtime hours"]["id"]}], "order": [{"ref": "line"}]}
     rows = query(env, "bob", spec)["result"]["rows"]
     assert [r[0] for r in rows] == ["Final assembly", "Paint line", "Press line", "Welding line"] and all(r[1] > 0 for r in rows)
     rate = query(env, "bob", {"connection": DEMO_KEY, "source": {"table": "production_output"},
-                              "aggregations": [{"fn": "metric", "metric": metrics["Average scrap rate per report"]["id"]}]})["result"]
+                              "aggregations": [{"fn": "metric", "metric": metrics["Scrap rate"]["id"]}]})["result"]
     assert 0 < rate["rows"][0][0] < 0.1 and rate["columns"][0]["format"]["style"] == "percent"
+    # a ratio (M12): all scrap ÷ all pieces of each line, exactly what the database says
+    path = env["tmp"] / "demo" / "factory.sqlite"
+    truth = dict(_rows(path, """SELECT l.name, 1.0 * sum(o.scrap_qty) / sum(o.good_qty + o.scrap_qty) FROM production_output o
+                                 JOIN work_orders w ON w.id = o.work_order_id JOIN production_lines l ON l.id = w.line_id GROUP BY 1"""))
+    per_line = query(env, "bob", {"connection": DEMO_KEY, "source": {"table": "production_output"},
+                                  "joins": [{"table": "work_orders"}, {"table": "production_lines"}],
+                                  "breakouts": [{"ref": "production_lines.name", "alias": "line"}],
+                                  "aggregations": [{"fn": "metric", "metric": metrics["Scrap rate"]["id"]}]})["result"]["rows"]
+    assert {line: round(v, 6) for line, v in per_line} == {line: round(v, 6) for line, v in truth.items()}
 
 
 def test_admin_hides_the_demo_for_everyone(env, tmp_path):
@@ -151,6 +160,41 @@ def test_admin_edits_of_the_demo_data_model_survive_a_restart(env, tmp_path):
         assert names["vehicles"] == {"display_name": "Cars", "description": None, "translations": None}
         metrics = client.get("/api/metrics", params={"connection": DEMO_KEY}, headers=admin).json()["metrics"]
         assert len(metrics) == 3  # not added twice
+
+
+def test_an_install_seeded_before_m12_gets_the_scrap_rate_once(env, tmp_path):
+    """The seed runs once: an older install keeps its metrics (also the average one) and gets the new ones."""
+    from sqlalchemy import delete
+
+    from app.content.tables import app_settings_table, metrics_table
+    from app.demo import METRICS_SETTING, SEEDED_SETTING
+
+    app_db = env["db"]
+    with app_db.engine.begin() as conn:  # as an M11 install left it
+        conn.execute(delete(metrics_table).where(metrics_table.c.name == "Scrap rate"))
+        conn.execute(delete(app_settings_table).where(app_settings_table.c.key == METRICS_SETTING))
+        conn.execute(app_settings_table.update().where(app_settings_table.c.key == SEEDED_SETTING).values(value="1"))
+    old = {"name": "Average scrap rate per report", "connection": DEMO_KEY, "table": "production_output",
+           "definition": {"fn": "avg", "ref": "production_output.scrap_qty"}}
+    call(env, "admin", "POST", "/api/metrics", json=old)
+    output = next(m for m in call(env, "admin", "GET", "/api/metrics")["metrics"] if m["name"] == "Output")
+    call(env, "admin", "PUT", f"/api/metrics/{output['id']}", json={**{k: output[k] for k in ("connection", "table", "definition")},
+                                                                    "name": "Good pieces"})  # an admin renamed one
+
+    def restart(rename: tuple[str, str] | None = None) -> list[str]:
+        client = TestClient(create_app(Settings(search_workers=2, demo_enabled=True), _shop(tmp_path), app_db))
+        with client:
+            admin = auth(client, "admin", "admin-pass-1")
+            metrics = client.get("/api/metrics", params={"connection": DEMO_KEY}, headers=admin).json()["metrics"]
+            if rename:
+                m = next(m for m in metrics if m["name"] == rename[0])
+                body = {**{k: m[k] for k in ("connection", "table", "definition")}, "name": rename[1]}
+                assert client.put(f"/api/metrics/{m['id']}", json=body, headers=admin).status_code == 200
+            return sorted(m["name"] for m in metrics)
+
+    assert restart(rename=("Scrap rate", "Scrap share")) == [
+        "Average scrap rate per report", "Downtime hours", "Good pieces", "Scrap rate"]
+    assert restart() == ["Average scrap rate per report", "Downtime hours", "Good pieces", "Scrap share"]  # not again
 
 
 def test_row_rules_apply_to_the_demo(env):

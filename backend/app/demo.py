@@ -53,6 +53,10 @@ VERSION = 1          # PRAGMA user_version of the file; a new version regenerate
 SEED = 20261028
 HIDDEN_SETTING = "demo_hidden"
 SEEDED_SETTING = "demo_seeded"  # the data model was filled (once; admins may change it afterwards)
+MODEL_VERSION = 2    # of that filling: 2 = M12 "Show values as" for every foreign key (added to a model filled before)
+# The names of the demo metrics offered so far (M12): one new to the demo reaches installs filled before, once.
+METRICS_SETTING = "demo_metrics"
+FIRST_METRICS = ["Output", "Average scrap rate per report", "Downtime hours"]  # what installs filled before M12 got
 
 WORK_ORDERS = 2000
 DOWNTIME_EVENTS = 1500
@@ -543,24 +547,38 @@ METRICS = [  # name, description, Russian name, Russian description, table, defi
     ("Output", "Good pieces reported (vehicles on final assembly).", "Выпуск",
      "Сданные годные штуки (на главном конвейере - машины).", "production_output",
      {"fn": "sum", "ref": "production_output.good_qty"}, {"style": "number", "decimals": 0}),
-    # An average of per-report shares, named as such: a true scrap rate (all scrap ÷ all pieces)
-    # needs ratio metrics (planned, ROADMAP M12).
-    ("Average scrap rate per report", "The share of scrapped pieces in each output report, averaged over the reports.",
-     "Средняя доля брака по отчётам", "Доля бракованных штук в каждом отчёте о выпуске, усреднённая по отчётам.",
+    # A ratio metric (M12): all scrap ÷ all pieces, right per line, shift or month. Before M12 the demo
+    # had "Average scrap rate per report" (an average of per-report shares); installs keep that one.
+    ("Scrap rate", "Scrapped pieces as a share of all pieces reported (good and scrapped): all scrap ÷ all pieces.",
+     "Доля брака", "Бракованные штуки как доля всех сданных (годных и бракованных): весь брак ÷ все штуки.",
      "production_output",
-     {"fn": "avg", "expr": {"op": "/", "args": [
-         {"ref": "production_output.scrap_qty"},
-         {"op": "+", "args": [{"ref": "production_output.good_qty"}, {"ref": "production_output.scrap_qty"}]},
-     ]}}, {"style": "percent", "decimals": 1}),
+     {"fn": "ratio", "numerator": {"fn": "sum", "ref": "production_output.scrap_qty"},
+      "denominator": {"fn": "sum", "expr": {"op": "+", "args": [
+          {"ref": "production_output.good_qty"}, {"ref": "production_output.scrap_qty"}]}}},
+     {"style": "percent", "decimals": 1}),
     ("Downtime hours", "Hours the lines stood still.", "Часы простоя", "Сколько часов стояли линии.", "downtime_events",
      {"fn": "sum", "expr": {"op": "/", "args": [{"ref": "downtime_events.minutes"}, {"value": 60}]}}, {"style": "number", "decimals": 1}),
 ]
 
+# M12 "Show values as": the column of the related table that questions and value pickers show
+# in place of each foreign key's id ("Final assembly", not 4)
+LABELS = {
+    ("parts", "line_id"): "name",
+    ("work_orders", "part_id"): "name", ("work_orders", "line_id"): "name", ("work_orders", "shift_id"): "name",
+    ("production_output", "work_order_id"): "order_number",
+    ("downtime_events", "line_id"): "name", ("downtime_events", "shift_id"): "name",
+    ("downtime_events", "reason_id"): "name", ("downtime_events", "work_order_id"): "order_number",
+    ("scrap_records", "work_order_id"): "order_number", ("scrap_records", "reason_id"): "name",
+    ("vehicles", "work_order_id"): "order_number",
+    ("quality_inspections", "vehicle_id"): "vin",
+}
+
 SYSTEM = User(id=0, username="ncode", role="admin")
 
 
-def seed_data_model(semantic: SemanticStore) -> None:
-    """English names and descriptions with Russian translations; the metrics. What an admin set stays."""
+def seed_data_model(semantic: SemanticStore, offered: list[str] | tuple[str, ...] = ()) -> None:
+    """English names and descriptions with Russian translations; the metrics. What an admin set stays:
+    metrics offered before (by name) are not made again, even when an admin renamed or changed them."""
     tables, fields = semantic.tables(DEMO_KEY), semantic.fields(DEMO_KEY)
     for table, (name, description, ru_name, ru_description, columns) in MODEL.items():
         if table not in tables:
@@ -568,15 +586,19 @@ def seed_data_model(semantic: SemanticStore) -> None:
                 display_name=name, description=description,
                 translations={"ru": {"display_name": ru_name, "description": ru_description}}))
         for column, (cname, cdesc, ru_cname, ru_cdesc, *extra) in columns.items():
+            label = LABELS.get((table, column))
             if column in fields.get(table, {}):
+                if label and not fields[table][column].get("label_column"):  # a model filled before M12
+                    semantic.set_field(SYSTEM, DEMO_KEY, table, column, FieldIn(**{
+                        k: v for k, v in fields[table][column].items() if k in FieldIn.model_fields and k != "label_column"}, label_column=label))
                 continue
             semantic.set_field(SYSTEM, DEMO_KEY, table, column, FieldIn(
                 display_name=cname, description=cdesc,
                 semantic_type=extra[0] if extra else None, format=extra[1] if len(extra) > 1 else None,
-                translations={"ru": {"display_name": ru_cname, "description": ru_cdesc}}))
+                translations={"ru": {"display_name": ru_cname, "description": ru_cdesc}}, label_column=label))
     existing = {m.name for m in semantic.metrics({DEMO_KEY})} | {m.name for m in semantic.metrics({DEMO_KEY}, archived=True)}
     for name, description, ru_name, ru_description, table, definition, fmt in METRICS:
-        if name in existing:
+        if name in existing or name in offered:
             continue
         semantic.save_metric(SYSTEM, MetricIn.model_validate({
             "name": name, "description": description, "connection": DEMO_KEY, "table": table, "definition": definition,
@@ -622,9 +644,14 @@ class DemoDatabase:
                 counts = generate(self.path)
                 logger.info("Demo database created in %s (%d work orders, %.1f s)", self.path,
                             counts["work_orders"], time.perf_counter() - started)
-            if self._setting(SEEDED_SETTING) != VERSION:
-                seed_data_model(self.semantic)
-                self._put(SEEDED_SETTING, VERSION, None)
+            seeded = self._setting(SEEDED_SETTING)
+            if seeded != MODEL_VERSION:
+                offered = self._setting(METRICS_SETTING)
+                if not isinstance(offered, list):
+                    offered = FIRST_METRICS if seeded is not None else []
+                seed_data_model(self.semantic, offered)
+                self._put(SEEDED_SETTING, MODEL_VERSION, None)
+                self._put(METRICS_SETTING, list(dict.fromkeys(offered + [m[0] for m in METRICS])), None)
         except (OSError, sqlite3.Error, ValueError) as exc:
             self.reason = "error"
             logger.warning("The demo database could not be created in %s: %s", self.path, exc)

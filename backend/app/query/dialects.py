@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Float, Integer, Numeric, String, and_, case, cast, func, literal_column, null
+from sqlalchemy import (
+    Date, DateTime, Double, Float, Integer, Numeric, String, and_, case, cast, func, literal_column, null,
+)
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import ColumnElement
 
@@ -144,6 +146,23 @@ def avg(expr: Any, dialect: str) -> Any:
     if dialect == "mssql":
         return func.avg(cast(expr, Float), type_=Float())
     return func.avg(expr, type_=Numeric())
+
+
+def ratio(numerator: Any, denominator: Any, dialect: str) -> Any:
+    """numerator / NULLIF(denominator, 0) as a floating-point number (ratio metrics, M12).
+
+    Never integer division (SQLite, PostgreSQL and SQL Server divide whole numbers as whole
+    numbers: 3 / 4 = 0), and NULL instead of an error where the denominator is 0."""
+    if dialect in MYSQL_FAMILY:
+        # '/' is decimal division there, cut to 4 decimals (div_precision_increment); "* 1E0" makes it
+        # DOUBLE on every version (CAST AS DOUBLE needs MySQL 8.0.17 / MariaDB 10.4.5)
+        top = numerator * _lit("1E0")
+    elif dialect in PG_FAMILY:
+        top = cast(numerator, Double())  # Float would be DuckDB's 4-byte FLOAT
+    else:
+        top = cast(numerator, Float())  # SQLite: REAL; SQL Server: FLOAT(53)
+    # a plain "/": SQLAlchemy's own true division would add "+ 0.0" or a CAST AS NUMERIC to the denominator
+    return top.op("/", return_type=Float())(func.nullif(denominator, _lit("0")))
 
 
 def round_(expr: Any, digits: int, dialect: str) -> Any:
