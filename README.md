@@ -27,6 +27,8 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   webhook on a schedule, with CSV / Excel attached; alerts when a number crosses a line.
 - **Share outside Ncode** - public links (password, expiry) and signed embedding in other websites.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
+- **Ncode - Kanban** - task boards for the team next to the analysis: tasks with people, dates,
+  priority, steps with progress, photos from the phone, comments and history, live for everyone.
 - **Easy to start** - a Factory demo database with ready examples, a home page with first steps,
   plain words, a sentence under every result, a glossary, verified official answers.
 - **Team ready** - users and groups, row-level security, an audit log, usage and slow-query reports,
@@ -59,6 +61,7 @@ Details, upgrades, backups and monitoring: [docs/guide/install.md](docs/guide/in
 |---|---|
 | [Installing and running](docs/guide/install.md) | Docker and HTTPS, running without Docker, upgrades, tests, backups, health and metrics |
 | [Using Ncode](docs/guide/using.md) | databases, search, questions, library, SQL, charts, combining sources, analysis, data model, dashboards, subscriptions and sharing |
+| [Ncode - Kanban](docs/guide/kanban.md) | task boards: stages, tasks, steps, photos, working together |
 | [Administration](docs/guide/admin.md) | users and groups, row-level security, audit log, delivery, sharing, backups, languages |
 | [Security](docs/guide/security.md) | what protects your databases and data, and what is up to you |
 | [API reference](docs/guide/api.md) | every endpoint |
