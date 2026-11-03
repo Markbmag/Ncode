@@ -563,6 +563,43 @@ RU: dict[str, str] = {
     "The embedding token needs an expiry (\"exp\")": "Токену встраивания нужен срок действия (\"exp\")",
     "The embedding token has expired": "Срок действия токена встраивания истёк",
     "The embedding token may live at most 30 days": "Токен встраивания может действовать не больше 30 дней",
+    # ---------------------------------------------------------------- app/kanban (Ncode - Kanban)
+    "Board not found": "Доска не найдена",
+    "Card not found": "Карточка не найдена",
+    "Column not found": "Колонка не найдена",
+    "Label not found": "Метка не найдена",
+    "Step not found": "Шаг плана действий не найден",
+    "Comment not found": "Комментарий не найден",
+    "Attachment not found": "Вложение не найдено",
+    "Only members of this board can change it": "Изменять доску могут только её участники",
+    "Only the board's owners can do this": "Это могут сделать только владельцы доски",
+    "The board is archived: restore it first": "Доска в архиве: сначала восстановите её",
+    "Archive the board first": "Сначала отправьте доску в архив",
+    "Archive the card first": "Сначала отправьте карточку в архив",
+    "The column is not on this board": "Этой колонки нет на доске",
+    "The start date is after the due date": "Дата начала позже срока",
+    "Each member is either a user or a group": "Участник — это либо пользователь, либо группа",
+    "Unknown user id {uid}": "Неизвестный пользователь (id {uid})",
+    "Unknown group id {gid}": "Неизвестная группа (id {gid})",
+    "Unknown label id {lid}": "Неизвестная метка (id {lid})",
+    "A board needs at least one owner": "У доски должен быть хотя бы один владелец",
+    "Move its cards first": "Сначала перенесите её карточки",
+    "A board needs at least one column": "На доске должна быть хотя бы одна колонка",
+    "Only the author can edit a comment": "Изменить комментарий может только его автор",
+    "Only the author or the board's owners can delete a comment":
+        "Удалить комментарий может только его автор или владелец доски",
+    "Only images have a preview": "Миниатюра бывает только у изображений",
+    "This attachment has no preview": "У этого вложения нет миниатюры",
+    "Give the file's name (filename)": "Укажите имя файла (filename)",
+    "Files of this type cannot be attached ({extension(name) or name}). Allowed: images, PDF, office documents and text files":
+        "Файлы такого типа нельзя прикрепить ({extension(name) or name}). Можно: изображения, PDF, офисные документы "
+        "и текстовые файлы",
+    "The file is larger than {mb} MB": "Файл больше {mb} МБ",
+    "The file's content does not match its type ({extension(name)})":
+        "Содержимое файла не соответствует его типу ({extension(name)})",
+    "The preview is too large": "Миниатюра слишком большая",
+    "The preview must be a JPEG, PNG or WebP image": "Миниатюра должна быть изображением JPEG, PNG или WebP",
+    "The file is missing on the server": "Файл отсутствует на сервере",
 }
 
 # Single words that fill a {placeholder} of another message ("Someone else saved this {what} ...").

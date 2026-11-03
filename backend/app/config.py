@@ -137,6 +137,7 @@ class Settings:
     dataset_max_mb: int = 100            # largest file that can be uploaded
     dataset_max_rows: int = 1_000_000    # rows kept per uploaded file
     profile_sample_rows: int = 20_000    # rows read to profile / X-ray a table (M7)
+    kanban_max_upload_mb: int = 15       # largest file attached to a Kanban card (roadmap §8c)
     # --- automation and sharing (M8) ---
     scheduler_enabled: bool = True       # send subscriptions and alerts on schedule
     scheduler_interval_sec: int = 30     # how often due subscriptions are looked for
@@ -213,6 +214,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         dataset_max_mb=max(1, _int(env, "NCODE_DATASET_MAX_MB", defaults.dataset_max_mb)),
         dataset_max_rows=max(1, _int(env, "NCODE_DATASET_MAX_ROWS", defaults.dataset_max_rows)),
         profile_sample_rows=max(100, _int(env, "NCODE_PROFILE_SAMPLE_ROWS", defaults.profile_sample_rows)),
+        kanban_max_upload_mb=max(1, _int(env, "NCODE_KANBAN_MAX_UPLOAD_MB", defaults.kanban_max_upload_mb)),
         scheduler_enabled=_bool(env, "NCODE_SCHEDULER_ENABLED", defaults.scheduler_enabled),
         scheduler_interval_sec=max(5, _int(env, "NCODE_SCHEDULER_INTERVAL_SEC", defaults.scheduler_interval_sec)),
         scheduler_workers=max(1, _int(env, "NCODE_SCHEDULER_WORKERS", defaults.scheduler_workers)),

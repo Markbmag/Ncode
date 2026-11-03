@@ -24,6 +24,7 @@
     GET    /api/search/{task_id}        -> progress (+ results when finished)
     DELETE /api/search/{task_id}        -> cancel
     WS     /ws/{task_id}                first client message: {"token": "...", "lang": "en" or "ru"}
+    /api/kanban/*, WS /ws/kanban/{board_id}   Ncode - Kanban, see app/kanban/routes.py
 
 Send the token as `Authorization: Bearer <token>`.
 """
@@ -69,6 +70,7 @@ from .admin_routes import register_admin_routes
 from .content.health import register_broken_content_routes
 from .demo import DEMO_KEY, SYSTEM as DEMO_SYSTEM_USER, DemoDatabase, register_demo_routes
 from .glossary import register_glossary_routes
+from .kanban.routes import register_kanban_routes
 from .demo_content import seed_demo_content
 from .home import Home, register_home_routes
 from .backup import AutoBackup
@@ -808,6 +810,9 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     register_home_routes(  # M11: recently viewed, "Start here", the new-user checklist, personal settings
         app, app_db=app_db, content=content, current_user=current_user, require_admin=require_admin,
+    )
+    register_kanban_routes(  # Ncode - Kanban (§8c): /api/kanban/*, WS /ws/kanban/{board_id}
+        app, app_db=app_db, settings=settings, current_user=current_user, user_from_token=user_from_token,
     )
     if demo.registered():
         # M11: the demo's examples (a collection with questions and a dashboard), made once
