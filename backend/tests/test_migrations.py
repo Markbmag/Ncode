@@ -7,6 +7,7 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, inspect
 
 from app.content.tables import collections_table  # also registers the library tables in `metadata`
+import app.kanban.tables  # noqa: F401  - and the Kanban tables (K1)
 from app.appdb import AppDB, metadata, users_table
 from app.migrate import current_revision, head_revision, upgrade
 from app.security import hash_password
