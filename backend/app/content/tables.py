@@ -1,4 +1,4 @@
-"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0009 (app/migrations/versions)."""
+"""Table definitions for the library, the semantic layer, automation and sharing. They mirror migrations 0002-0011 (app/migrations/versions)."""
 
 from __future__ import annotations
 
@@ -294,4 +294,21 @@ share_links_table = Table(
     Column("revoked_at", Float),
     Column("last_used_at", Float),
     Column("views", Integer, nullable=False, default=0),
+)
+
+
+# ---------------------------------------------------------------- M15: history (migration 0011)
+
+content_versions_table = Table(  # every save of a question or dashboard keeps the version before it
+    "content_versions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("item_type", String(16), nullable=False),  # "question" | "dashboard"
+    Column("item_id", Integer, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("data", Text, nullable=False),             # JSON: the item as it was saved
+    Column("summary", String(300)),
+    Column("saved_by", String(64)),
+    Column("saved_at", Float, nullable=False),
+    Index("ix_content_versions_item", "item_type", "item_id", "version"),
 )
