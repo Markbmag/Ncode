@@ -65,6 +65,10 @@ export const theme = extendTheme({
         backgroundClip: 'content-box',
       },
       '*::-webkit-scrollbar-thumb:hover': { backgroundColor: 'var(--chakra-colors-scrollThumbHover)' },
+      // the opened list of a drop-down: the theme's panel colours instead of the system's white list
+      'select option, select optgroup': { background: 'var(--chakra-colors-panelBg)', color: 'var(--chakra-colors-bodyText)' },
+      'select option:checked': { background: 'var(--chakra-colors-panelHover)' },
+      'select option:disabled': { color: 'var(--chakra-colors-faintText)' },
     },
   },
   components: {
