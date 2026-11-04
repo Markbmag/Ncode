@@ -32,7 +32,8 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Ncode - Kanban** - task boards for the team next to the analysis: tasks with people, dates,
   priority, steps with progress, photos from the phone, comments and history, live for everyone;
-  on the phone's home screen as its own app, with stage tabs, press-and-hold to move and tasks from photos.
+  on the phone's home screen as its own app, with stage tabs, press-and-hold to move and tasks from photos;
+  a calendar per board, My tasks across boards, repeating tasks and links to dashboards.
 - **Easy to start** - a Factory demo database with ready examples, a home page with first steps,
   plain words, a sentence under every result, a glossary, verified official answers.
 - **Team ready** - users and groups, row-level security, an audit log, usage and slow-query reports,

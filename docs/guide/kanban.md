@@ -22,6 +22,29 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 - **Comments** and **History** (who did what, when) at the bottom.
 - Move a task with **Move to…** on the task, or drag it. A note at the bottom offers **Undo**.
 - *Remove from the board* hides a task (it can be brought back from *Hidden tasks*).
+- Descriptions and comments show exactly what was typed; web addresses become links.
+- **Repeats** (under *When*): every day, every working day (Mon–Fri), every week or every month. When
+  the task is moved to a done stage, the next one appears in the first stage with its next date, the
+  same people and labels and its steps unticked; the note says when it is due, and *Undo* takes it
+  away again. Choose *Does not repeat* to end the series.
+- **Search & BI**: *Link a dashboard or question* attaches a dashboard or question you may open, e.g.
+  the scrap dashboard on "Look into the scrap rise". People who may open it see its name and open it
+  from the task; others only see that there is a link.
+
+## Calendar
+
+*Board | Calendar* at the top of a board shows the same tasks (with the same filters) on a month
+calendar: each task on its due date (or its start date when it has no due date), in the colour of its
+stage, late ones in red, finished ones ticked. Drag a task to another day to change its due date, or
+from *No date* onto a day to give it one; *Undo* is in the note. On a phone the calendar is a list of
+days: late tasks first, then today and the days of the month.
+
+## My tasks
+
+*My tasks* (on the boards page, with the number of late tasks, and in the boards menu) lists
+everything assigned to you on all boards: *Late · Today · Next 7 days · Later · No date · Done this
+week*. Each task shows its board and stage; *Done* and *Move to…* work right there, and a task opens
+on the same page.
 
 ## Working together
 
