@@ -9,10 +9,10 @@ import { apiErrorMessage } from '../api';
 import { ArchiveIcon, PlusIcon, RefreshIcon, TrashIcon, UsersIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { deleteBoard, kanbanKeys, updateBoard, useBoards } from './api';
+import { deleteBoard, kanbanKeys, updateBoard, useBoards, useMyTasks } from './api';
 import { CreateBoardDialog } from './dialogs';
-import { KanbanIcon } from './icons';
-import { boardProgress, colorHex, personName, timeAgo, withAlpha } from './logic';
+import { KanbanIcon, UserIcon } from './icons';
+import { boardProgress, colorHex, personName, timeAgo, todayIso, withAlpha } from './logic';
 import { EmptyState, ProgressBar } from './parts';
 import type { BoardSummary } from './types';
 
@@ -130,6 +130,24 @@ function ArchivedRow({ board }: { board: BoardSummary }) {
   );
 }
 
+/** "My tasks · 3 late" (K3): the way to everything assigned to me. */
+function MyTasksButton() {
+  const my = useMyTasks();
+  const today = todayIso();
+  const open = (my.data?.cards ?? []).filter((c) => c.completed_at === null);
+  const late = open.filter((c) => c.due_date !== null && c.due_date < today).length;
+  return (
+    <Button as={RouterLink} to="/kanban/my" size="lg" h="52px" px={6} fontSize="lg" variant="subtle" leftIcon={<UserIcon boxSize={5} />} data-testid="my-tasks-button">
+      {t('My tasks')}
+      {open.length > 0 && (
+        <Text as="span" ml={2} px={2} borderRadius="full" fontSize="sm" fontWeight={800} bg={late ? 'red.500' : 'chipBg'} color={late ? 'white' : 'bodyText'} data-testid="my-tasks-count">
+          {late ? tn(late, '{n} late', '{n} late') : open.length}
+        </Text>
+      )}
+    </Button>
+  );
+}
+
 export default function BoardsPage() {
   const [params] = useSearchParams();
   const q = (params.get('q') ?? '').trim().toLocaleLowerCase();
@@ -165,9 +183,12 @@ export default function BoardsPage() {
               {t('A board is a shared to-do list for a team: each task moves from To do to In progress to Done. Everyone can look at every board; its members change it.')}
             </Text>
           </Box>
-          <Button size="lg" h="52px" px={7} fontSize="lg" leftIcon={<PlusIcon boxSize={5} />} onClick={() => setCreating(true)} flexShrink={0} data-testid="new-board">
-            {t('New board')}
-          </Button>
+          <Flex gap={3} direction={{ base: 'column', sm: 'row' }} flexShrink={0}>
+            <MyTasksButton />
+            <Button size="lg" h="52px" px={7} fontSize="lg" leftIcon={<PlusIcon boxSize={5} />} onClick={() => setCreating(true)} data-testid="new-board">
+              {t('New board')}
+            </Button>
+          </Flex>
         </Flex>
 
         <Tabs index={tab} onChange={setTab} variant="soft-rounded" colorScheme="brand" size="md" mb={5}>

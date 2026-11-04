@@ -7,6 +7,8 @@
     PATCH  /api/kanban/boards/{id}               {name?, description?, color?, archived?} -> board (owners)
     DELETE /api/kanban/boards/{id}               an archived board, with its files (owners)
     GET    /api/kanban/boards/{id}/history?limit=100   {"history": [...]} the board's latest changes
+    GET    /api/kanban/my?done_days=7            {cards, boards: [{id, name, color, can_edit, columns, labels}], people}
+                                                 the caller's tasks on every board they can see (K3)
     PUT    /api/kanban/boards/{id}/members       {members: [{user: id | group: id, role}]} -> {"members"}
     POST   /api/kanban/boards/{id}/columns       {name, color?, is_done?} -> column
     PATCH  /api/kanban/columns/{id}              {name?, color?, is_done?, position?} -> column
@@ -238,6 +240,10 @@ def register_kanban_routes(
         name = store.delete_board(user, board_id)
         app_db.audit(user.username, "kanban_board_delete", phrase=f"{name} (board {board_id})", status="ok")
         return {"deleted": board_id}
+
+    @router.get("/my")
+    def my_tasks(done_days: int = Query(7, ge=0, le=60), user: User = Depends(current_user)):
+        return store.my_cards(user, done_days)
 
     @router.get("/boards/{board_id}/history")
     def board_history(board_id: int, limit: int = Query(100, ge=1, le=500), user: User = Depends(current_user)):

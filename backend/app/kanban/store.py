@@ -585,6 +585,43 @@ class KanbanStore:
             self._card(conn, user, card_id)
             return self._card_full(conn, card_id)
 
+    def my_cards(self, user: User, done_days: int = 7) -> dict[str, Any]:
+        """The person's tasks on every board they can see (K3 "My tasks"): open ones, and the ones finished
+        in the last done_days days. With each board's stages, so a task can be moved from the list."""
+        with self.engine.connect() as conn:
+            since = time.time() - done_days * 86400
+            a, c, b = card_assignees_table.c, cards_table.c, boards_table.c
+            rows = conn.execute(
+                select(cards_table).join(card_assignees_table, a.card_id == c.id).join(boards_table, b.id == c.board_id).where(
+                    a.user_id == user.id, c.archived.is_(False), b.archived.is_(False),
+                    or_(c.completed_at.is_(None), c.completed_at >= since),
+                ).order_by(c.due_date, c.board_id, c.position, c.id)
+            ).all()
+            board_ids = sorted({r.board_id for r in rows})
+            boards = conn.execute(select(boards_table).where(b.id.in_(board_ids))).all() if board_ids else []
+            roles = _roles(conn, user, board_ids)
+            columns = conn.execute(select(columns_table).where(columns_table.c.board_id.in_(board_ids))
+                                   .order_by(columns_table.c.position, columns_table.c.id)).all() if board_ids else []
+            done_cols = {col.id for col in columns if col.is_done}
+            # a task in a "done" stage without a finish time counts as done long ago
+            cards = [s for s in self._summaries(conn, rows) if not (s["column_id"] in done_cols and s["completed_at"] is None)]
+            people = sorted({uid for s in cards for uid in s["assignees"]})
+            names = _names(conn, people)
+            by_board: dict[int, list[dict[str, Any]]] = {}
+            for col in columns:
+                by_board.setdefault(col.board_id, []).append(_column_json(col))
+            labels: dict[int, list[dict[str, Any]]] = {}
+            for lb in conn.execute(select(labels_table).where(labels_table.c.board_id.in_(board_ids))
+                                   .order_by(labels_table.c.name, labels_table.c.id)).all() if board_ids else []:
+                labels.setdefault(lb.board_id, []).append({"id": lb.id, "name": lb.name, "color": lb.color})
+            return {
+                "cards": cards,
+                "boards": [{"id": bd.id, "name": bd.name, "color": bd.color,
+                            "can_edit": Access(bd, roles.get(bd.id), user.is_admin).can_edit,
+                            "columns": by_board.get(bd.id, []), "labels": labels.get(bd.id, [])} for bd in boards],
+                "people": [{"id": uid, "username": names.get(uid, "?")} for uid in people],
+            }
+
     def board_history(self, user: User, board_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.engine.connect() as conn:
             self._access(conn, user, board_id)

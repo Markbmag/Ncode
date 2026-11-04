@@ -1,7 +1,7 @@
 /** Ncode - Kanban: calls to /api/kanban/* and their react-query cache keys. */
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
-import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, Priority, Role } from './types';
+import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, MyTasks, Priority, Role } from './types';
 
 const BASE = '/api/kanban';
 
@@ -11,7 +11,18 @@ export const kanbanKeys = {
   board: (id: number) => ['kanban', 'board', id] as const,
   card: (id: number) => ['kanban', 'card', id] as const,
   file: (url: string) => ['kanban', 'file', url] as const,
+  my: ['kanban', 'my'] as const,
 };
+
+/** My tasks on every board (K3); refreshed every minute and when the window comes back. */
+export function useMyTasks() {
+  return useQuery({
+    queryKey: kanbanKeys.my,
+    queryFn: async () => (await http.get<MyTasks>(`${BASE}/my`)).data,
+    staleTime: 5_000,
+    refetchInterval: 60_000,
+  });
+}
 
 export function useBoards(archived = false) {
   return useQuery({
@@ -103,6 +114,8 @@ export interface CardInput {
 
 export const createCard = async (boardId: number, body: CardInput & { column_id: number; title: string; position?: number }) =>
   (await http.post<Card>(`${BASE}/boards/${boardId}/cards`, body)).data;
+/** To the top of a stage (the server picks the place). */
+export const moveCardToTop = async (id: number, column_id: number) => (await http.post<Card>(`${BASE}/cards/${id}/move`, { column_id })).data;
 export const updateCard = async (id: number, body: CardInput) => (await http.patch<Card>(`${BASE}/cards/${id}`, body)).data;
 export const moveCard = async (id: number, column_id: number, position: number) =>
   (await http.post<CardSummary>(`${BASE}/cards/${id}/move`, { column_id, position })).data;

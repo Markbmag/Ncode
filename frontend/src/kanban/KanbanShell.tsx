@@ -10,7 +10,7 @@ import { LANGUAGES, lang, setLang, t } from '../i18n/index.ts';
 import { ServiceMark, ServiceSwitcher } from '../launcher/ServiceSwitcher';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useBoards } from './api';
-import { KanbanIcon } from './icons';
+import { KanbanIcon, UserIcon } from './icons';
 import { colorHex } from './logic';
 import { PersonAvatar } from './parts';
 import { OfflineBanner } from '../pwa/OfflineBanner';
@@ -59,6 +59,9 @@ function BoardsMenu() {
       <MenuList zIndex={1600} maxH="60vh" overflowY="auto" minW="240px">
         <MenuItem icon={<KanbanIcon boxSize={4} />} onClick={() => navigate('/kanban')} fontWeight={600}>
           {t('All boards')}
+        </MenuItem>
+        <MenuItem icon={<UserIcon boxSize={4} />} onClick={() => navigate('/kanban/my')} fontWeight={600} data-testid="menu-my-tasks">
+          {t('My tasks')}
         </MenuItem>
         {(boards.data?.length ?? 0) > 0 && <MenuDivider />}
         <MenuGroup title={t('Boards')} fontSize="xs" color="faintText">

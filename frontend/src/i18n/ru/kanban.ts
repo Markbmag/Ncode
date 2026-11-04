@@ -333,4 +333,13 @@ export const KANBAN: Record<string, string> = {
   'No tasks with a date this month.': 'В этом месяце нет задач с датой.',
   'Nothing due.': 'Ничего не запланировано.',
   'Today': 'Сегодня',
+  // K3: my tasks
+  '{n} late|{n} late': '{n} просрочена|{n} просрочены|{n} просрочено',
+  'Could not load your tasks': 'Не удалось загрузить ваши задачи',
+  'Everything assigned to you, on all boards.': 'Всё, что поручено вам, на всех досках.',
+  'Nothing assigned to you': 'Вам ничего не поручено',
+  'Tasks where you are chosen under “Who does it” show up here, from every board.': 'Здесь появляются задачи со всех досок, где вы выбраны в разделе «Кто делает».',
+  'Done this week': 'Сделано за неделю',
+  'Later': 'Позже',
+  'Next 7 days': 'Ближайшие 7 дней',
 };

@@ -602,3 +602,41 @@ export function dayTitle(iso: string): string {
 const WEEK_DAYS = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']; // a Monday ... Sunday
 /** Mon ... Sun / Пн ... Вс */
 export const weekdayNames = () => WEEK_DAYS.map((d) => cap(new Intl.DateTimeFormat(locale(), { weekday: 'short' }).format(asDate(d)).replace('.', '')));
+
+// ---------------------------------------------------------------- my tasks (K3)
+
+export type MyGroupKey = 'late' | 'today' | 'week' | 'later' | 'nodate' | 'done';
+export const MY_GROUPS: MyGroupKey[] = ['late', 'today', 'week', 'later', 'nodate', 'done'];
+
+/** My tasks in the order a person works through them: late, today, the next 7 days, later, without a
+ * date; the ones finished lately last (newest first). Empty groups are left out. */
+export function myGroups<T extends CardSummary>(cards: T[], today: string, isDone: (c: T) => boolean): { key: MyGroupKey; cards: T[] }[] {
+  const weekEnd = isoOf(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) + 7);
+  const rank: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const groups: Record<MyGroupKey, T[]> = { late: [], today: [], week: [], later: [], nodate: [], done: [] };
+  for (const c of cards) {
+    const date = c.due_date;
+    if (isDone(c)) groups.done.push(c);
+    else if (!date) groups.nodate.push(c);
+    else if (date < today) groups.late.push(c);
+    else if (date === today) groups.today.push(c);
+    else if (date < weekEnd) groups.week.push(c);
+    else groups.later.push(c);
+  }
+  const byDate = (a: T, b: T) => (a.due_date ?? '').localeCompare(b.due_date ?? '') || rank[a.priority] - rank[b.priority] || a.id - b.id;
+  for (const key of ['late', 'today', 'week', 'later'] as const) groups[key].sort(byDate);
+  groups.nodate.sort((a, b) => rank[a.priority] - rank[b.priority] || a.id - b.id);
+  groups.done.sort((a, b) => (b.completed_at ?? 0) - (a.completed_at ?? 0));
+  return MY_GROUPS.filter((k) => groups[k].length).map((key) => ({ key, cards: groups[key] }));
+}
+
+export function myGroupTitle(key: MyGroupKey): string {
+  return {
+    late: t('Late'),
+    today: t('Today'),
+    week: t('Next 7 days'),
+    later: t('Later'),
+    nodate: t('No date'),
+    done: t('Done this week'),
+  }[key];
+}

@@ -141,3 +141,10 @@ export interface BoardEvent {
   by?: string | null;
   action?: string | null;
 }
+
+/** GET /api/kanban/my (K3): the caller's tasks on every board they can see. */
+export interface MyTasks {
+  cards: (CardSummary & { board_id: number })[];
+  boards: { id: number; name: string; color: string | null; can_edit: boolean; columns: Column[]; labels: Label[] }[];
+  people: Person[];
+}
