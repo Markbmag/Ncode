@@ -135,9 +135,12 @@ test('a board from scratch: stages, tasks, drag and drop, steps, comment, photo;
   await expect(cardIn(page, 'In progress', 'Fix the pump').getByTestId('card-progress')).toHaveText('1 of 2 steps done');
   await expect(cardIn(alice.page, 'In progress', 'Fix the pump').getByTestId('card-progress')).toHaveText('1 of 2 steps done');
 
-  await drawer.getByTestId('comment-input').fill('The seal is **in stock**.');
+  // comments show exactly what was typed; a web address becomes a link
+  await drawer.getByTestId('comment-input').fill('The seal is in stock, see https://example.com/seal-42');
   await drawer.getByTestId('comment-send').click();
-  await expect(drawer.getByTestId('comment').filter({ hasText: 'The seal is in stock.' })).toBeVisible();
+  const comment = drawer.getByTestId('comment').filter({ hasText: 'The seal is in stock, see' });
+  await expect(comment).toBeVisible();
+  await expect(comment.getByRole('link', { name: 'https://example.com/seal-42' })).toHaveAttribute('href', 'https://example.com/seal-42');
 
   await drawer.getByTestId('file-input').setInputFiles({ name: 'pump.png', mimeType: 'image/png', buffer: PNG });
   await expect(drawer.getByTestId('attachment-thumb')).toHaveCount(1);

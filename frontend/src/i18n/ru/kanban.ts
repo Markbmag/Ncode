@@ -231,7 +231,6 @@ export const KANBAN: Record<string, string> = {
   'Task': 'Задача',
   'More details (optional): what, where, how…': 'Подробности (необязательно): что, где, как…',
   'More details': 'Подробности',
-  'Tip: **bold**, lists with - at the start of a line, links as [text](https://…).': 'Подсказка: **жирный**, списки через - в начале строки, ссылки как [текст](https://…).',
   'Who does it': 'Кто делает',
   'Take {name} off this task': 'Снять {name} с задачи',
   'Add or remove people': 'Добавить или убрать людей',
@@ -269,7 +268,7 @@ export const KANBAN: Record<string, string> = {
   'Your account, language, theme, sign out': 'Ваш аккаунт, язык, тема, выход',
   'The board starts with three stages: To do, In progress and Done.': 'Доска начинается с трёх этапов: «К выполнению», «В работе» и «Готово».',
   'Hide the board “{name}”? It disappears from the list; you can bring it back from Hidden boards.': 'Скрыть доску «{name}»? Она исчезнет из списка; вернуть её можно из раздела «Скрытые доски».',
-  'Hide the board (can be restored)': 'Скрыть доску (можно вернуть)',
+  'Hide the board': 'Скрыть доску',
   'Everyone signed in can look at this board. Members change it: editors work on tasks and stages, owners also choose the members.':
     'Эту доску могут смотреть все вошедшие пользователи. Изменяют её участники: редакторы работают с задачами и этапами, владельцы ещё и выбирают участников.',
   'Delete the label “{name}”? Tasks lose it. This cannot be undone.': 'Удалить метку «{name}»? Задачи её потеряют. Это нельзя отменить.',

@@ -21,7 +21,7 @@ function Dialog({ title, onClose, children, footer, size = 'md', onSubmit }: { t
         <ModalHeader fontSize="xl">{title}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>{children}</ModalBody>
-        {footer && <ModalFooter gap={2}>{footer}</ModalFooter>}
+        {footer && <ModalFooter gap={2} flexWrap="wrap" rowGap={2}>{footer}</ModalFooter>}
       </ModalContent>
     </Modal>
   );
@@ -126,7 +126,7 @@ export function BoardSettingsDialog({ board, canManage, onClose, onSaved, onArch
         <>
           {canManage && (
             <Button variant="ghost" colorScheme="red" leftIcon={<ArchiveIcon boxSize={4} />} mr="auto" onClick={() => void archive()} data-testid="archive-board">
-              {t('Hide the board (can be restored)')}
+              {t('Hide the board')}
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>

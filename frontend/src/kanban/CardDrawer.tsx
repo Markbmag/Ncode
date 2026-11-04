@@ -6,7 +6,6 @@ import {
 import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '../api';
-import { Markdown } from '../dashboards/Markdown';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, DownloadIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../icons';
 import { t } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -23,7 +22,7 @@ import {
   byPosition, colorHex, dueState, dueText, formatSize, fullTime, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
   priorityLabel, progressOf, progressText, timeAgo, todayIso, UPLOAD_ACCEPT, withAlpha,
 } from './logic';
-import { LabelChip, PersonAvatar, ProgressBar } from './parts';
+import { LabelChip, PersonAvatar, PlainText, ProgressBar } from './parts';
 import { attachFile } from './upload';
 import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column } from './types';
 import { PRIORITIES } from './types';
@@ -435,9 +434,6 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   aria-label={t('More details')}
                   data-testid="description-input"
                 />
-                <Text fontSize="sm" color="mutedText">
-                  {t('Tip: **bold**, lists with - at the start of a line, links as [text](https://…).')}
-                </Text>
               </VStack>
             ) : (
               <Box>
@@ -446,7 +442,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                 </Text>
                 {card.description ? (
                   <Box mt={2} fontSize="md" data-testid="card-description">
-                    <Markdown source={card.description} />
+                    <PlainText text={card.description} />
                   </Box>
                 ) : null}
               </Box>
@@ -705,7 +701,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                         </Box>
                       ) : (
                         <Box mt={1} px={3} py={2} borderRadius="lg" bg="chipBg" fontSize="md">
-                          <Markdown source={c.body} />
+                          <PlainText text={c.body} />
                         </Box>
                       )}
                       {(mine || canManage) && editingComment?.id !== c.id && (
