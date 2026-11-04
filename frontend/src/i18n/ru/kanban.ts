@@ -377,4 +377,11 @@ export const KANBAN: Record<string, string> = {
   'Start date and repeat…': 'Дата начала и повтор…',
   'This task is not on the board.': 'Этой задачи нет на доске.',
   'More for the step “{text}”': 'Ещё для шага «{text}»',
+  // people by name (not Ncode users)
+  'Add “{name}”': 'Добавить «{name}»',
+  'Added by name: not an Ncode user': 'Добавлен(а) по имени: не пользователь Ncode',
+  'For someone without an Ncode account': 'Для того, у кого нет учётной записи Ncode',
+  'Ncode users': 'Пользователи Ncode',
+  'No Ncode user with this name.': 'Нет пользователя Ncode с таким именем.',
+  'Type a name or pick someone': 'Введите имя или выберите человека',
 };

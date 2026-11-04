@@ -58,3 +58,38 @@ test('a task shows the essentials; the rest is one click away', async ({ page })
   await expect(drawer.getByTestId('mark-done')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('anyone can be put on a task by name, not only Ncode users', async ({ page }) => {
+  const errors = watchErrors(page);
+  const board = await api(page.request, 'carol', 'POST', '/api/kanban/boards', { name: unique('People') });
+  const detail = await api(page.request, 'carol', 'GET', `/api/kanban/boards/${board.id}`);
+  const card = await api(page.request, 'carol', 'POST', `/api/kanban/boards/${board.id}/cards`, { column_id: detail.columns[0].id, title: 'Fix the gate' });
+  await api(page.request, 'carol', 'POST', `/api/kanban/boards/${board.id}/cards`, { column_id: detail.columns[0].id, title: 'Paint the fence' });
+  await signIn(page, 'carol', `/kanban/b/${board.id}/c/${card.id}`);
+  const drawer = page.getByTestId('card-drawer');
+
+  // a name typed and Enter: on the task, marked as not an Ncode user
+  await drawer.getByTestId('assignees-button').click();
+  await page.getByTestId('assignee-name-input').fill('Ivan Petrov');
+  await expect(page.getByTestId('assignee-name-add')).toContainText('Add “Ivan Petrov”');
+  await page.getByTestId('assignee-name-input').press('Enter');
+  await expect(drawer.getByTestId('assignee-name')).toHaveCount(1);
+  await expect(drawer.getByTestId('assignee-name')).toContainText('Ivan Petrov');
+  // the same field finds Ncode users
+  await page.getByTestId('assignee-name-input').fill('ali');
+  await expect(page.getByTestId('assignee-option')).toHaveCount(1);
+  await expect(page.getByTestId('assignee-option')).toContainText('alice');
+  await expect(page.getByTestId('assignee-name-add')).toBeVisible(); // "ali" could still be a name
+  await page.getByTestId('assignee-option').click();
+  await expect(drawer.getByTestId('assignee')).toHaveCount(1);
+  await expect(drawer.getByTestId('assignee')).toContainText('alice');
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`)).assignee_names).toEqual(['Ivan Petrov']);
+
+  // the board: filter by the name
+  await drawer.getByTestId('card-close').click();
+  await page.getByTestId('filter-more').click();
+  await page.getByTestId('filter-person').selectOption({ label: 'Ivan Petrov' });
+  await expect(page.getByTestId('card-face')).toHaveText([/Fix the gate/]);
+  expect(errors).toEqual([]);
+});

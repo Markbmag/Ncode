@@ -26,6 +26,7 @@ import {
 import { LinkPicker } from './LinkPicker';
 import { LabelChip, PersonAvatar, PlainText, ProgressBar } from './parts';
 import { attachFile } from './upload';
+import { WhoPicker } from './WhoPicker';
 import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column, Repeat } from './types';
 import { PRIORITIES, REPEATS } from './types';
 import { useNotify } from './useNotify';
@@ -587,40 +588,14 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
           {/* who, when, how important, labels: one card of facts */}
           <Box border="1px solid" borderColor="lineColor" borderRadius="xl" px={{ base: 3, md: 4 }} py={1} data-testid="card-facts">
             <FactRow icon={<UserIcon boxSize={4} />} label={t('Who')}>
-              <Flex gap={1.5} wrap="wrap" align="center">
-                {card.assignees.map((id) => {
-                  const name = personName(id, detail.people);
-                  return (
-                    <HStack key={id} spacing={1.5} pl={1} pr={canEdit ? 0.5 : 2.5} py={0.5} borderRadius="full" bg="chipBg" data-testid="assignee">
-                      <PersonAvatar name={name} size="xs" />
-                      <Text fontWeight={600}>{name}</Text>
-                      {canEdit && (
-                        <IconButton aria-label={t('Take {name} off this task', { name })} size="xs" variant="ghost" borderRadius="full" icon={<XIcon boxSize={3} />} onClick={() => void patch({ assignees: card.assignees.filter((x) => x !== id) })} />
-                      )}
-                    </HStack>
-                  );
-                })}
-                {canEdit && (
-                  <Menu closeOnSelect={false} isLazy>
-                    <MenuButton as={Button} size="sm" variant="ghost" leftIcon={<PlusIcon boxSize={3.5} />} color="brand.500" _dark={{ color: 'brand.200' }} data-testid="assignees-button">
-                      {card.assignees.length ? t('Add') : t('Choose who does it')}
-                    </MenuButton>
-                    <MenuList zIndex={1700} maxH="50vh" overflowY="auto">
-                      <MenuOptionGroup type="checkbox" value={card.assignees.map(String)} onChange={(v) => void patch({ assignees: (Array.isArray(v) ? v : [v]).map(Number) })}>
-                        {people.map((p) => (
-                          <MenuItemOption key={p.id} value={String(p.id)} fontSize="md">
-                            <HStack>
-                              <PersonAvatar name={p.username} size="xs" />
-                              <Text as="span">{p.username}</Text>
-                            </HStack>
-                          </MenuItemOption>
-                        ))}
-                      </MenuOptionGroup>
-                    </MenuList>
-                  </Menu>
-                )}
-                {!canEdit && !card.assignees.length && <Text color="mutedText">{t('Nobody yet')}</Text>}
-              </Flex>
+              <WhoPicker
+                assignees={card.assignees}
+                names={card.assignee_names ?? []}
+                people={people}
+                allPeople={detail.people}
+                canEdit={canEdit}
+                onChange={(change) => void patch(change)}
+              />
             </FactRow>
 
             <FactRow icon={<CalendarIcon boxSize={4} />} label={t('Due')}>

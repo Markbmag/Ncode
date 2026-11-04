@@ -24,7 +24,7 @@ import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
 import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
-  dayTitle, photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
+  dayTitle, namedPeople, photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
 } from './logic';
 import type { CardFilter } from './logic';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
@@ -479,11 +479,28 @@ function FilterBar({ filter, setFilter, board, me }: { filter: CardFilter; setFi
       </Button>
       {(more || extra) && (
         <>
-          <Select w="auto" minW="150px" flexShrink={0} borderRadius="full" value={filter.person ?? ''} onChange={(e) => setFilter({ ...filter, person: e.target.value ? Number(e.target.value) : null })} aria-label={t('Person')} data-testid="filter-person">
+          <Select
+            w="auto"
+            minW="150px"
+            flexShrink={0}
+            borderRadius="full"
+            value={filter.person === null ? '' : typeof filter.person === 'number' ? `u${filter.person}` : `n${filter.person}`}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilter({ ...filter, person: !v ? null : v.startsWith('u') ? Number(v.slice(1)) : v.slice(1) });
+            }}
+            aria-label={t('Person')}
+            data-testid="filter-person"
+          >
             <option value="">{t('Anyone')}</option>
             {board.people.filter((p) => p.active !== false).map((p) => (
-              <option key={p.id} value={p.id}>
+              <option key={p.id} value={`u${p.id}`}>
                 {p.username}
+              </option>
+            ))}
+            {namedPeople(board.cards).map((n) => (
+              <option key={`n${n}`} value={`n${n}`}>
+                {n}
               </option>
             ))}
           </Select>

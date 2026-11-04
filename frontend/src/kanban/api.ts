@@ -108,6 +108,7 @@ export interface CardInput {
   start_date?: string | null;
   due_date?: string | null;
   assignees?: number[];
+  assignee_names?: string[];
   labels?: number[];
   archived?: boolean;
   repeat?: Repeat | null;

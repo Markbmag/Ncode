@@ -17,7 +17,8 @@
     PATCH  /api/kanban/labels/{id}               {name?, color?} -> label
     DELETE /api/kanban/labels/{id}
     POST   /api/kanban/boards/{id}/cards         {column_id, title, description?, priority?, start_date?, due_date?,
-                                                  assignees?, labels?, position?, repeat?} -> card (at the top by default)
+                                                  assignees?, assignee_names?, labels?, position?, repeat?} -> card
+                                                 (at the top by default; assignee_names: people who are not Ncode users)
     GET    /api/kanban/cards/{id}                -> card
     PATCH  /api/kanban/cards/{id}                {title?, description?, priority?, start_date?, due_date?, assignees?,
                                                   labels?, archived?, repeat?} -> card
@@ -151,6 +152,7 @@ class CardIn(_In):
     labels: list[int] = Field(default_factory=list, max_length=50)
     position: Position | None = None
     repeat: Repeat | None = None
+    assignee_names: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=50)
 
 
 class CardPatch(_In):
@@ -163,6 +165,7 @@ class CardPatch(_In):
     labels: list[int] | None = Field(default=None, max_length=50)
     archived: bool | None = None
     repeat: Repeat | None = None        # null: no longer repeats
+    assignee_names: list[Annotated[str, StringConstraints(max_length=200)]] | None = Field(default=None, max_length=50)
 
 
 class LinkIn(_In):

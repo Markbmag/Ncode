@@ -67,6 +67,7 @@ export interface CardSummary {
   due_date: string | null;
   position: number;
   assignees: number[];
+  assignee_names?: string[]; // people who are not Ncode users, by name
   labels: number[];
   checklist: { done: number; total: number };
   comments: number;

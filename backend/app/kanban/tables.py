@@ -1,4 +1,4 @@
-"""Kanban tables (migrations 0010, 0012). In the app's one MetaData so the migration test compares them."""
+"""Kanban tables (migrations 0010, 0012, 0013). In the app's one MetaData so the migration test compares them."""
 
 from __future__ import annotations
 
@@ -147,4 +147,12 @@ card_links_table = Table(  # K3: a task points at a Search & BI dashboard or que
     Column("target_id", Integer, nullable=False),
     Column("added_by", Integer),
     Column("created_at", Float, nullable=False),
+)
+
+card_names_table = Table(  # people on a task who are not Ncode users, by name (migration 0013)
+    "kanban_card_names",
+    metadata,
+    Column("card_id", Integer, ForeignKey("kanban_cards.id"), primary_key=True),
+    Column("name", String(80), primary_key=True),
+    Column("position", Integer, nullable=False, server_default="0"),
 )

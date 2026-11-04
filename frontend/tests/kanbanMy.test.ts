@@ -28,3 +28,15 @@ test('late, today, next 7 days, later, no date, done this week', () => {
   // the week runs over the end of the month
   assert.equal(myGroups([card(1, { due_date: '2026-12-03' })], '2026-11-30', () => false)[0].key, 'week');
 });
+
+test('people by name: the person filter and the search find them', async () => {
+  const { matchesFilter, namedPeople, NO_FILTER } = await import('../src/kanban/logic.ts');
+  const ctx = { me: null, today: '2026-11-04', doneColumns: new Set<number>(), labels: [] };
+  const gate = card(1, { title: 'Fix the gate', assignee_names: ['Ivan Petrov'] });
+  const roof = card(2, { title: 'Roof', assignees: [7], assignee_names: ['Olga'] });
+  assert.equal(matchesFilter(gate, { ...NO_FILTER, person: 'ivan petrov' }, ctx), true);
+  assert.equal(matchesFilter(roof, { ...NO_FILTER, person: 'Ivan Petrov' }, ctx), false);
+  assert.equal(matchesFilter(roof, { ...NO_FILTER, person: 7 }, ctx), true);
+  assert.equal(matchesFilter(gate, { ...NO_FILTER, q: 'ivan' }, ctx), true);
+  assert.deepEqual(namedPeople([gate, roof, card(3, { assignee_names: ['ivan petrov', 'Anna'] })]), ['Anna', 'Ivan Petrov', 'Olga']);
+});

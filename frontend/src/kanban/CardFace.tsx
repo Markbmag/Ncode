@@ -67,7 +67,7 @@ function MoveTo({ card, columns, onMove }: { card: CardSummary; columns: Column[
 export const CardFace = memo(function CardFace({ card, labels, people, today, done, accent, dragging, ghost, columns, onMove }: CardFaceProps) {
   const cardLabels = labels.filter((l) => card.labels.includes(l.id));
   const progress = progressOf(card.checklist);
-  const names = card.assignees.map((id) => personName(id, people));
+  const names = [...card.assignees.map((id) => personName(id, people)), ...(card.assignee_names ?? [])];
   const urgent = card.priority === 'urgent' && !done;
   return (
     <Box

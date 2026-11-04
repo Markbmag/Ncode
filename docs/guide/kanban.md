@@ -17,7 +17,8 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
   ("Saved" shows after each change).
 - At the top: the task's **stage** (tap to move it), a green **Done** button and **×** to close.
 - Then the name and the details (click to change), and one card with the facts: **Who** (several
-  people), **Due** (late tasks turn red and say "3 days late"; *Start date and repeat…* below it),
+  people: Ncode users, or anyone else by name - type "Ivan from maintenance" and press Enter; such
+  names have a dashed outline, can be filtered by on the board and are found by the search), **Due** (late tasks turn red and say "3 days late"; *Start date and repeat…* below it),
   **Importance** (Low · Normal · High · Urgent) and **Labels**.
 - **Steps**: the action plan. Tick steps as they are done; the task and the board show
   "2 of 5 steps done" with a bar.

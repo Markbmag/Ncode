@@ -37,7 +37,7 @@ from .attachments import INLINE, FileStore, is_image
 from .events import BoardEvents
 from .tables import (
     activity_table, attachments_table, board_members_table, boards_table, card_assignees_table, card_labels_table,
-    card_links_table, cards_table, checklist_table, columns_table, comments_table, labels_table,
+    card_links_table, card_names_table, cards_table, checklist_table, columns_table, comments_table, labels_table,
 )
 
 API = "/api/kanban"
@@ -53,6 +53,22 @@ LINK_KINDS = ("dashboard", "question")                  # K3: what a task may po
 
 # K3: names of Search & BI items as one person may see them: {(kind, id): name, or None when hidden or gone}
 LinkNames = Callable[[User, list[tuple[str, int]]], dict[tuple[str, int], str | None]]
+
+
+MAX_NAMES = 20  # people by name on one task
+
+
+def clean_names(names: Iterable[str] | None) -> list[str]:
+    """Names of people who are not Ncode users, as typed: trimmed, inner spaces collapsed, each once
+    (whatever the capitals), in the order given."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in names or []:
+        name = " ".join(str(raw).split())[:80]
+        if name and name.casefold() not in seen:
+            seen.add(name.casefold())
+            out.append(name)
+    return out[:MAX_NAMES]
 
 
 def next_due(rule: str, due: date | None, today: date) -> date:
@@ -390,7 +406,7 @@ class KanbanStore:
             card_ids = select(cards_table.c.id).where(cards_table.c.board_id == board_id)
             for table in (attachments_table, comments_table, checklist_table):
                 conn.execute(delete(table).where(table.c.card_id.in_(card_ids)))
-            for table in (card_assignees_table, card_labels_table, card_links_table):
+            for table in (card_assignees_table, card_labels_table, card_links_table, card_names_table):
                 conn.execute(delete(table).where(table.c.card_id.in_(card_ids)))
             for table in (cards_table, labels_table, columns_table, board_members_table, activity_table):
                 conn.execute(delete(table).where(table.c.board_id == board_id))
@@ -555,6 +571,10 @@ class KanbanStore:
         for r in conn.execute(select(card_assignees_table).where(card_assignees_table.c.card_id.in_(scope))
                               .order_by(card_assignees_table.c.user_id)):
             assignees.setdefault(r.card_id, []).append(r.user_id)
+        named: dict[int, list[str]] = {}
+        for r in conn.execute(select(card_names_table).where(card_names_table.c.card_id.in_(scope))
+                              .order_by(card_names_table.c.position, card_names_table.c.name)):
+            named.setdefault(r.card_id, []).append(r.name)
         labels: dict[int, list[int]] = {}
         for r in conn.execute(select(card_labels_table).where(card_labels_table.c.card_id.in_(scope))
                               .order_by(card_labels_table.c.label_id)):
@@ -579,7 +599,7 @@ class KanbanStore:
             out.append({
                 "id": c.id, "board_id": c.board_id, "column_id": c.column_id, "title": c.title, "priority": c.priority,
                 "start_date": c.start_date, "due_date": c.due_date, "position": c.position, "archived": bool(c.archived),
-                "assignees": assignees.get(c.id, []), "labels": labels.get(c.id, []),
+                "assignees": assignees.get(c.id, []), "assignee_names": named.get(c.id, []), "labels": labels.get(c.id, []),
                 "checklist": {"done": done, "total": total}, "comments": comments.get(c.id, 0),
                 "attachments": files.get(c.id, 0), "cover": covers.get(c.id),
                 "completed_at": c.completed_at, "updated_at": c.updated_at, "updated_by": c.updated_by,
@@ -728,7 +748,8 @@ class KanbanStore:
     def create_card(self, user: User, board_id: int, *, column_id: int, title: str, description: str | None = None,
                     priority: str = "normal", start_date: Any = None, due_date: Any = None,
                     assignees: list[int] | None = None, labels: list[int] | None = None,
-                    position: float | None = None, repeat: str | None = None) -> dict[str, Any]:
+                    position: float | None = None, repeat: str | None = None,
+                    assignee_names: list[str] | None = None) -> dict[str, Any]:
         with self._write(user) as tx:
             conn = tx.conn
             self._access(conn, user, board_id, "edit")
@@ -748,6 +769,8 @@ class KanbanStore:
             )).inserted_primary_key[0])
             for uid in people:
                 conn.execute(insert(card_assignees_table).values(card_id=cid, user_id=uid))
+            for i, name in enumerate(clean_names(assignee_names)):
+                conn.execute(insert(card_names_table).values(card_id=cid, name=name, position=i))
             for lid in tags:
                 conn.execute(insert(card_labels_table).values(card_id=cid, label_id=lid))
             if position is not None:
@@ -793,6 +816,20 @@ class KanbanStore:
                         conn.execute(insert(card_assignees_table).values(card_id=card_id, user_id=uid))
                     names = _names(conn, added + removed)
                     diff["assignees"] = {"added": [names.get(u) for u in added], "removed": [names.get(u) for u in removed]}
+            if changes.get("assignee_names") is not None:
+                new_names = clean_names(changes["assignee_names"])
+                old_names = [r.name for r in conn.execute(select(card_names_table.c.name).where(card_names_table.c.card_id == card_id)
+                                                          .order_by(card_names_table.c.position, card_names_table.c.name))]
+                if new_names != old_names:
+                    conn.execute(delete(card_names_table).where(card_names_table.c.card_id == card_id))
+                    for i, name in enumerate(new_names):
+                        conn.execute(insert(card_names_table).values(card_id=card_id, name=name, position=i))
+                    old_keys, new_keys = {n.casefold() for n in old_names}, {n.casefold() for n in new_names}
+                    added = [n for n in new_names if n.casefold() not in old_keys]
+                    removed = [n for n in old_names if n.casefold() not in new_keys]
+                    if added or removed:
+                        prev = diff.get("assignees", {"added": [], "removed": []})
+                        diff["assignees"] = {"added": prev["added"] + added, "removed": prev["removed"] + removed}
             if changes.get("labels") is not None:
                 new_tags = set(changes["labels"])
                 old_tags = {r.label_id for r in conn.execute(select(card_labels_table.c.label_id)
@@ -859,6 +896,8 @@ class KanbanStore:
         )).inserted_primary_key[0])
         for r in conn.execute(select(card_assignees_table.c.user_id).where(card_assignees_table.c.card_id == c.id)):
             conn.execute(insert(card_assignees_table).values(card_id=nid, user_id=r.user_id))
+        for r in conn.execute(select(card_names_table).where(card_names_table.c.card_id == c.id)):
+            conn.execute(insert(card_names_table).values(card_id=nid, name=r.name, position=r.position))
         for r in conn.execute(select(card_labels_table.c.label_id).where(card_labels_table.c.card_id == c.id)):
             conn.execute(insert(card_labels_table).values(card_id=nid, label_id=r.label_id))
         for i in conn.execute(select(checklist_table).where(checklist_table.c.card_id == c.id)
@@ -881,7 +920,7 @@ class KanbanStore:
             files = conn.execute(select(attachments_table.c.file, attachments_table.c.thumb)
                                  .where(attachments_table.c.card_id == card_id)).all()
             for table in (attachments_table, comments_table, checklist_table, card_assignees_table,
-                          card_labels_table, card_links_table, activity_table):
+                          card_labels_table, card_links_table, card_names_table, activity_table):
                 conn.execute(delete(table).where(table.c.card_id == card_id))
             conn.execute(delete(cards_table).where(cards_table.c.id == card_id))
             tx.files.append((c.board_id, [n for f in files for n in (f.file, f.thumb)]))

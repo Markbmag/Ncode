@@ -128,3 +128,31 @@ def test_links_to_dashboards_follow_what_each_person_may_see(env):
     removed = call(env, "DELETE", f"/links/{seen[0]['id']}", "bob")
     assert removed["links"] == []
     assert [h["action"] for h in removed["history"]][:2] == ["link_removed", "link_added"]
+
+
+# ---------------------------------------------------------------------- people who are not Ncode users
+def test_people_by_name_on_a_task(env):
+    board, detail = new_board(env)
+    todo, done = detail["columns"][0]["id"], detail["columns"][-1]["id"]
+    card = new_card(env, board["id"], todo, title="Fix the gate", assignees=[env.ids["bob"]],
+                    assignee_names=["  Ivan   Petrov ", "ivan petrov", "Olga (electrician)", ""])
+    assert card["assignees"] == [env.ids["bob"]]
+    assert card["assignee_names"] == ["Ivan Petrov", "Olga (electrician)"]  # trimmed, once, in order
+    changed = call(env, "PATCH", f"/cards/{card['id']}", json={"assignee_names": ["Olga (electrician)", "Sergey"]})
+    assert changed["assignee_names"] == ["Olga (electrician)", "Sergey"]
+    entry = next(h for h in changed["history"] if h["action"] == "card_updated")
+    assert entry["details"]["changes"]["assignees"] == {"added": ["Sergey"], "removed": ["Ivan Petrov"]}
+    # the board shows them; a repeating task takes them along
+    on_board = next(c for c in call(env, "GET", f"/boards/{board['id']}")["cards"] if c["id"] == card["id"])
+    assert on_board["assignee_names"] == ["Olga (electrician)", "Sergey"]
+    call(env, "PATCH", f"/cards/{card['id']}", json={"repeat": "daily"})
+    nxt = call(env, "POST", f"/cards/{card['id']}/move", json={"column_id": done})["next"]
+    assert call(env, "GET", f"/cards/{nxt['id']}")["assignee_names"] == ["Olga (electrician)", "Sergey"]
+    # everyone can be taken off; deleting the task removes the names too
+    assert call(env, "PATCH", f"/cards/{nxt['id']}", json={"assignee_names": []})["assignee_names"] == []
+    call(env, "PATCH", f"/cards/{card['id']}", json={"archived": True})
+    call(env, "DELETE", f"/cards/{card['id']}")
+    from app.kanban.tables import card_names_table
+    from sqlalchemy import select
+    with env.db.engine.connect() as conn:
+        assert conn.execute(select(card_names_table).where(card_names_table.c.card_id == card["id"])).all() == []

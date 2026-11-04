@@ -227,7 +227,7 @@ export function priorityLabel(p: Priority): string {
 
 export interface CardFilter {
   mine: boolean;
-  person: number | null;
+  person: number | string | null; // an Ncode user's id, or a name typed on tasks
   label: number | null;
   priority: Priority | null;
   overdue: boolean;
@@ -254,14 +254,18 @@ export interface FilterContext {
 /** Whether a card passes every filter that is set (search: title and label names, any order of words). */
 export function matchesFilter(card: CardSummary, f: CardFilter, ctx: FilterContext): boolean {
   if (f.mine && (ctx.me === null || !card.assignees.includes(ctx.me))) return false;
-  if (f.person !== null && !card.assignees.includes(f.person)) return false;
+  if (typeof f.person === 'number' && !card.assignees.includes(f.person)) return false;
+  if (typeof f.person === 'string') {
+    const wanted = f.person.toLocaleLowerCase();
+    if (!(card.assignee_names ?? []).some((n) => n.toLocaleLowerCase() === wanted)) return false;
+  }
   if (f.label !== null && !card.labels.includes(f.label)) return false;
   if (f.priority !== null && card.priority !== f.priority) return false;
   if (f.overdue && !isOverdue(card, ctx.today, ctx.doneColumns)) return false;
   const words = f.q.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
     const labelNames = ctx.labels.filter((l) => card.labels.includes(l.id)).map((l) => l.name);
-    const haystack = [card.title, ...labelNames, `#${card.id}`].join(' ').toLocaleLowerCase();
+    const haystack = [card.title, ...labelNames, ...(card.assignee_names ?? []), `#${card.id}`].join(' ').toLocaleLowerCase();
     if (!words.every((w) => haystack.includes(w))) return false;
   }
   return true;
@@ -653,4 +657,11 @@ export function myGroupTitle(key: MyGroupKey): string {
 
 export function repeatLabel(r: Repeat): string {
   return { daily: t('Every day'), weekdays: t('Every working day (Mon–Fri)'), weekly: t('Every week'), monthly: t('Every month') }[r];
+}
+
+/** The names typed on a board's tasks (people who are not Ncode users), each once, A to Z. */
+export function namedPeople(cards: Pick<CardSummary, 'assignee_names'>[]): string[] {
+  const byKey = new Map<string, string>();
+  for (const c of cards) for (const n of c.assignee_names ?? []) if (!byKey.has(n.toLocaleLowerCase())) byKey.set(n.toLocaleLowerCase(), n);
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
