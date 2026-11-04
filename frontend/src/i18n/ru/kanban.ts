@@ -307,4 +307,13 @@ export const KANBAN: Record<string, string> = {
   '{user} changed the stages': '{user} изменил(а) этапы',
   '{user} hid “{title}”': '{user} убрал(а) с доски «{title}»',
   '{user} changed the steps of “{title}”': '{user} изменил(а) шаги задачи «{title}»',
+  // K2: phone
+  'New task from a photo': 'Новая задача по фото',
+  'Photo': 'Фото',
+  'Could not add the photo': 'Не удалось добавить фото',
+  'The photo is added. Give the task a short name:': 'Фото добавлено. Дайте задаче короткое название:',
+  'Drop the task on a stage above to move it there': 'Отпустите задачу на этапе выше, чтобы перенести её туда',
+  'Swipe sideways or tap a stage. Press and hold a task to move it.': 'Листайте в сторону или нажмите на этап. Чтобы перенести задачу, нажмите и подержите её.',
+  '{stage} (here now)': '{stage} (сейчас здесь)',
+  'Open the task': 'Открыть задачу',
 };

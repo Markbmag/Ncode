@@ -483,3 +483,43 @@ export function guessType(name: string, given: string): string {
   };
   return known[ext] ?? 'application/octet-stream';
 }
+
+// ---------------------------------------------------------------- phone (K2)
+
+/** The stage tabs over a phone board are drop targets too: "tab12" is stage 12. */
+export const tabKey = (columnId: number) => `tab${columnId}`;
+export const tabColumn = (key: string | number): number | null => (/^tab\d+$/.test(String(key)) ? Number(String(key).slice(3)) : null);
+
+/** The stage in view on a phone: the column whose middle is closest to the middle of the screen.
+ * columns: each column's left edge and width inside the scrolling row. */
+export function stageInView(scrollLeft: number, viewWidth: number, columns: { left: number; width: number }[]): number {
+  if (!columns.length) return 0;
+  const middle = scrollLeft + viewWidth / 2;
+  let best = 0;
+  columns.forEach((c, i) => {
+    const b = columns[best];
+    if (Math.abs(c.left + c.width / 2 - middle) < Math.abs(b.left + b.width / 2 - middle)) best = i;
+  });
+  return best;
+}
+
+/** Photos bigger than this are made smaller on the phone before sending (faster on mobile data). */
+export const PHOTO_MAX_SIDE = 2560;
+export const PHOTO_SHRINK_ABOVE = 1_500_000; // bytes
+
+/** Whether a picked file is a photo worth making smaller before it is sent. HEIC is left as it is:
+ * not every browser can read it. */
+export function shouldShrink(type: string, size: number): boolean {
+  return ['image/jpeg', 'image/png', 'image/webp'].includes(type) && size > PHOTO_SHRINK_ABOVE;
+}
+
+/** "photo.jpg" for a picture that was made smaller (it is a JPEG now). */
+export function shrunkName(name: string): string {
+  const base = (name || 'photo').replace(/\.[^.]+$/, '');
+  return `${base || 'photo'}.jpg`;
+}
+
+/** The name of a task made straight from a photo: "Photo 14:05", edited right after. */
+export function photoTaskTitle(now: Date, word: string): string {
+  return `${word} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}

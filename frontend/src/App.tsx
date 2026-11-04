@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Flex, Spinner } from '@chakra-ui/react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { http, setToken, UNAUTHORIZED_EVENT } from './api';
+import { getToken, http, setToken, UNAUTHORIZED_EVENT } from './api';
 import type { User } from './api';
 import { queryClient } from './lib/queryClient';
 import Login from './Login';
@@ -30,6 +30,28 @@ function App() {
   return shared ? <SharedApp /> : <SignedInApp />;
 }
 
+// Who was signed in last (K2): a phone that opens Ncode without a connection stays signed in and
+// says it is offline, instead of showing the sign-in page. Forgotten on sign-out and expiry.
+const LAST_USER_KEY = 'ncode_last_user';
+
+function rememberUser(user: User | null) {
+  try {
+    if (user) localStorage.setItem(LAST_USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(LAST_USER_KEY);
+  } catch {
+    // private mode: nothing remembered
+  }
+}
+
+function rememberedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(LAST_USER_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
 function SignedInApp() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
@@ -39,12 +61,15 @@ function SignedInApp() {
   useEffect(() => {
     http
       .get<User>('/api/auth/me')
-      .then((res) => setUser(res.data))
+      .then((res) => {
+        rememberUser(res.data);
+        setUser(res.data);
+      })
       .catch((err: unknown) => {
-        setUser(null);
-        if (!(axios.isAxiosError(err) && err.response)) {
-          setNotice(t('The server is not reachable. Make sure the backend is running.'));
-        }
+        const unreachable = !(axios.isAxiosError(err) && err.response);
+        const last = unreachable && getToken() ? rememberedUser() : null;
+        setUser(last); // no connection, but signed in before on this device: open the app, it says it is offline
+        if (unreachable && !last) setNotice(t('The server is not reachable. Make sure the backend is running.'));
       })
       .finally(() => setChecking(false));
   }, []);
@@ -53,6 +78,7 @@ function SignedInApp() {
   useEffect(() => {
     const handler = () => {
       queryClient.clear(); // never show one user's data to the next
+      rememberUser(null);
       setUser(null);
       setNotice(t('Your session has expired. Please sign in again.'));
     };
@@ -67,6 +93,7 @@ function SignedInApp() {
       // the local session is cleared anyway
     }
     setToken(null);
+    rememberUser(null);
     queryClient.clear();
     setUser(null);
     setNotice('');
@@ -85,7 +112,15 @@ function SignedInApp() {
   }
 
   if (!user) {
-    return <Login onLoggedIn={setUser} notice={notice} />;
+    return (
+      <Login
+        onLoggedIn={(u) => {
+          rememberUser(u);
+          setUser(u);
+        }}
+        notice={notice}
+      />
+    );
   }
 
   return (

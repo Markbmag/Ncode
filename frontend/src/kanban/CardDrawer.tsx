@@ -12,7 +12,7 @@ import { t } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import {
   addChecklistItem, addComment, deleteAttachment, deleteCard, deleteChecklistItem, deleteComment, downloadAttachment, kanbanKeys, updateCard,
-  updateChecklistItem, updateComment, uploadAttachment, uploadThumb, useCard, useFileUrl,
+  updateChecklistItem, updateComment, useCard, useFileUrl,
 } from './api';
 import type { CardInput } from './api';
 import {
@@ -20,11 +20,11 @@ import {
   UserIcon,
 } from './icons';
 import {
-  byPosition, colorHex, dueState, dueText, formatSize, fullTime, guessType, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
+  byPosition, colorHex, dueState, dueText, formatSize, fullTime, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
   priorityLabel, progressOf, progressText, timeAgo, todayIso, UPLOAD_ACCEPT, withAlpha,
 } from './logic';
 import { LabelChip, PersonAvatar, ProgressBar } from './parts';
-import { makeThumbnail } from './thumb';
+import { attachFile } from './upload';
 import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column } from './types';
 import { PRIORITIES } from './types';
 import { useNotify } from './useNotify';
@@ -200,6 +200,8 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
   const column = columns.find((c) => c.id === card.column_id);
   const done = Boolean(column?.is_done || card.completed_at);
   const [title, setTitle] = useState(card.title);
+  // a task just made from a photo (K2): its name is ready to be typed over
+  const nameIt = new URLSearchParams(window.location.search).get('name') === '1' && canEdit;
   const [description, setDescription] = useState(card.description ?? '');
   const [newItem, setNewItem] = useState('');
   const [comment, setComment] = useState('');
@@ -310,12 +312,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
     let ok = 0;
     for (const file of chosen) {
       try {
-        const type = guessType(file.name, file.type);
-        const res = await uploadAttachment(card.id, file, file.name || 'photo.jpg', type);
-        if (isImage(type) && res?.id) {
-          const thumb = await makeThumbnail(file);
-          if (thumb) await uploadThumb(res.id, thumb).catch(() => undefined); // the full image still works without it
-        }
+        await attachFile(card.id, file);
         ok += 1;
       } catch (err) {
         notify(apiErrorMessage(err, t('Could not add {file}', { file: file.name })), { error: true });
@@ -400,7 +397,21 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
             </Flex>
             {canEdit ? (
               <VStack align="stretch" spacing={3}>
+                {nameIt && (
+                  <HStack spacing={3} align="center">
+                    {images[0] && (
+                      <Box w="72px" flexShrink={0}>
+                        <Thumb attachment={images[0]} onOpen={() => setPreview(0)} />
+                      </Box>
+                    )}
+                    <Text fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} data-testid="name-it-hint">
+                      {t('The photo is added. Give the task a short name:')}
+                    </Text>
+                  </HStack>
+                )}
                 <Textarea
+                  autoFocus={nameIt}
+                  onFocus={nameIt ? (e) => e.currentTarget.select() : undefined}
                   value={title}
                   onChange={(e) => setTitle(e.target.value.replace(/\n/g, ' '))}
                   onBlur={saveTitle}

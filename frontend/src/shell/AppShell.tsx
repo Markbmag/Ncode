@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { Box, Flex, HStack, IconButton, Skeleton, VStack } from '@chakra-ui/react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { OfflineBanner } from '../pwa/OfflineBanner';
 import { ColorModeButton, DatabaseSwitcher, Logo, NavLinks, Sidebar } from '../components/Sidebar';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';
 import { LogOutIcon } from '../icons';
@@ -42,6 +43,7 @@ export default function AppShell() {
       </Box>
 
       <Box flex={1} minW={0}>
+        <OfflineBanner />
         <Box display={{ base: 'block', md: 'none' }} bg="sidebarBg" borderBottom="1px solid" borderColor="lineColor" data-print-hide>
           <Flex align="center" justify="space-between" px={4} py={3}>
             <Logo />

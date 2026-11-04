@@ -28,7 +28,35 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 Everyone looking at a board sees changes as they happen, with a short note such as
 "carol moved “Leak under press 4” to Done".
 
+## On a phone
+
+**Put it on the home screen once.** Open Ncode in the phone's browser and sign in, then open
+Kanban. On an iPhone: Safari → the Share button → *Add to Home Screen* → *Add*. On Android: Chrome
+→ ⋮ → *Add to Home screen* (or *Install app*). The teal **Kanban** icon opens Kanban full screen,
+like an app; the indigo **Ncode** icon (added from a Search & BI page) opens the analysis side. You
+stay signed in.
+
+- **Stages as tabs.** Above the board, one tab per stage with its number of tasks
+  (*To do 3 · In progress 2 · Done 5*). Tap a tab or swipe sideways; one stage fills the screen.
+- **Moving a task:** press and hold it for a moment, then
+  - let go: big buttons for each stage (*In progress*, *Done*...) and *Open the task*;
+  - or drag it onto a stage tab at the top, which lights up.
+  Every move can be undone from the note at the bottom.
+- **A task from a photo:** the camera button next to *+ Add a task* opens the camera; the photo
+  becomes a new task in that stage, and the name ("Photo 14:05") is ready to be typed over. Big
+  photos are made smaller on the phone first (about 1 MB instead of 4, quicker over mobile data;
+  the location stored in the photo is left out).
+- **No connection** (a weak spot in the hall): the app still opens and says *No connection* at the
+  top. What is on the screen stays; changes need the connection, and the board catches up by itself
+  when it is back. Nothing is stored on the phone except the app itself.
+- Text fields are large enough that the iPhone does not zoom in while you type.
+
 ## For administrators
 
 - Files are stored in `backend/data/kanban/` and are part of backups.
 - `NCODE_KANBAN_MAX_UPLOAD_MB` (default 15) limits the size of one file.
+- The home-screen app works on any address, but opening **without a connection** needs HTTPS
+  (phones only keep an app for offline use from a secure address). With Docker and
+  `NCODE_TLS=internal`, each phone must trust Caddy's certificate once - see
+  [Install → HTTPS on a LAN](install.md). Over plain `http://` the icon still opens Kanban full
+  screen; it just needs the connection to start.

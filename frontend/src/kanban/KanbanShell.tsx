@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import {
   Box, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, InputRightElement, Menu, MenuButton, MenuDivider, MenuGroup, MenuItem, MenuList, Skeleton, Text, useBreakpointValue, useColorMode,
 } from '@chakra-ui/react';
@@ -13,6 +13,8 @@ import { useBoards } from './api';
 import { KanbanIcon } from './icons';
 import { colorHex } from './logic';
 import { PersonAvatar } from './parts';
+import { OfflineBanner } from '../pwa/OfflineBanner';
+import { setAppIdentity } from '../pwa/identity';
 
 export function KanbanLogo() {
   return (
@@ -73,6 +75,16 @@ function BoardsMenu() {
         </MenuGroup>
       </MenuList>
     </Menu>
+  );
+}
+
+/** On a phone a board shows its own name and a back arrow, so the top bar leaves the boards menu out. */
+function PhoneAwareBoardsMenu() {
+  const { board } = useParams();
+  return (
+    <Box display={{ base: board ? 'none' : 'block', md: 'block' }} minW={0}>
+      <BoardsMenu />
+    </Box>
   );
 }
 
@@ -171,6 +183,11 @@ function AccountMenu() {
 
 /** Ncode - Kanban's own frame: a top bar (logo, boards, search, services, you) over the page. */
 export default function KanbanShell() {
+  // "Add to Home Screen" here makes a Kanban icon that opens Kanban (K2)
+  useEffect(() => {
+    setAppIdentity('kanban');
+    return () => setAppIdentity('bi');
+  }, []);
   return (
     <Flex direction="column" h="100vh" sx={{ '@supports (height: 100dvh)': { height: '100dvh' } }} bg="boardBg" fontSize="md" data-testid="kanban-shell">
       <Flex
@@ -189,12 +206,13 @@ export default function KanbanShell() {
         <ServiceSwitcher />
         <KanbanLogo />
         <Box w="1px" h="22px" bg="lineColor" mx={1} display={{ base: 'none', md: 'block' }} />
-        <BoardsMenu />
+        <PhoneAwareBoardsMenu />
         <Flex flex={1} justify="flex-end" minW={0}>
           <TopSearch />
         </Flex>
         <AccountMenu />
       </Flex>
+      <OfflineBanner />
       <Box flex={1} minH={0} position="relative">
         <Suspense fallback={<Skeleton m={6} h="200px" borderRadius="2xl" />}>
           <Outlet />
