@@ -1,8 +1,8 @@
-import { useContext, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton,
-  Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, Tooltip, useColorMode, useToast,
+  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, useColorMode, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import { apiErrorMessageAsync, http } from '../api';
 import { Visualization } from '../components/viz/Visualization';
@@ -21,6 +21,8 @@ import { CardEndpointsContext, useCardRun } from './api';
 import { activeMappings, editorParams, unreachedFilters } from './logic';
 import type { FilterValues } from './logic';
 import { Markdown } from './Markdown';
+import { ageHint, ageText, readAt } from './phone';
+import { useNow } from './useNow';
 import type { DashCard, DashFilter } from './types';
 import { lang, t, tn } from '../i18n/index.ts';
 
@@ -38,6 +40,8 @@ interface Props {
   onEdit?: () => void;
   onRemove?: () => void;
   onChange?: (card: DashCard) => void;
+  /** M15: when the card's rows were read from the database (null: nothing shown yet) */
+  onReadAt?: (key: string, at: number | null) => void;
 }
 
 const DRAG = 'card-drag';
@@ -65,9 +69,10 @@ export function DashboardCard(props: Props) {
 }
 
 function Frame({
-  title, caption, editing, onEdit, onRemove, menu, status, children, plain = false, testId,
+  title, caption, editing, onEdit, onRemove, menu, status, aside, children, plain = false, testId,
 }: {
   title?: string;
+  aside?: React.ReactNode; // M15: when the data was read, at the end of the caption line
   caption?: string | null; // what the card shows, in one line under its title (M11)
   editing: boolean;
   onEdit?: () => void;
@@ -91,7 +96,7 @@ function Frame({
       data-testid={testId ?? 'dash-card'}
     >
       {(title !== undefined || editing || menu) && (
-        <Flex align="center" gap={2} px={3} py={1.5} minH="36px" className={editing ? DRAG : undefined} cursor={editing ? 'grab' : undefined} borderBottom={title !== undefined && !caption ? '1px solid' : undefined} borderColor="lineColor">
+        <Flex align="center" gap={2} px={3} py={1.5} minH="36px" className={editing ? DRAG : undefined} cursor={editing ? 'grab' : undefined} borderBottom={title !== undefined && !caption && !aside ? '1px solid' : undefined} borderColor="lineColor">
           <Text fontSize="sm" fontWeight={600} noOfLines={1} flex={1} title={title}>
             {title}
           </Text>
@@ -106,10 +111,13 @@ function Frame({
           )}
         </Flex>
       )}
-      {caption && (
-        <Text px={3} mt={-1} pb={1.5} fontSize="xs" color="mutedText" isTruncated title={caption} borderBottom="1px solid" borderColor="lineColor" data-testid="card-caption">
-          {caption}
-        </Text>
+      {(caption || aside) && (
+        <Flex px={3} mt={-1} pb={1.5} gap={2} align="baseline" borderBottom="1px solid" borderColor="lineColor">
+          <Text flex={1} minW={0} fontSize="xs" color="mutedText" isTruncated title={caption ?? undefined} data-testid="card-caption">
+            {caption}
+          </Text>
+          {aside}
+        </Flex>
       )}
       <Box flex={1} minH={0} display={plain ? 'flex' : undefined} alignItems={plain ? 'center' : undefined} px={plain ? 1 : 0}>
         {children}
@@ -130,7 +138,7 @@ function Message({ children, tone = 'muted', action }: { children: React.ReactNo
   );
 }
 
-function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved, trigger, refresh, editing, onEdit, onRemove, onChange }: Props) {
+function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved, trigger, refresh, editing, onEdit, onRemove, onChange, onReadAt }: Props) {
   const q = card.question;
   const runnable = !!q && (q.state === 'ok' || q.state === 'archived');
   const [retry, setRetry] = useState(0);
@@ -186,6 +194,16 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
   };
 
   const busy = run.status === 'queued' || run.status === 'running';
+  // "data as of" (M15): a reused result is as old as the run that made it
+  const now = useNow();
+  // (while the next run loads, the rows on screen and their time stay; after an error none is told)
+  const readTime = run.status !== 'error' && run.result ? readAt(run.finishedAt, run.result.stats) : null;
+  const dataAt = readTime === null ? null : { at: readTime, cached: !!run.result?.stats?.cached };
+  const cardKey = card.key;
+  useEffect(() => {
+    onReadAt?.(cardKey, dataAt?.at ?? null);
+  }, [onReadAt, cardKey, dataAt?.at]);
+  useEffect(() => () => onReadAt?.(cardKey, null), [onReadAt, cardKey]);
   const status = (
     <HStack spacing={1.5}>
       {filtering.length > 0 && (
@@ -206,9 +224,16 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
       {busy && result && <Spinner size="xs" color="faintText" />}
     </HStack>
   );
+  const age = dataAt && !editing ? (
+    <Tooltip label={ageHint(dataAt.at, now, dataAt.cached)} hasArrow>
+      <Text fontSize="xs" color="faintText" whiteSpace="nowrap" tabIndex={0} data-testid="card-data-age">
+        {ageText(dataAt.at, now)}
+      </Text>
+    </Tooltip>
+  ) : null;
   const menu = runnable ? (
     <Menu isLazy placement="bottom-end">
-      <MenuButton as={IconButton} aria-label={t('Actions for {name}', { name: title })} size="xs" variant="ghost" icon={<MoreIcon boxSize={4} />} className="no-print" data-testid="card-menu" />
+      <MenuButton as={IconButton} aria-label={t('Actions for {name}', { name: title })} size={{ base: 'md', md: 'xs' }} variant="ghost" icon={<MoreIcon boxSize={4} />} className="no-print" data-testid="card-menu" />
       <MenuList fontSize="sm">
         <MenuItem icon={<RefreshIcon boxSize={4} />} onClick={() => setRetry((n) => n + 1)}>
           {t('Refresh')}
@@ -265,6 +290,7 @@ function QuestionCard({ dashboardId, card, filters, values, runValuesJson, saved
     <Frame
       title={title}
       caption={named.caption}
+      aside={age}
       editing={editing}
       onEdit={onEdit}
       onRemove={onRemove}

@@ -1,4 +1,7 @@
-import { Badge, Box, Flex, Heading, HStack, IconButton, SimpleGrid, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Badge, Box, Flex, Heading, HStack, IconButton, SimpleGrid, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import { ColorModeButton } from '../components/Sidebar';
 import { LanguageSwitch } from '../i18n/LanguageSwitch';

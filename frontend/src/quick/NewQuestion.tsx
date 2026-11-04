@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
-import { HStack, Skeleton, Switch, Text, Tooltip } from '@chakra-ui/react';
+import {
+  HStack, Skeleton, Switch, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import type { QuerySpec } from '../query/types';
 import type { VizState } from '../viz/state';
 import { QuickQuestion } from './QuickQuestion';

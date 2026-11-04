@@ -1,4 +1,7 @@
-import { Box, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from './Tooltip';
 import type { TextProps } from '@chakra-ui/react';
 
 interface FriendlyNameProps {

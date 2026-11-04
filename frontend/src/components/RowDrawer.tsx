@@ -1,7 +1,7 @@
 import {
-  Badge, Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack,
-  IconButton, Text, Tooltip, VStack, useToast,
+  Badge, Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Text, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from './Tooltip';
 import type { MatchMode, SearchHit } from '../api';
 import { CopyIcon } from '../icons';
 import { Highlight } from './Highlight';

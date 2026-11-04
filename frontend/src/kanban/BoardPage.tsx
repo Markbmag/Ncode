@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton,
-  ModalContent, ModalHeader, ModalOverlay, Portal, Select, Skeleton, Text, Textarea, Tooltip, useToast, VStack,
+  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Portal, Select, Skeleton, Text, Textarea, useToast, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import {
   closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -20,10 +20,10 @@ import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, updateCol
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
-import { ArrowLeftIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
+import { ArrowLeftIcon, CameraIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
-  priorityLabel, todayIso, withAlpha,
+  photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
 } from './logic';
 import type { CardFilter } from './logic';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
@@ -31,6 +31,8 @@ import type { BoardDetail, BoardEvent, CardSummary, Column, Priority } from './t
 import { PRIORITIES } from './types';
 import { useBoardSocket } from './useBoardSocket';
 import { useNotify } from './useNotify';
+import { MoveSheet, StageTabs } from './phone';
+import { attachFile } from './upload';
 
 const cardKey = (id: number) => `c${id}`;
 const colKey = (id: number) => `col${id}`;
@@ -45,6 +47,9 @@ function findColumn(key: string | number, items: Items): number | null {
   for (const [col, ids] of Object.entries(items)) if (ids.includes(id)) return Number(col);
   return null;
 }
+
+/** The drag started with a finger (phones and tablets), not a mouse or the keyboard. */
+const isTouch = (event: Event | null | undefined) => typeof TouchEvent !== 'undefined' && event instanceof TouchEvent;
 
 // ---------------------------------------------------------------- one task that can be dragged
 
@@ -111,9 +116,12 @@ interface ColumnViewProps {
   onChangeColumn: (column: Column, body: Partial<Column>) => void;
   onMoveColumn: (column: Column, by: -1 | 1) => void;
   onDeleteColumn: (column: Column) => void;
+  onPhotoTask: (column: Column, file: File) => Promise<void>;
 }
 
-function ColumnView({ column, index, columns, ids, cardsById, total, board, today, canEdit, onOpen, onMove, onAdd, onChangeColumn, onMoveColumn, onDeleteColumn }: ColumnViewProps) {
+function ColumnView({ column, index, columns, ids, cardsById, total, board, today, canEdit, onOpen, onMove, onAdd, onChangeColumn, onMoveColumn, onDeleteColumn, onPhotoTask }: ColumnViewProps) {
+  const camera = useRef<HTMLInputElement>(null);
+  const [sending, setSending] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: colKey(column.id), data: { type: 'column' } });
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
@@ -253,8 +261,9 @@ function ColumnView({ column, index, columns, ids, cardsById, total, board, toda
               </HStack>
             </Box>
           ) : (
+            <HStack spacing={2}>
             <Button
-              w="100%"
+              flex={1}
               h="44px"
               variant="ghost"
               justifyContent="flex-start"
@@ -274,6 +283,37 @@ function ColumnView({ column, index, columns, ids, cardsById, total, board, toda
             >
               {t('Add a task')}
             </Button>
+            {/* phones: a new task straight from a photo (K2) */}
+            <Tooltip label={t('New task from a photo')} hasArrow>
+              <IconButton
+                aria-label={t('New task from a photo')}
+                icon={<CameraIcon boxSize={5} />}
+                h="44px"
+                minW="44px"
+                variant="subtle"
+                borderRadius="xl"
+                display={{ base: 'inline-flex', md: 'none' }}
+                isLoading={sending}
+                onClick={() => camera.current?.click()}
+                data-testid="column-photo-task"
+              />
+            </Tooltip>
+            <input
+              ref={camera}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                setSending(true);
+                void onPhotoTask(column, file).finally(() => setSending(false));
+              }}
+              data-testid="column-photo-input"
+            />
+            </HStack>
           )}
         </Box>
       )}
@@ -536,6 +576,8 @@ export default function BoardPage() {
   const [dialog, setDialog] = useState<'members' | 'labels' | 'settings' | 'hidden' | null>(null);
   const today = todayIso();
   const scroller = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState(0); // phones: the stage in view
+  const [sheet, setSheet] = useState<number | null>(null); // phones: the task held for "Move to"
 
   const onOther = useCallback(
     (event: BoardEvent, title: string | null) => {
@@ -588,13 +630,20 @@ export default function BoardPage() {
 
   const fail = useCallback((err: unknown, fallback: string) => notify(apiErrorMessage(err, fallback), { error: true }), [notify]);
 
+  // the board's address without "name=1" (only the task just made from a photo asks for its name)
+  const boardSearch = useMemo(() => {
+    const next = new URLSearchParams(search);
+    next.delete('name');
+    return next.toString();
+  }, [search]);
+
   const lastDrag = useRef(0); // the click that ends a drag does not open the task
   const openCard = useCallback(
     (id: number) => {
       if (Date.now() - lastDrag.current < 300) return;
-      navigate({ pathname: `/kanban/b/${boardId}/c/${id}`, search: search.toString() });
+      navigate({ pathname: `/kanban/b/${boardId}/c/${id}`, search: boardSearch });
     },
-    [navigate, boardId, search],
+    [navigate, boardId, boardSearch],
   );
 
   /** Moves a task; the board shows it at once, before the server answers. */
@@ -638,6 +687,19 @@ export default function BoardPage() {
     [detail?.cards, move],
   );
 
+  // ------------------------------------------------ phones: which stage is in view (K2)
+  const onScrollColumns = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const kids = [...el.querySelectorAll<HTMLElement>('[data-testid="column"]')];
+    setStage(stageInView(el.scrollLeft, el.clientWidth, kids.map((k) => ({ left: k.offsetLeft - el.offsetLeft, width: k.offsetWidth }))));
+  }, []);
+  const showStage = useCallback((index: number) => {
+    const el = scroller.current?.querySelectorAll<HTMLElement>('[data-testid="column"]')[index];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    setStage(index);
+  }, []);
   // ------------------------------------------------ drag and drop
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
@@ -645,7 +707,8 @@ export default function BoardPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const onDragStart = ({ active }: DragStartEvent) => {
+  const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
+    if (isTouch(activatorEvent)) navigator.vibrate?.(15); // a short buzz on Android: the task is picked up
     const id = idOf(active.id);
     const from = findColumn(active.id, visible);
     if (from === null) return;
@@ -669,12 +732,26 @@ export default function BoardPage() {
     });
   };
 
-  const onDragEnd = ({ active, over }: DragEndEvent) => {
+  const onDragEnd = ({ active, over, delta, activatorEvent }: DragEndEvent) => {
     const d = drag;
     setDrag(null);
     lastDrag.current = Date.now();
-    if (!d || !over || !detail) return;
+    if (!d || !detail) return;
     const id = idOf(active.id);
+    // phones: held and let go without moving -> big "Move to" buttons
+    if (isTouch(activatorEvent) && Math.hypot(delta.x, delta.y) < 12) {
+      setSheet(id);
+      return;
+    }
+    // phones: dropped on a stage tab -> to the top of that stage
+    const toTab = over ? tabColumn(over.id) : null;
+    if (toTab !== null) {
+      const card = cardsById.get(id);
+      if (card && card.column_id !== toTab) moveTo(card, toTab);
+      showStage(columns.findIndex((c) => c.id === toTab));
+      return;
+    }
+    if (!over) return;
     const col = findColumn(active.id, d.items);
     if (col === null) return;
     let list = d.items[col];
@@ -690,6 +767,22 @@ export default function BoardPage() {
     const after = list[index + 1] !== undefined ? cardsById.get(list[index + 1])?.position : undefined;
     move(id, col, positionBetween(before, after));
   };
+
+  // ------------------------------------------------ phones (K2)
+  const photoTask = useCallback(
+    async (column: Column, file: File) => {
+      try {
+        const card = await createCard(boardId, { column_id: column.id, title: photoTaskTitle(new Date(), t('Photo')) });
+        await attachFile(card.id, file);
+        refresh();
+        navigate({ pathname: `/kanban/b/${boardId}/c/${card.id}`, search: boardSearch ? `${boardSearch}&name=1` : 'name=1' });
+      } catch (err) {
+        fail(err, t('Could not add the photo'));
+        refresh();
+      }
+    },
+    [boardId, refresh, navigate, fail, boardSearch],
+  );
 
   // ------------------------------------------------ stages and tasks
   const addCard = useCallback(
@@ -773,7 +866,7 @@ export default function BoardPage() {
             <IconButton aria-label={t('All boards')} variant="ghost" icon={<ArrowLeftIcon boxSize={5} />} onClick={() => navigate('/kanban')} display={{ base: 'inline-flex', md: 'none' }} />
           </Tooltip>
           <Box minW={0} flex={{ base: 1, md: 'none' }}>
-            <Heading as="h1" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em" noOfLines={1} data-testid="board-title">
+            <Heading as="h1" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em" noOfLines={{ base: 2, md: 1 }} data-testid="board-title">
               {board.name}
             </Heading>
           </Box>
@@ -840,8 +933,10 @@ export default function BoardPage() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setDrag(null)}
       >
+        <StageTabs columns={columns} counts={totals} active={stage} dragging={drag !== null} onPick={showStage} />
         <Flex
           ref={scroller}
+          onScroll={onScrollColumns}
           flex={1}
           minH={0}
           gap={3}
@@ -872,6 +967,7 @@ export default function BoardPage() {
               onChangeColumn={changeColumn}
               onMoveColumn={moveColumn}
               onDeleteColumn={removeColumn}
+              onPhotoTask={photoTask}
             />
           ))}
           {canEdit && <AddColumn onAdd={addColumn} />}
@@ -895,9 +991,26 @@ export default function BoardPage() {
           columns={columns}
           canEdit={canEdit}
           canManage={canManage}
-          onClose={() => navigate({ pathname: `/kanban/b/${boardId}`, search: search.toString() })}
+          onClose={() => navigate({ pathname: `/kanban/b/${boardId}`, search: boardSearch })}
           onChanged={refresh}
           onMove={moveTo}
+        />
+      )}
+      {sheet !== null && cardsById.get(sheet) && (
+        <MoveSheet
+          card={cardsById.get(sheet)!}
+          columns={columns}
+          onClose={() => setSheet(null)}
+          onOpen={() => {
+            setSheet(null);
+            navigate({ pathname: `/kanban/b/${boardId}/c/${sheet}`, search: boardSearch });
+          }}
+          onMove={(columnId) => {
+            const card = cardsById.get(sheet)!;
+            setSheet(null);
+            moveTo(card, columnId);
+            showStage(columns.findIndex((c) => c.id === columnId));
+          }}
         />
       )}
       {dialog === 'members' && <MembersDialog detail={detail} canManage={canManage && !board.archived} onClose={() => setDialog(null)} onSaved={refresh} />}

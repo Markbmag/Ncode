@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
-import { Box, Flex, Text, Tooltip, useToast } from '@chakra-ui/react';
+import {
+  Box, Flex, Text, useToast,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ColumnType, ResultColumn } from '../../api';
 import { SMART_DATES_DEFAULT, formatValue } from '../../lib/format';

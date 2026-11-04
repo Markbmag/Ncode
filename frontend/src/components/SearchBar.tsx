@@ -1,7 +1,8 @@
 import type { RefObject } from 'react';
 import {
-  Button, ButtonGroup, Flex, HStack, Input, InputGroup, InputLeftElement, Select, Switch, Text, Tooltip, Wrap, WrapItem,
+  Button, ButtonGroup, Flex, HStack, Input, InputGroup, InputLeftElement, Select, Switch, Text, Wrap, WrapItem,
 } from '@chakra-ui/react';
+import { Tooltip } from './Tooltip';
 import type { MatchMode } from '../api';
 import { SearchIcon, TableIcon } from '../icons';
 import { t } from '../i18n/index.ts';

@@ -1,6 +1,9 @@
 import { memo } from 'react';
 import type { SyntheticEvent } from 'react';
-import { Box, Button, Flex, HStack, Image, Menu, MenuButton, MenuItem, MenuList, Portal, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Button, Flex, HStack, Image, Menu, MenuButton, MenuItem, MenuList, Portal, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { CheckIcon, ChevronDownIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useFileUrl } from './api';

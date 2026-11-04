@@ -1,4 +1,7 @@
-import { ButtonGroup, IconButton, Tooltip } from '@chakra-ui/react';
+import {
+  ButtonGroup, IconButton,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import { RedoIcon, UndoIcon } from '../../icons';
 import type { DraftHistory } from '../../query/useDraftHistory';
 import { t } from '../../i18n/index.ts';

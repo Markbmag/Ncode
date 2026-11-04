@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  Avatar, Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text, Tooltip,
-  useColorMode, useMediaQuery,
+  Avatar, Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text, useColorMode, useMediaQuery,
 } from '@chakra-ui/react';
+import { Tooltip } from './Tooltip';
 import { NavLink } from 'react-router-dom';
 import type { Connection, User } from '../api';
 import { CheckIcon, ChevronDownIcon, LockIcon, LogOutIcon, MailIcon, MoonIcon, PanelLeftIcon, PencilIcon, PlusIcon, SunIcon } from '../icons';

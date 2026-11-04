@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Checkbox, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerFooter,
-  DrawerHeader, DrawerOverlay, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Modal, ModalBody,
-  ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, NumberInput, NumberInputField, Select, Skeleton, Switch, Tag, TagCloseButton,
-  TagLabel, Text, Textarea, Tooltip, VStack, Wrap, WrapItem, useToast,
+  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Checkbox, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, NumberInput, NumberInputField, Select, Skeleton, Switch, Tag, TagCloseButton, TagLabel, Text, Textarea, VStack, Wrap, WrapItem, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { localDateText } from '../viz/format';

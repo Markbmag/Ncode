@@ -6,6 +6,9 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { queryClient } from './lib/queryClient';
 import { theme } from './theme';
+import { registerServiceWorker } from './pwa/register';
+
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

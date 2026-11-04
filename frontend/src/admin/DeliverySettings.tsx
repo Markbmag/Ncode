@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  Badge, Box, Button, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, NumberInput, NumberInputField,
-  Select, SimpleGrid, Skeleton, Text, Tooltip, VStack, useToast,
+  Badge, Box, Button, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, NumberInput, NumberInputField, Select, SimpleGrid, Skeleton, Text, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage } from '../api';
 import { PencilIcon, PlusIcon, SendIcon, TrashIcon } from '../icons';
 import { admin, useAdminSettings, useDestinations } from './api';

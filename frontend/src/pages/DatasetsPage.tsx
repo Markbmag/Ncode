@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  Alert, AlertIcon, Badge, Box, Button, CloseButton, Flex, FormControl, FormLabel, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
-  MenuItem, MenuList, Skeleton, Text, Textarea, Tooltip, VStack, useDisclosure, useToast,
+  Alert, AlertIcon, Badge, Box, Button, CloseButton, Flex, FormControl, FormLabel, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Skeleton, Text, Textarea, VStack, useDisclosure, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';

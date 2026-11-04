@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ..appdb import AppDB, User
 from ..content.store import ContentError
-from . import channels
+from . import channels, charts
 from .engine import Engine
 from .render import CardOut, Report, email_html, plain_text, slack_payload, teams_payload, telegram_text, webhook_payload
 from .scheduler import Scheduler
@@ -81,6 +81,11 @@ def register_automation_routes(
 
     def target_name(user: User, target_type: str, target_id: int) -> str | None:
         try:
+            if target_type == "metric":  # M15: a followed metric (a digest)
+                if engine.semantic is None:
+                    return None
+                m = engine.semantic.metric(target_id)
+                return m.name if not m.archived and user.can_use(m.connection) else None
             if target_type == "dashboard":
                 return content().dashboards.get(user, target_id).name
             return content().store.get_question(user, target_id).name
@@ -152,7 +157,7 @@ def register_automation_routes(
     # ------------------------------------------------------------------ subscriptions
     @router.get("/api/subscriptions")
     def list_subscriptions(
-        target_type: str | None = Query(None, pattern="^(dashboard|question)$"),
+        target_type: str | None = Query(None, pattern="^(dashboard|question|metric)$"),
         target_id: int | None = None,
         all: bool = False,  # noqa: A002 - query parameter name
         user: User = Depends(current_user),
@@ -193,8 +198,11 @@ def register_automation_routes(
         outcome = engine.build(user, body, None)
         if outcome.error:
             raise HTTPException(status_code=409, detail=outcome.error)
+        # the chart images as data: links (the preview frame cannot show the email's cid: links)
+        pictures = charts.pictures(outcome.report, outcome.report.lang)
         return {
-            "html": email_html(outcome.report),
+            "html": email_html(outcome.report, {i: (p.data_uri(), p.alt, p.width) for i, p in pictures.items()}),
+            "summary": outcome.report.summary,
             "text": plain_text(outcome.report),
             "alert": None if outcome.alert_met is None else {"met": outcome.alert_met, "note": outcome.alert_note},
             "empty": outcome.empty,

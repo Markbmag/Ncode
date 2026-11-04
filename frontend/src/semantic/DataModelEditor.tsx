@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Text,
-  Textarea, Tooltip, VStack, useToast,
+  Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Text, Textarea, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { apiErrorMessage, http } from '../api';
 import type { ColumnType, SchemaColumn, SchemaTable, SchemaV2 } from '../api';

@@ -27,15 +27,16 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from sqlalchemy import and_, delete, func, insert, or_, select, update
 
 from ..appdb import User, users_table
 from ..query.spec import QuerySpec
+from . import history
 from .store import (
     ContentError, ContentStore, EditConflict, Level, NotFound, Question, Snapshot, _clean_name, check_base, forget_items,
 )
-from .tables import dashboard_cards_table, dashboards_table, favorites_table
+from .tables import dashboard_cards_table, dashboards_table, favorites_table, questions_table
 
 KEY = r"^[A-Za-z0-9_-]{1,40}$"
 FilterType = Literal["date_range", "date", "text", "category", "number"]
@@ -164,6 +165,28 @@ class Dashboard:
 
 def _loads(text: str | None, default: Any) -> Any:
     return json.loads(text) if text else default
+
+
+def card_data(c: Card) -> dict[str, Any]:
+    """A card as it is stored (and read back by DashboardStore._cards)."""
+    return {
+        "key": c.key, "kind": c.kind, "question_id": c.question_id, "tab": c.tab, "layout": c.layout.model_dump(),
+        "viz": c.viz, "title": c.title, "text": c.text,
+        "mappings": {k: m.model_dump(exclude_none=True) for k, m in c.mappings.items()},
+    }
+
+
+def dashboard_data(d: Dashboard) -> dict[str, Any]:
+    """What a saved version of a dashboard keeps (M15)."""
+    return {"name": d.name, "description": d.description, "filters": d.filters, "tabs": d.tabs, "cards": d.cards, "settings": d.settings}
+
+
+def definition_data(name: str, description: str | None, definition: Definition) -> dict[str, Any]:
+    return json.loads(json.dumps({
+        "name": name, "description": description, "filters": [f.model_dump() for f in definition.filters],
+        "tabs": [t.model_dump() for t in definition.tabs], "cards": [card_data(c) for c in definition.cards],
+        "settings": definition.settings,
+    }))
 
 
 # ---------------------------------------------------------------- filter values -> question run
@@ -453,9 +476,10 @@ class DashboardStore:
         definition.cards = [c for c in definition.cards if c.kind != "question" or c.question_id is not None]
         self._check_questions(user, definition, allowed=set())
         now = time.time()
+        name, description = _clean_name(name, 200), (description or "").strip() or None
         with self.engine.begin() as conn:
             did = int(conn.execute(insert(dashboards_table).values(
-                name=_clean_name(name, 200), description=(description or "").strip() or None,
+                name=name, description=description,
                 collection_id=collection_id, owner_id=user.id, archived=False,
                 filters=json.dumps([f.model_dump() for f in definition.filters]),
                 tabs=json.dumps([t.model_dump() for t in definition.tabs]),
@@ -463,6 +487,8 @@ class DashboardStore:
                 created_at=now, updated_at=now, updated_by=user.username,
             )).inserted_primary_key[0])
             self._write_cards(conn, did, definition.cards)
+            history.record(conn, "dashboard", did, definition_data(name, description, definition), [["created"]],
+                           saved_by=user.username, saved_at=now, keep=self.content.history_keep)
         return self.get(user, did)
 
     def _check_questions(self, user: User, definition: Definition, allowed: set[int]) -> None:
@@ -485,29 +511,90 @@ class DashboardStore:
                 text=c.text, title=c.title, position=position,
             ))
 
-    def save_definition(self, user: User, did: int, definition: Definition, base_updated_at: float | None = None) -> Dashboard:
+    def save_definition(
+        self, user: User, did: int, definition: Definition, base_updated_at: float | None = None,
+        *, restore: dict[str, Any] | None = None,
+    ) -> Dashboard:
         """Replace filters, tabs, cards and settings. With `base_updated_at` (what the editor
-        loaded) the save is refused (409) when someone else saved the dashboard meanwhile."""
+        loaded) the save is refused (409) when someone else saved the dashboard meanwhile.
+        A save that changes the dashboard keeps a new version (M15); `restore` = the version
+        being brought back ({"version", "name", "description"})."""
         current = self.get(user, did, "edit")
         self._check_questions(user, definition, allowed={c["question_id"] for c in current.cards if c.get("question_id")})
         orphans = {c["key"] for c in current.cards if c["kind"] == "question" and c.get("question_id") is None}
         for c in definition.cards:
-            if c.kind == "question" and c.question_id is None and c.key not in orphans:
+            if c.kind == "question" and c.question_id is None and c.key not in orphans and restore is None:
                 raise ContentError(f"Card {c.key} has no question: choose one or remove the card")
+        name = restore["name"] if restore else current.name
+        description = restore["description"] if restore else current.description
+        now = time.time()
         with self.engine.begin() as conn:
             stmt = update(dashboards_table).where(dashboards_table.c.id == did)
             if base_updated_at is not None:
                 stmt = stmt.where(dashboards_table.c.updated_at == base_updated_at)
             done = conn.execute(stmt.values(
+                name=name, description=description,
                 filters=json.dumps([f.model_dump() for f in definition.filters]),
                 tabs=json.dumps([t.model_dump() for t in definition.tabs]),
-                settings=json.dumps(definition.settings), updated_at=time.time(), updated_by=user.username,
+                settings=json.dumps(definition.settings), updated_at=now, updated_by=user.username,
             ))
             if done.rowcount == 0:
                 who = conn.execute(select(dashboards_table.c.updated_by).where(dashboards_table.c.id == did)).scalar()
                 raise EditConflict("dashboard", who)
             self._write_cards(conn, did, definition.cards)
+            before, after = dashboard_data(current), definition_data(name, description, definition)
+            history.record(
+                conn, "dashboard", did, after,
+                [["restored", restore["version"]]] if restore else history.dashboard_changes(before, after),
+                saved_by=user.username, saved_at=now, keep=self.content.history_keep,
+                before=before, before_by=current.updated_by, before_at=current.updated_at,
+            )
         return self.get(user, did)
+
+    def versions(self, user: User, did: int) -> list[dict[str, Any]]:
+        self.get(user, did)  # must be visible
+        return history.versions(self.engine, "dashboard", did)
+
+    def version(self, user: User, did: int, number: int) -> dict[str, Any]:
+        self.get(user, did)
+        found = history.version(self.engine, "dashboard", did, number)
+        if found is None:
+            raise NotFound("Version")
+        return found
+
+    def restore_version(self, user: User, did: int, number: int, base_updated_at: float | None = None) -> Dashboard:
+        """Bring back a saved version; that is itself a new version. Cards of questions deleted
+        since then show "deleted question"; cards of questions the user may not see are refused."""
+        current = self.get(user, did, "edit")
+        data = self.version(user, did, number)["data"]
+        allowed = {c["question_id"] for c in current.cards if c.get("question_id")}
+        cards = []
+        for raw in data.get("cards") or []:
+            raw = dict(raw)
+            qid = raw.get("question_id")
+            if qid is not None and qid not in allowed:
+                try:
+                    self.content.get_question(user, qid)
+                except NotFound:
+                    with self.engine.connect() as conn:
+                        exists = conn.execute(select(questions_table.c.id).where(questions_table.c.id == qid)).first()
+                    if exists is not None:
+                        raise ContentError(
+                            f"Version {number} shows a question that is not shared with you. Ask its owner or an administrator to restore it", 403
+                        ) from None
+                    raw["question_id"] = None  # deleted since: the card says so
+                    raw["mappings"] = {}
+            cards.append(raw)
+        try:
+            definition = Definition.model_validate({
+                "filters": data.get("filters") or [], "tabs": data.get("tabs") or [], "cards": cards, "settings": data.get("settings") or {},
+            })
+        except ValidationError as exc:
+            raise ContentError(f"Version {number} cannot be restored: {exc.errors()[0]['msg']}") from None
+        return self.save_definition(user, did, definition, base_updated_at, restore={
+            "version": number, "name": _clean_name(data.get("name") or current.name, 200),
+            "description": (data.get("description") or "").strip() or None,
+        })
 
     def update(self, user: User, did: int, base_updated_at: float | None = None, **changes: Any) -> Dashboard:
         current = self.get(user, did, "edit")
@@ -525,9 +612,16 @@ class DashboardStore:
         if "archived" in changes:
             values["archived"] = bool(changes["archived"])
         if values:
-            values.update(updated_at=time.time(), updated_by=user.username)
+            now = time.time()
+            values.update(updated_at=now, updated_by=user.username)
+            before = dashboard_data(current)
+            after = {**before, **{k: values[k] for k in ("name", "description") if k in values}}
             with self.engine.begin() as conn:
                 conn.execute(update(dashboards_table).where(dashboards_table.c.id == did).values(**values))
+                if after != before:  # a new name or description is a new version; moving or archiving is not
+                    history.record(conn, "dashboard", did, after, history.dashboard_changes(before, after),
+                                   saved_by=user.username, saved_at=now, keep=self.content.history_keep,
+                                   before=before, before_by=current.updated_by, before_at=current.updated_at)
         return self.get(user, did)
 
     def set_verified(self, user: User, did: int, on: bool) -> Dashboard:

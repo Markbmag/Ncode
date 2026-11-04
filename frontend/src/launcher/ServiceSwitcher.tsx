@@ -1,4 +1,7 @@
-import { Box, Flex, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Flex, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckIcon } from '../icons';
 import { AppsIcon, BarChartIcon, KanbanIcon } from '../kanban/icons';

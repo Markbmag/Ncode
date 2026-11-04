@@ -1,6 +1,9 @@
 /** Small building blocks of the Kanban pages: avatars, chips, progress bar, colour picker, empty state. */
 import type { ReactNode } from 'react';
-import { Avatar, Box, Button, Flex, HStack, SimpleGrid, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Avatar, Box, Button, Flex, HStack, SimpleGrid, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { CheckIcon, PlusIcon } from '../icons';
 import { t } from '../i18n/index.ts';
 import { avatarColor, colorHex, dueState, dueText, PALETTE, PRIORITY_COLOR, priorityLabel, shortDate, withAlpha } from './logic';

@@ -38,6 +38,13 @@ then install `caddy-root.crt` as a trusted root (Windows: double-click → Insta
 *Trusted Root Certification Authorities*; or roll it out by group policy). With a public name and
 ports 80/443 open, `NCODE_TLS=you@example.com` gets a Let's Encrypt certificate instead.
 
+**Phones** (needed for the Kanban app to open without a connection): send `caddy-root.crt` to the
+phone (e.g. by email) and open it.
+- *iPhone:* open the file → *Settings* → *Profile Downloaded* → *Install*; then *Settings* →
+  *General* → *About* → *Certificate Trust Settings* → switch the Caddy certificate on.
+- *Android:* *Settings* → *Security* → *Encryption & credentials* → *Install a certificate* → *CA
+  certificate* (the menu names differ a little between phones).
+
 **SQLite files** you want to connect to must be mounted into the backend container (see the
 comment in `docker-compose.yml`) and added with their path inside the container.
 

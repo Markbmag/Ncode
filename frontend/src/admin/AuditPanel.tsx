@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
-  Badge, Box, Button, Code, Flex, HStack, Input, Select, Skeleton, Table, Tbody, Td, Text, Th, Thead, Tooltip, Tr,
+  Badge, Box, Button, Code, Flex, HStack, Input, Select, Skeleton, Table, Tbody, Td, Text, Th, Thead, Tr,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { http } from '../api';
 import { DownloadIcon } from '../icons';
 import { saveBlob } from '../lib/csv';

@@ -1,10 +1,9 @@
 import { useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Alert, AlertDescription, AlertIcon, Box, Button, ButtonGroup, Drawer, DrawerBody, DrawerCloseButton, DrawerContent,
-  DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuItemOption, MenuList, MenuOptionGroup,
-  Select, Spinner, Text, Tooltip, useColorMode, useDisclosure, useToast,
+  Alert, AlertDescription, AlertIcon, Box, Button, ButtonGroup, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Select, Spinner, Text, useColorMode, useDisclosure, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import { apiErrorMessageAsync, http } from '../../api';
 import { ChartIcon, ChevronDownIcon, DownloadIcon, MoreIcon, RefreshIcon, SettingsIcon, TableIcon } from '../../icons';
 import { buildCsvFromArrays, downloadText, saveBlob, safeFilename } from '../../lib/csv';

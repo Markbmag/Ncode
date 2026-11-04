@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList,
-  Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea, Tooltip, useDisclosure, useToast,
+  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea, useDisclosure, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { EngineBadge } from '../components/EngineBadge';
-import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
+import { ArchiveIcon, BellIcon, ChevronRightIcon, GlobeIcon, CopyIcon, FolderIcon, HistoryIcon, MergeIcon, MoreIcon, PencilIcon, RefreshIcon, SaveIcon, SparklesIcon, StarIcon, TableIcon } from '../icons';
 import { library } from './api';
 import { withBase } from './conflict';
 import { useEditConflict } from './ConflictDialog';
@@ -16,6 +16,7 @@ import { VerifiedBadge, VerifyMenuItem } from './VerifiedBadge';
 import { queryChanged } from './verified.ts';
 import type { QuestionPayload, SavedQuestion } from './api';
 import { DialogShell, MoveDialog, SaveQuestionDialog } from './dialogs';
+import { HistoryDrawer } from './HistoryDrawer';
 import { ShareButton } from './ShareItem';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
 import { ShareDialog } from '../sharing/ShareDialog';
@@ -51,6 +52,7 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
   const details = useDisclosure();
   const share = useDisclosure();
   const leave = useDisclosure();
+  const history = useDisclosure(); // saved versions (M15)
   const editorMode = useEditorMode(); // editing a saved question opened as its result (M12)
   const ws = useWorkspace();
   // ?subscriptions=1 (from the Subscriptions page) opens the drawer
@@ -267,6 +269,9 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
               <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void duplicate()}>
                 {t('Duplicate')}
               </MenuItem>
+              <MenuItem icon={<HistoryIcon boxSize={4} />} onClick={history.onOpen} isDisabled={dirty} data-testid="question-history">
+                {dirty ? t('History (save or discard your changes first)') : t('History')}
+              </MenuItem>
               <VerifyMenuItem kind="question" id={saved.id} verified={saved.verified} />
               <MenuItem icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen('alert')} data-testid="question-alert">
                 {t('Set up an alert…')}
@@ -310,6 +315,17 @@ export function QuestionHeader({ engine, title, subtitle, saved, dirty, payload,
       </HStack>
 
       {conflict.dialog}
+      {saved && (
+        <HistoryDrawer
+          kind="question"
+          id={saved.id}
+          isOpen={history.isOpen}
+          onClose={history.onClose}
+          canEdit={canEdit}
+          question={saved}
+          onRestored={(restored) => onRevert?.(restored as SavedQuestion)}
+        />
+      )}
       {saved && editorMode && (
         <Modal isOpen={leave.isOpen} onClose={leave.onClose} isCentered>
           <ModalOverlay />

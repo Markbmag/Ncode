@@ -72,3 +72,28 @@ def test_the_scrap_rate_example_uses_the_ratio_metric(tmp_path):
         assert result["columns"][1]["format"]["style"] == "percent"
         rates = dict(result["rows"])
         assert max(rates, key=rates.get) == "Paint line" and all(0 < v < 0.2 for v in rates.values())
+
+
+def test_number_cards_compare_weeks_and_the_scrap_rate_has_a_target(tmp_path):
+    """M15: the dashboard's number cards are grouped by week (the card compares the last full week
+    with the week before); the scrap rate card says lower is better and has a 2 % target."""
+    with _client(tmp_path) as client:
+        carol = auth(client, "carol", "carol-pass-1")
+        board_id = client.get("/api/dashboards", headers=carol).json()["dashboards"][0]["id"]
+        board = client.get(f"/api/dashboards/{board_id}", headers=carol).json()
+        cards = {c["key"]: c for c in board["cards"]}
+        orders, scrap = cards["orders"]["question"]["viz"]["spec"], cards["scrap_kpi"]["question"]["viz"]["spec"]
+        assert orders["type"] == scrap["type"] == "kpi"
+        assert orders["x"] == "Week" and orders["kpi"]["upIsGood"] is True
+        assert scrap["kpi"] == {"compare": True, "sparkline": True, "upIsGood": False, "target": 0.02}
+        # side by side above the weekly chart, so a phone shows them two per row
+        assert (cards["orders"]["layout"]["y"], cards["scrap_kpi"]["layout"]["y"]) == (2, 2)
+        for key in ("orders", "scrap_kpi"):
+            res = client.post(f"/api/dashboards/{board_id}/cards/{key}/run", headers=carol, json={"wait_ms": 5000}).json()
+            if res["status"] == "running":
+                res = wait_done(client, carol, res["task_id"])
+            cols = res["result"]["columns"]
+            assert cols[0]["name"] == "Week" and cols[0]["type"] == "date", key
+            assert len(res["result"]["rows"]) > 40, key  # a year of weeks for the trend line
+        rates = [r[1] for r in res["result"]["rows"]]
+        assert cols[1]["format"]["style"] == "percent" and all(0 <= v < 0.1 for v in rates)

@@ -1,7 +1,7 @@
 import {
-  Box, Button, ButtonGroup, Checkbox, Divider, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Switch,
-  Text, Tooltip, VStack,
+  Box, Button, ButtonGroup, Checkbox, Divider, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Switch, Text, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import type { ReactNode } from 'react';
 import type { ResultColumn } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
@@ -161,13 +161,7 @@ export function VizSettings({ spec, columns, onChange, seriesNames = [], rowCoun
           </Field>
         </HStack>
       )}
-      {t === 'kpi' && (
-        <VStack align="stretch" spacing={1}>
-          <Checkbox size="sm" isChecked={spec.kpi?.compare ?? true} onChange={(e) => set({ kpi: { ...spec.kpi, compare: e.target.checked } })}>{tr('Change vs previous row')}</Checkbox>
-          <Checkbox size="sm" isChecked={spec.kpi?.sparkline ?? true} onChange={(e) => set({ kpi: { ...spec.kpi, sparkline: e.target.checked } })}>{tr('Sparkline')}</Checkbox>
-          <Checkbox size="sm" isChecked={spec.kpi?.upIsGood ?? true} onChange={(e) => set({ kpi: { ...spec.kpi, upIsGood: e.target.checked } })}>{tr('Going up is good')}</Checkbox>
-        </VStack>
-      )}
+      {t === 'kpi' && <KpiFields spec={spec} columns={columns} set={set} />}
       {t === 'pie' && (
         <Checkbox size="sm" isChecked={spec.donut !== false} onChange={(e) => set({ donut: e.target.checked })}>
           {tr('Donut (hole in the middle)')}
@@ -305,4 +299,46 @@ function FormatRow({ name, title, fmt, onChange }: { name: string; title: string
 function PivotFields({ spec, columns, set }: { spec: VizSpec; columns: ResultColumn[]; set: (p: Partial<VizSpec>) => void }) {
   // the layout shown (the default one until it is changed): Rows / Columns / Values like Excel (M12)
   return <PivotEditor spec={effectivePivot(spec, columns)} columns={columns} onChange={(pivot) => set({ pivot })} />;
+}
+
+/** Number card (M15): comparison, trend, what "up" means, a target in the value's own units. */
+function KpiFields({ spec, columns, set }: { spec: VizSpec; columns: ResultColumn[]; set: (patch: Partial<VizSpec>) => void }) {
+  const kpi = spec.kpi ?? {};
+  const name = spec.value ?? spec.series?.[0]?.y ?? columns.find((c) => c.type === 'number')?.name;
+  const col = columns.find((c) => c.name === name);
+  const fmt: ColumnFormat = { ...((col?.format as ColumnFormat | null) ?? {}), ...(name ? spec.format?.[name] : {}) };
+  // a share kept as a fraction (0.02) is typed as percent (2)
+  const share = fmt.style === 'percent' && fmt.percentIsFraction !== false;
+  const shown = kpi.target === null || kpi.target === undefined ? '' : String(share ? Math.round(kpi.target * 1e6) / 1e4 : kpi.target);
+  const meaning = kpi.neutral ? 'none' : kpi.upIsGood === false ? 'bad' : 'good';
+  const patch = (p: Partial<NonNullable<VizSpec['kpi']>>) => set({ kpi: { ...kpi, ...p } });
+  return (
+    <VStack align="stretch" spacing={3} data-testid="kpi-settings">
+      <Checkbox size="sm" isChecked={kpi.compare ?? true} onChange={(e) => patch({ compare: e.target.checked })}>
+        {tr('Compare with the period before')}
+        <Tooltip label={tr('With dates: the last complete period against the one before it (the running week or month is not compared). Without dates: the last row against the row before.')} hasArrow>
+          <Text as="span" color="faintText"> ⓘ</Text>
+        </Tooltip>
+      </Checkbox>
+      <Checkbox size="sm" isChecked={kpi.sparkline ?? true} onChange={(e) => patch({ sparkline: e.target.checked })}>{tr('Small trend line')}</Checkbox>
+      <Field label={tr('When the number goes up')}>
+        <Select size="sm" value={meaning} onChange={(e) => patch({ upIsGood: e.target.value !== 'bad', neutral: e.target.value === 'none' })} data-testid="kpi-meaning">
+          <option value="good">{tr('That is good (green)')}</option>
+          <option value="bad">{tr('That is bad (red), e.g. scrap or downtime')}</option>
+          <option value="none">{tr('Neither (no colour)')}</option>
+        </Select>
+      </Field>
+      <Field label={share ? tr('Target, %') : tr('Target')} hint={tr('Optional. The card says how far the value is from it.')}>
+        <Input
+          size="sm"
+          type="number"
+          step="any"
+          value={shown}
+          placeholder={tr('none')}
+          onChange={(e) => patch({ target: e.target.value === '' ? null : share ? Number(e.target.value) / 100 : Number(e.target.value) })}
+          data-testid="kpi-target-input"
+        />
+      </Field>
+    </VStack>
+  );
 }

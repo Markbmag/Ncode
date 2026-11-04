@@ -53,6 +53,9 @@ test('saving over someone else\'s newer save asks first', async ({ page }) => {
   await signIn(page, 'carol', `/questions/${q.id}`);
   await expect(page.getByTestId('question-title')).toBeVisible();
   await page.getByTestId('edit-question').click(); // M12: a saved question opens as its result
+  // the editor, not the result view being replaced (both have a Chart button; a slow machine is still showing the view)
+  await expect(page.getByTestId('builder')).toBeVisible();
+  await expect(page.getByTestId('question-view')).toHaveCount(0);
   // meanwhile, in another browser, the same question is renamed
   await api(page.request, 'carol', 'PATCH', `/api/questions/${q.id}`, { name: 'Renamed elsewhere' });
   await page.getByTestId('view-chart').click();

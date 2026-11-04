@@ -5,6 +5,10 @@ the owner's permissions: what the owner may no longer see is not sent. Recipient
 get what the owner sees - like forwarding a report - so only add people who may
 see it. Admins see and manage every subscription; a recipient can remove
 themselves.
+
+A digest (M15, "Follow") is a subscription with options.digest = "day" | "week": instead of
+the cards it sends the biggest changes of the latest complete day or week in sentences
+(app/automation/digest.py). It can also follow a metric (target_type "metric").
 """
 
 from __future__ import annotations
@@ -71,6 +75,7 @@ class Options(_Model):
     rows: int = Field(default=10, ge=1, le=50)                            # rows shown per card
     skip_empty: bool = False                                              # send nothing when every card is empty
     message: str = Field(default="", max_length=2000)                     # a note above the results
+    digest: Literal["day", "week"] | None = None                          # M15: the biggest changes vs. the day / week before
 
 
 class AlertCondition(_Model):
@@ -88,7 +93,7 @@ class AlertCondition(_Model):
 
 class SubscriptionIn(_Model):
     name: str = Field(default="", max_length=200)
-    target_type: Literal["dashboard", "question"]
+    target_type: Literal["dashboard", "question", "metric"]
     target_id: int
     schedule: Schedule
     recipients: Recipients
@@ -100,6 +105,10 @@ class SubscriptionIn(_Model):
     def _shape(self) -> "SubscriptionIn":
         if self.alert is not None and self.target_type != "question":
             raise ValueError("alerts watch a question, not a dashboard")
+        if self.alert is not None and self.options.digest:
+            raise ValueError("a digest is not an alert")
+        if self.target_type == "metric" and not self.options.digest:
+            raise ValueError("a metric can only be followed (a digest)")
         return self
 
 

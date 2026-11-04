@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import {
-  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Checkbox, Code, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link,
-  Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Select, Skeleton, Switch, Tab, TabList, TabPanel, TabPanels,
-  Tabs, Text, Tooltip, VStack, useToast,
+  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Checkbox, Code, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Select, Skeleton, Switch, Tab, TabList, TabPanel, TabPanels, Tabs, Text, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { localDateText } from '../viz/format';

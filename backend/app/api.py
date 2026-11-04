@@ -71,6 +71,7 @@ from .content.health import register_broken_content_routes
 from .demo import DEMO_KEY, SYSTEM as DEMO_SYSTEM_USER, DemoDatabase, register_demo_routes
 from .glossary import register_glossary_routes
 from .kanban.routes import register_kanban_routes
+from .templates_mfg import register_template_routes
 from .demo_content import seed_demo_content
 from .home import Home, register_home_routes
 from .backup import AutoBackup
@@ -121,6 +122,7 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     automation = AutomationEngine(
         app_db=app_db, settings_store=settings_store, subs=subscriptions, runner=runner,
         content=lambda: app.state.content, statement_timeout_sec=settings.statement_timeout_sec,
+        semantic=semantic, registry=registry, email_language=settings.email_language,  # M15: digests
     )
     scheduler = Scheduler(automation, subscriptions, interval_sec=settings.scheduler_interval_sec, workers=settings.scheduler_workers)
     scheduler.chores.append(AutoBackup(app_db.path, settings.backup_hour, settings.backup_keep).tick)
@@ -810,6 +812,10 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
     )
     register_home_routes(  # M11: recently viewed, "Start here", the new-user checklist, personal settings
         app, app_db=app_db, content=content, current_user=current_user, require_admin=require_admin,
+    )
+    register_template_routes(  # M15: dashboard templates for manufacturing, mapped to real columns once
+        app, registry=registry, semantic=semantic, queries=queries, content=content,
+        current_user=current_user, require_connection=require_connection,
     )
     register_kanban_routes(  # Ncode - Kanban (§8c): /api/kanban/*, WS /ws/kanban/{board_id}
         app, app_db=app_db, settings=settings, current_user=current_user, user_from_token=user_from_token,

@@ -65,6 +65,14 @@ export function record<T>(h: History<T>, next: T, now: number, limit = HISTORY_L
   return { past: [...h.past, h.present].slice(-limit), present: next, future: [], at: now, part };
 }
 
+/**
+ * The present changed by itself, not by the person (the dashboard grid tidying up its cards after
+ * one was removed, M15): no new step, so undoing the removal brings the old layout back in one go.
+ */
+export function amend<T>(h: History<T>, next: T): History<T> {
+  return changedPaths(h.present, next).length === 0 ? h : { ...h, present: next };
+}
+
 export const canUndo = (h: History<unknown>): boolean => h.past.length > 0;
 export const canRedo = (h: History<unknown>): boolean => h.future.length > 0;
 

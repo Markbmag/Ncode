@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { Flex, Text, useColorMode } from '@chakra-ui/react';
 import type { ResultEnvelope } from '../../api';
 import { ResultsTable } from '../data/ResultsTable';
 import { buildOption, scaleWarning } from '../../viz/options';
 import { chartTheme } from '../../viz/palette';
+import { NARROW_PX, narrowOption, narrowViz } from '../../viz/narrow';
 import type { VizSpec } from '../../viz/types';
 import { EChart } from './EChart';
 import type { EChartHandle } from './EChart';
@@ -25,7 +26,17 @@ interface VisualizationProps {
 export function Visualization({ result, viz, smartDates, chartRef, scaleNote = true }: VisualizationProps) {
   const { colorMode } = useColorMode();
   const theme = useMemo(() => chartTheme(colorMode === 'dark' ? 'dark' : 'light'), [colorMode]);
-  const option = useMemo(() => buildOption(result, viz, theme), [result, viz, theme]);
+  // a phone-wide chart: legend below, fewer labels (M15)
+  const box = useRef<HTMLDivElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setNarrow(el.clientWidth > 0 && el.clientWidth < NARROW_PX));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [viz.type]);
+  const option = useMemo(() => (narrow ? narrowOption(buildOption(result, narrowViz(viz), theme)) : buildOption(result, viz, theme)), [result, viz, theme, narrow]);
   const warning = useMemo(() => (scaleNote ? scaleWarning(result, viz) : null), [result, viz, scaleNote]);
 
   if (viz.type === 'table') return <ResultsTable columns={result.columns} rows={result.rows} smartDates={smartDates} />;
@@ -39,7 +50,7 @@ export function Visualization({ result, viz, smartDates, chartRef, scaleNote = t
     );
   }
   return (
-    <Flex h="100%" direction="column" p={3}>
+    <Flex ref={box} h="100%" direction="column" p={3}>
       {warning && (
         <Text fontSize="xs" color="mutedText" mb={1} data-testid="scale-warning">
           {warning}

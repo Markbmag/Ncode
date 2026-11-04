@@ -156,6 +156,9 @@ class Settings:
     # (NCODE_DEMO); off in a bare Settings() so tests and tools never create it by accident.
     demo_enabled: bool = False
     demo_language: str = "en"            # names of the demo's example questions and dashboard: "en" or "ru"
+    email_language: str = "en"           # M15: digests of people without a stored UI language: "en" or "ru"
+    # --- dashboards people read (M15) ---
+    history_keep: int = 50               # saved versions kept per question and dashboard (history, restore)
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -226,6 +229,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         metrics_token=(env.get("NCODE_METRICS_TOKEN") or "").strip(),
         demo_enabled=_bool(env, "NCODE_DEMO", True),
         demo_language="ru" if (env.get("NCODE_DEMO_LANGUAGE") or "").strip().lower().startswith("ru") else "en",
+        email_language="ru" if (env.get("NCODE_EMAIL_LANGUAGE") or "").strip().lower().startswith("ru") else "en",
+        history_keep=max(1, _int(env, "NCODE_HISTORY_KEEP", defaults.history_keep)),
     )
 
 

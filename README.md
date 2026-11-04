@@ -25,10 +25,14 @@ editor, charts, dashboards). The plan and its milestones are in [docs/ROADMAP.md
   relationships for databases without foreign keys, and named metrics everyone shares.
 - **Subscriptions and alerts** - dashboards and questions by email, Slack, Teams, Telegram or
   webhook on a schedule, with CSV / Excel attached; alerts when a number crosses a line.
+- **Dashboards people read** - number cards that say how they compare with last week and a target,
+  a phone layout, version history with restore, ready-made plant templates (OEE, downtime Pareto,
+  scrap, output vs plan) and *Follow*: a daily or weekly email of the biggest changes in sentences.
 - **Share outside Ncode** - public links (password, expiry) and signed embedding in other websites.
 - **Export to CSV** - from results, or stream a whole table / all matches (up to 50,000 rows by default).
 - **Ncode - Kanban** - task boards for the team next to the analysis: tasks with people, dates,
-  priority, steps with progress, photos from the phone, comments and history, live for everyone.
+  priority, steps with progress, photos from the phone, comments and history, live for everyone;
+  on the phone's home screen as its own app, with stage tabs, press-and-hold to move and tasks from photos.
 - **Easy to start** - a Factory demo database with ready examples, a home page with first steps,
   plain words, a sentence under every result, a glossary, verified official answers.
 - **Team ready** - users and groups, row-level security, an audit log, usage and slow-query reports,

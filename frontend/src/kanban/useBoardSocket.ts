@@ -79,9 +79,39 @@ export function useBoardSocket(boardId: number, me: string, onOther: (event: Boa
       timer = setTimeout(connect, Math.min(15_000, 500 * 2 ** Math.min(retry, 5)));
     };
 
+    // Phones (K2): an app in the background loses its connection without being told. Coming back,
+    // read the board again and, after a longer break or a lost network, connect afresh at once.
+    let hiddenAt = 0;
+    const wake = (event: Event) => {
+      if (stopped) return;
+      if (event.type === 'visibilitychange' && document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      const long = event.type === 'online' || (hiddenAt > 0 && Date.now() - hiddenAt > 20_000);
+      hiddenAt = 0;
+      refresh();
+      if (socket && socket.readyState === WebSocket.OPEN && !long) return;
+      if (socket && socket.readyState === WebSocket.CONNECTING && !long) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      retry = 0;
+      if (socket) {
+        const old = socket;
+        socket = null;
+        old.onclose = null;
+        old.close();
+      }
+      connect();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
+
     connect();
     return () => {
       stopped = true;
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
       if (timer) clearTimeout(timer);
       socket?.close();
     };

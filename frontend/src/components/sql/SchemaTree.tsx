@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Box, Button, Flex, IconButton, Input, InputGroup, InputLeftElement, Skeleton, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Box, Button, Flex, IconButton, Input, InputGroup, InputLeftElement, Skeleton, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import type { SchemaTable } from '../../api';
 import { ChevronDownIcon, KeyIcon, LinkIcon, RefreshIcon, SearchIcon, TableIcon } from '../../icons';
 import { t } from '../../i18n/index.ts';

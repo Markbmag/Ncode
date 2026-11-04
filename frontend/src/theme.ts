@@ -78,6 +78,8 @@ export const theme = extendTheme({
       },
       '*::-webkit-scrollbar-thumb:hover': { backgroundColor: 'var(--chakra-colors-scrollThumbHover)' },
       // the opened list of a drop-down: the theme's panel colours instead of the system's white list
+      // iPhones zoom into a text field whose text is smaller than 16 px (K2: no zooming on phones)
+      '@supports (-webkit-touch-callout: none)': { 'input, textarea, select': { fontSize: '16px !important' } },
       'select option, select optgroup': { background: 'var(--chakra-colors-panelBg)', color: 'var(--chakra-colors-bodyText)' },
       'select option:checked': { background: 'var(--chakra-colors-panelHover)' },
       'select option:disabled': { color: 'var(--chakra-colors-faintText)' },

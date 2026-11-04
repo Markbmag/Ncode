@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement,
-  Select, Skeleton, Text, Textarea, Tooltip, VStack,
+  Badge, Box, Button, Checkbox, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement, Select, Skeleton, Text, Textarea, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQueries } from '@tanstack/react-query';
 import { http } from '../api';
 import type { SchemaV2 } from '../api';

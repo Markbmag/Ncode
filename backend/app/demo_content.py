@@ -1,10 +1,11 @@
 """Ready-made content for the Factory demo (roadmap M11).
 
 A newcomer's first steps (home page checklist) start at a dashboard, so the demo brings one:
-a shared collection "Factory demo" with six questions and the dashboard "Production overview"
+a shared collection "Factory demo" with seven questions and the dashboard "Production overview"
 (period and line filters), set as the home page's "Start here" collection when none is set.
 One question uses the demo's ratio metric "Scrap rate" (M12; installs that made the examples
-before keep theirs).
+before keep theirs). The number cards compare the last full week with the week before, the scrap
+rate also with a target (M15; new installs only, existing examples stay as they are).
 
 Created once (app setting "demo_content"); afterwards it is ordinary content that admins may
 change, move or delete. The names follow NCODE_DEMO_LANGUAGE ("en" or "ru").
@@ -37,7 +38,8 @@ TEXTS = {
         "downtime": ("Downtime by reason", "Where the lines lose the most time: the ten biggest reasons."),
         "scrap": ("Scrapped pieces per line", "Which line scraps the most pieces."),
         "rate": ("Scrap rate per line", "The share of the pieces each line scraps: all scrap ÷ all pieces (the Scrap rate metric)."),
-        "orders": ("Work orders", "How many work orders were produced."),
+        "orders": ("Work orders", "How many work orders were produced each week; the card compares the last full week with the week before."),
+        "scrap_kpi": ("Scrap rate by week", "All scrap ÷ all pieces for each week, against a 2 % target: lower is better."),
         "vehicles": ("Latest vehicles", "The last 50 cars built, with their VIN."),
         "period": "Period", "line": "Line",
         "columns": {"week": "Week", "good": "Good pieces", "reason": "Reason", "minutes": "Downtime, min",
@@ -52,7 +54,8 @@ TEXTS = {
         "downtime": ("Простои по причинам", "Где линии теряют больше всего времени: десять главных причин."),
         "scrap": ("Брак по линиям", "Какая линия бракует больше всего деталей."),
         "rate": ("Доля брака по линиям", "Какую долю деталей бракует каждая линия: весь брак ÷ все детали (метрика «Доля брака»)."),
-        "orders": ("Заказы-наряды", "Сколько заказов-нарядов выполнено."),
+        "orders": ("Заказы-наряды", "Сколько заказов-нарядов выполнено за каждую неделю; карточка сравнивает последнюю полную неделю с предыдущей."),
+        "scrap_kpi": ("Доля брака по неделям", "Весь брак ÷ все детали за каждую неделю, в сравнении с целью 2 %: чем меньше, тем лучше."),
         "vehicles": ("Последние автомобили", "Последние 50 собранных машин с VIN."),
         "period": "Период", "line": "Линия",
         "columns": {"week": "Неделя", "good": "Годные детали", "reason": "Причина", "minutes": "Простой, мин",
@@ -93,6 +96,13 @@ def questions(c: dict[str, str], metrics: dict[str, int] | None = None) -> dict[
             breakouts=[{"ref": "production_lines.name", "alias": c["line"]}],
             order=[{"ref": c["scrapped"], "dir": "desc"}],
         ), {"version": 1, "type": "bar", "x": c["line"], "series": [{"y": c["scrapped"]}]}),
+        **({"scrap_kpi": (_spec(
+            source={"table": "production_output"},
+            joins=[{"table": "work_orders"}, {"table": "production_lines"}],
+            aggregations=[{"fn": "metric", "metric": rate, "alias": c["rate"]}],
+            breakouts=[{"ref": "production_output.reported_at", "bucket": "week", "alias": c["week"]}],
+        ), {"version": 1, "type": "kpi", "value": c["rate"], "x": c["week"],
+            "kpi": {"compare": True, "sparkline": True, "upIsGood": False, "target": 0.02}})} if rate else {}),
         **({"rate": (_spec(
             source={"table": "production_output"},
             joins=[{"table": "work_orders"}, {"table": "production_lines"}],
@@ -104,7 +114,9 @@ def questions(c: dict[str, str], metrics: dict[str, int] | None = None) -> dict[
             source={"table": "work_orders"},
             joins=[{"table": "production_lines"}],
             aggregations=[{"fn": "count", "alias": c["orders"]}],
-        ), {"version": 1, "type": "kpi", "value": c["orders"]}),
+            breakouts=[{"ref": "work_orders.production_date", "bucket": "week", "alias": c["week"]}],
+        ), {"version": 1, "type": "kpi", "value": c["orders"], "x": c["week"],
+            "kpi": {"compare": True, "sparkline": True, "upIsGood": True}}),
         "vehicles": (_spec(
             source={"table": "vehicles"},
             fields=[{"ref": "vin"}, {"ref": "model"}, {"ref": "color"}, {"ref": "market"}, {"ref": "built_at"}],
@@ -116,11 +128,13 @@ def questions(c: dict[str, str], metrics: dict[str, int] | None = None) -> dict[
 
 # the dashboard: which date column the period filter narrows, and the line name for the line filter
 DATES = {"output": "production_output.reported_at", "downtime": "downtime_events.started_at",
-         "scrap": "scrap_records.recorded_at", "rate": "production_output.reported_at", "orders": "work_orders.production_date"}
+         "scrap": "scrap_records.recorded_at", "rate": "production_output.reported_at", "orders": "work_orders.production_date",
+         "scrap_kpi": "production_output.reported_at"}
 LINES = {"output": "production_lines.name", "downtime": "production_lines.name",
-         "scrap": "production_lines.name", "rate": "production_lines.name", "orders": "production_lines.name"}
+         "scrap": "production_lines.name", "rate": "production_lines.name", "orders": "production_lines.name",
+         "scrap_kpi": "production_lines.name"}
 LAYOUT = {  # 12 columns
-    "intro": (0, 0, 12, 2), "orders": (0, 2, 3, 6), "output": (3, 2, 9, 6),
+    "intro": (0, 0, 12, 2), "orders": (0, 2, 3, 6), "scrap_kpi": (3, 2, 3, 6), "output": (6, 2, 6, 6),
     "downtime": (0, 8, 6, 8), "scrap": (6, 8, 3, 8), "rate": (9, 8, 3, 8), "vehicles": (0, 16, 12, 8),
 }
 

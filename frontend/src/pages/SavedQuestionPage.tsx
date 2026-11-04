@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Skeleton, Text, Tooltip, VStack, useToast } from '@chakra-ui/react';
+import {
+  Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Skeleton, Text, VStack, useToast,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
@@ -72,7 +75,8 @@ export default function SavedQuestionPage() {
       />
     );
   if (q.kind !== 'federated' && !usable) return <NoDatabase q={q} />;
-  if (!editing) return <QuestionView key={q.id} q={q} onEdit={canEdit ? () => setEditing(true) : null} />;
+  // a new saved version (a restored one, M15) is shown afresh: its result, its chart
+  if (!editing) return <QuestionView key={`${q.id}-${q.updated_at}`} q={q} onEdit={canEdit ? () => setEditing(true) : null} />;
   return (
     <EditorModeContext.Provider value={editorMode}>
       {q.kind === 'federated' ? (

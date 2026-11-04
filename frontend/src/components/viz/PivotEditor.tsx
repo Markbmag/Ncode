@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
-import { Box, Checkbox, Flex, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Select, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Checkbox, Flex, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Select, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import type { ResultColumn } from '../../api';
 import { MoreIcon, PlusIcon } from '../../icons';
 import { columnDescription, columnTitle } from '../../viz/labels';

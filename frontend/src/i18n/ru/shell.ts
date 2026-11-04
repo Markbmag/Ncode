@@ -327,4 +327,6 @@ export const SHELL: Record<string, string> = {
   'Change the database the pages work on': 'Сменить базу данных, с которой работают страницы',
   'Databases you can use': 'Доступные вам базы данных',
   'Pick a database': 'Выберите базу данных',
+  // K2: phone
+  'No connection. You can look at what is on the screen; changes need the connection.': 'Нет связи. То, что на экране, можно смотреть; для изменений нужна связь.',
 };

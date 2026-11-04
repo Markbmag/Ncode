@@ -1,4 +1,7 @@
-import { Box, Button, Flex, HStack, IconButton, Select, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Box, Button, Flex, HStack, IconButton, Select, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { t } from '../i18n/index.ts';
 import { PlusIcon, SparklesIcon, XIcon } from '../icons';
 import { joinedBefore, suggestKey, syncJoins } from './logic';

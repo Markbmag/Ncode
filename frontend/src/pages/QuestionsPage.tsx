@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
-  Alert, AlertIcon, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, Tooltip,
-  VStack, Wrap, WrapItem, useBreakpointValue, useDisclosure,
+  Alert, AlertIcon, Box, Button, Checkbox, Collapse, Flex, HStack, Input, Select, Skeleton, Switch, Text, VStack, Wrap, WrapItem, useBreakpointValue, useDisclosure,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';

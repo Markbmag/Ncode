@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
-  Alert, AlertIcon, Badge, Box, Button, ButtonGroup, Checkbox, Collapse, Flex, HStack, IconButton, Input, Spinner, Switch, Text, Tooltip,
-  VStack, Wrap, WrapItem, useBreakpointValue,
+  Alert, AlertIcon, Badge, Box, Button, ButtonGroup, Checkbox, Collapse, Flex, HStack, IconButton, Input, Spinner, Switch, Text, VStack, Wrap, WrapItem, useBreakpointValue,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQueries } from '@tanstack/react-query';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';

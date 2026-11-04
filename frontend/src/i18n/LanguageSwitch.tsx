@@ -1,4 +1,7 @@
-import { Button, Menu, MenuButton, MenuItemOption, MenuList, MenuOptionGroup, Tooltip } from '@chakra-ui/react';
+import {
+  Button, Menu, MenuButton, MenuItemOption, MenuList, MenuOptionGroup,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { LANGUAGES, lang, setLang, t } from './index.ts';
 import type { Lang } from './index.ts';
 

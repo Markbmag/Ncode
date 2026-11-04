@@ -1,4 +1,7 @@
-import { Badge, Button, Flex, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuGroup, MenuItem, MenuList, Select, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Badge, Button, Flex, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuGroup, MenuItem, MenuList, Select, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import { LinkIcon, PlusIcon, XIcon } from '../../icons';
 import { columnOptions, queryTables } from '../../query/draft';
 import type { SchemaInfo } from '../../query/draft';

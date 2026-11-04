@@ -60,19 +60,25 @@ export function useDraftHistory<T>(value: T, apply: (value: T) => void): DraftHi
   const doUndo = useCallback(() => move(undo), [move]);
   const doRedo = useCallback(() => move(redo), [move]);
 
+  useUndoKeys(doUndo, doRedo);
+
+  return { undo: doUndo, redo: doRedo, canUndo: canUndo(h), canRedo: canRedo(h), revision };
+}
+
+/** Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl+Y on the page (not in text boxes, the SQL editor or dialogs). */
+export function useUndoKeys(onUndo: () => void, onRedo: () => void, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       const what = historyKey(e);
       if (!what || e.defaultPrevented) return;
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (editsText(target) || target?.closest('[role="dialog"], [role="alertdialog"], .cm-editor')) return;
       e.preventDefault();
-      if (what === 'undo') doUndo();
-      else doRedo();
+      if (what === 'undo') onUndo();
+      else onRedo();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [doUndo, doRedo]);
-
-  return { undo: doUndo, redo: doRedo, canUndo: canUndo(h), canRedo: canRedo(h), revision };
+  }, [onUndo, onRedo, enabled]);
 }
