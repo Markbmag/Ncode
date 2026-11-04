@@ -195,3 +195,15 @@ describe('table/chart switch matches what is shown (M10)', () => {
     assert.equal(shownMode(chosen, effectiveViz(chosen, people)), 'chart');
   });
 });
+
+test('the Russian interface writes Russian numbers', async () => {
+  const { setLangForTests } = await import('../src/i18n/index.ts');
+  setLangForTests('ru');
+  try {
+    assert.equal(formatNumber(0.008, { style: 'percent' }), '0,8 %');
+    assert.equal(formatNumber(1234.5), '1 234,5');
+    assert.equal(formatNumber(1234.5, {}, 'en-US'), '1,234.5'); // an explicit locale still wins
+  } finally {
+    setLangForTests('en');
+  }
+});

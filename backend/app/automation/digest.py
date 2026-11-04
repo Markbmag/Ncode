@@ -61,7 +61,7 @@ GONE = {  # the run's error when the followed thing is gone (Russian in app/i18n
     "metric": "The metric is gone or not shared with the subscription's owner any more",
 }
 
-TEXTS: dict[str, dict[str, str]] = {
+TEXTS: dict[str, dict[str, Any]] = {
     "en": {
         "title_day": "{name}: daily digest",
         "title_week": "{name}: weekly digest",
@@ -76,7 +76,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "biggest": "{name}: the biggest change is {category}, {prev} → {cur} ({pct}).",
         "none": "No big changes: nothing moved more than {threshold} %.",
         "steady": "About the same: {items}.",
-        "more": "And {n} smaller changes: see the dashboard.",
+        "more": ("And {n} smaller change: see the dashboard.", "And {n} smaller changes: see the dashboard."),
         "nothing": "Nothing to compare: Ncode found no date to compare the periods by.",
         "failed": "Cards that could not be read: {n} (see the send history).",
         "footer": "Sent by Ncode because {owner} follows “{name}”. ",
@@ -97,7 +97,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "biggest": "{name}: самое большое изменение — {category}, {prev} → {cur} ({pct}).",
         "none": "Больших изменений нет: ничего не изменилось больше чем на {threshold} %.",
         "steady": "Почти без изменений: {items}.",
-        "more": "И ещё изменений поменьше: {n} — смотрите на дашборде.",
+        "more": ("Ещё {n} изменение поменьше — смотрите на дашборде.", "Ещё {n} изменения поменьше — смотрите на дашборде.",
+                 "Ещё {n} изменений поменьше — смотрите на дашборде."),
         "nothing": "Сравнивать нечего: Ncode не нашёл дату, по которой можно сравнить периоды.",
         "failed": "Не удалось прочитать карточек: {n} (подробности в истории отправок).",
         "footer": "Ncode отправил это письмо, потому что {owner} следит за «{name}». ",
@@ -134,6 +135,17 @@ def today_in(timezone: str) -> date:
 
 def day_text(d: date, lang: str, year: bool = True) -> str:
     return f"{d.day} {MONTHS[lang][d.month - 1]}" + (f" {d.year}" if year else "")
+
+
+def _plural(n: int, forms: tuple[str, ...]) -> str:
+    """English forms: (one, other). Russian: one (1, 21), few (2-4, 22-24), many (5-20, 25 ...)."""
+    if len(forms) == 2:
+        return forms[0] if n == 1 else forms[1]
+    if n % 10 == 1 and n % 100 != 11:
+        return forms[0]
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return forms[1]
+    return forms[2]
 
 
 def pct_text(pct: float, lang: str, signed: bool = False) -> str:
@@ -317,7 +329,8 @@ def sentences(movements: list[Movement], every: str, current: Period, lang: str,
         out.append(words["none"].format(threshold=local_number(f"{THRESHOLD_PCT:g}", lang)))
     out += [m.sentence for m in changed[:MAX_CHANGES] if m.sentence]
     if len(changed) > MAX_CHANGES:
-        out.append(words["more"].format(n=len(changed) - MAX_CHANGES))
+        n = len(changed) - MAX_CHANGES
+        out.append(_plural(n, words["more"]).format(n=n))
     elif len(changed) < MAX_CHANGES - 1:
         steady = [m for m in movements if not m.sentence and m.current is not None][:3]
         if steady:

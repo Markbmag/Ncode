@@ -297,7 +297,7 @@ def email_html(report: Report, pictures: dict[int, tuple[str, str, int]] | None 
     pictures = pictures or {}
     cards = "".join(_email_card(c, report.rows_per_card, report, pictures.get(i)) for i, c in enumerate(report.cards))
     summary = "".join(
-        f'<p style="margin:0 0 10px;font-size:16px;line-height:1.5;color:#111827">{escape(line)}</p>' for line in report.summary
+        f'<p style="margin:0 0 10px;font-size:16px;line-height:1.5;color:#111827">{escape(line).replace(" %", "\u00a0%")}</p>' for line in report.summary
     )
     summary = f'<div style="margin:0 0 18px" data-digest="1">{summary}</div>' if summary else ""
     alert = (f'<div style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:14px">'

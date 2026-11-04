@@ -60,7 +60,7 @@ test('every text the app shows has a Russian translation', () => {
   const unquote = (q: string, body: string) => (q === '`' ? body : (JSON.parse(`"${body.replace(/\\'/g, "'").replace(/(^|[^\\])"/g, '$1\\"')}"`) as string));
   const str = String.raw`(['"])((?:\\.|(?!\1)[^\\\n])*)\1`;
   const single = new RegExp(String.raw`\b(?:t|tr)\(\s*${str}`, 'g');
-  const ctx = new RegExp(String.raw`\btc\(\s*'(\w+)',\s*${str}`, 'g');
+  const ctx = new RegExp(String.raw`\btc\(\s*'(\w+)',\s*${str.replace('\\1', '\\2')}`, 'g');
   const plural = new RegExp(String.raw`\btn\([^,()]+(?:\([^()]*\))?,\s*${str},\s*${str.replace('\\1', '\\3')}`, 'g');
   const missing: string[] = [];
   let checked = 0;

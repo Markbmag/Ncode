@@ -294,6 +294,15 @@ describe('ready questions after choosing a table', () => {
     assert.deepEqual(list.find((s) => s.key === 'top')!.spec.limit, 10);
   });
 
+  test('a number called "Total" does not read "Total Total"', () => {
+    setLangForTests('en');
+    const renamed = DEMO.map(([t, n, r, cols]) => [t, n, r, cols.map((c) => (t === 'downtime_events' && c[0] === 'minutes' ? [c[0], c[1], c[2], 'Total', c[4], c[5]] : c))]) as typeof DEMO;
+    const schema = schemaOf(renamed);
+    const titles = suggestQuestions(model('downtime_events', schema), schema, 'demo').map((s) => s.title);
+    assert.equal(titles[0], 'Total per Line');
+    assert.ok(titles.every((title) => !/Total Total/i.test(title)), titles.join(' / '));
+  });
+
   test('scrap records: the reason first, the part for the top 10, the shift for the shares', () => {
     setLangForTests('en');
     const titles = suggestQuestions(model('scrap_records'), SCHEMA, 'demo').map((s) => s.title);

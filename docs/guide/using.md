@@ -286,6 +286,29 @@ a card opens its question in the editor (with the filter values as parameters) a
 card as CSV, Excel or PNG; the dashboard's **⋯** has *Print / save as PDF*, *Duplicate*, *Rename*,
 *Move* and *Archive*. Cards load a few at a time (as many as `NCODE_MAX_CONCURRENT_QUERIES` allows).
 
+**Number cards (KPIs)** read like a sentence: the value of the last complete week or month, *▲ 12 %
+vs. the week before*, the distance to a target and "this week so far" for the running period, with
+a small trend line. In the chart's *Customize* → *Number*: *Compare with the period before*, *When
+the number goes up* (good = green, bad = red, e.g. scrap or downtime, or no colour), *Target* and
+*Small trend line*. Shares are compared in points ("0.4 points"), not in per cent of a per cent.
+
+Every dashboard says **Data from 10:30 · 5 min ago** (each card too, when it is older than the
+rest); *Refresh all* reads everything again. **On a phone** cards stack in one column in reading
+order, number cards two side by side, and the filters open from a *Filters* button as a sheet.
+
+**History and undo.** Every save keeps a version (the last `NCODE_HISTORY_KEEP`, 50 by default):
+*History* on a dashboard or a question shows who saved what and when; open a version to look at it,
+*Restore* brings it back (what you had stays in the history too). While editing a dashboard,
+Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (and the buttons) undo and redo moves, resizes, added and removed
+cards; *Cancel changes* goes back to the saved dashboard.
+
+**From a template.** *Dashboards* → *From a template* offers four ready-made dashboards for a plant:
+*Downtime Pareto*, *Scrap by shift and line*, *Output vs plan* and *OEE*. Pick the database, check the
+columns Ncode guessed (which table has the downtime, which column the minutes...), see a preview,
+choose a collection and *Create*: you get ordinary questions and a dashboard to change as you like.
+OEE shows only the parts your data supports and says what is missing; it assumes 480 planned minutes
+per working day and line (one shift), which you can change in the dialog.
+
 Dashboards live in collections and follow their sharing. A dashboard never shows more than the
 viewer may see: a card whose question is not shared with them says so, and running a card still
 needs access to its database. Editors can rearrange cards they cannot see but not add such questions.
@@ -315,6 +338,16 @@ or question → *New subscription*.
 A subscription runs with **its owner's permissions**: recipients see what the owner sees, like a
 forwarded report. When the owner loses access, is disabled or deleted, it stops. Admins can limit
 typed-in addresses to the company's domains.
+
+**Follow** (on a dashboard) sends a short digest instead of the whole report: every morning
+yesterday against the day before, or every Monday last week against the week before. It names the
+biggest changes in plain sentences - "Scrap per line fell 45 % vs. the week before (129 → 71),
+mostly Press line (−48)" - and says *No big changes* when nothing moved more than 5 %, with small
+chart pictures of the cards. It is written in the language you use Ncode in (otherwise
+`NCODE_EMAIL_LANGUAGE`) and appears on the **Subscriptions** page as a *Digest*, where it can be
+stopped. Charts in emails (digests and subscriptions) are pictures drawn on the server with the
+bundled DejaVu Sans font (`NCODE_CHART_FONT` for another); without the Pillow package they stay
+simple bars.
 
 **Admin → Delivery** sets the **site address** (links in emails and public links start with it), the
 **email server** (SMTP with STARTTLS / SSL, a *Send test* button) and the **chats and webhooks**

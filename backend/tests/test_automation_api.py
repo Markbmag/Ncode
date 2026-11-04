@@ -112,11 +112,12 @@ def subscription(env, who, target_type, target_id, status=200, **extra):
 
 
 def send_now(env, who, sid):
+    before = {r["id"] for r in call(env, who, "GET", f"/api/subscriptions/{sid}")["runs"]}
     call(env, who, "POST", f"/api/subscriptions/{sid}/send")
     deadline = time.time() + 15
     while time.time() < deadline:
         sub = call(env, who, "GET", f"/api/subscriptions/{sid}")
-        if sub["runs"] and sub["runs"][0]["status"] != "running":
+        if sub["runs"] and sub["runs"][0]["id"] not in before and sub["runs"][0]["status"] != "running":
             return sub["runs"][0]
         time.sleep(0.05)
     raise AssertionError("the run did not finish")

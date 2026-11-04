@@ -51,7 +51,8 @@ export function formatNumber(value: number, fmt: ColumnFormat = {}, locale?: str
   }
   let text: string;
   try {
-    text = new Intl.NumberFormat(locale, options).format(v);
+    // the Russian interface writes Russian numbers (0,8 %, 1 234) whatever the browser's language
+    text = new Intl.NumberFormat(locale ?? (lang() === 'ru' ? 'ru-RU' : undefined), options).format(v);
   } catch {
     text = String(v); // unknown currency code
   }

@@ -105,6 +105,20 @@ def test_at_most_four_changes_biggest_first():
     assert out[5] == "And 2 smaller changes: see the dashboard."
 
 
+def test_the_smaller_changes_line_counts_in_both_languages():
+    from app.automation.digest import TEXTS, _plural
+    en, ru = TEXTS["en"]["more"], TEXTS["ru"]["more"]
+    assert _plural(1, en).format(n=1) == "And 1 smaller change: see the dashboard."
+    assert _plural(21, en).format(n=21) == "And 21 smaller changes: see the dashboard."
+    assert [_plural(n, ru).format(n=n).split(" поменьше")[0] for n in (1, 3, 5, 11, 21, 22)] == [
+        "Ещё 1 изменение", "Ещё 3 изменения", "Ещё 5 изменений", "Ещё 11 изменений", "Ещё 21 изменение", "Ещё 22 изменения"]
+
+
+def test_a_percent_sign_stays_with_its_number_in_the_email():
+    html = email_html(Report(title="Plant", subtitle="", cards=[], summary=["Scrap fell 62 % (3.7 % → 1.4 %)."]))
+    assert "62\u00a0% (3.7\u00a0% → 1.4\u00a0%)" in html
+
+
 def test_local_numbers():
     assert local_number("1,234,567.89 EUR", "ru") == "1 234 567,89 EUR"
     assert local_number("1,234.5", "en") == "1,234.5"

@@ -44,7 +44,9 @@ export function suggestQuestions(model: QuickModel, schema: SchemaInfo, connecti
   const names = { number: number?.label ?? '' };
 
   const out: { key: string; title: string; parts: QuickParts; pie: boolean }[] = [];
-  const add = (key: string, title: string, parts: Partial<QuickParts>, pie = false) => out.push({ key, title, parts: { ...base, ...parts }, pie });
+  // a number column called "Total…" would read "Total Total…"
+  const add = (key: string, title: string, parts: Partial<QuickParts>, pie = false) =>
+    out.push({ key, title: title.replace(/^Total (?=total\b)/i, ''), parts: { ...base, ...parts }, pie });
   if (a) {
     if (number) add('total', t('Total {number} per {category}', { ...names, category: a.label }), { see: sum, category: a.ref });
     else add('count', t('Count per {category}', { category: a.label }), { category: a.ref });

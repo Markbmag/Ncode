@@ -289,8 +289,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       )}
       <Flex align="center" gap={3} wrap="wrap" mb={3}>
         <Box minW={0}>
-          <HStack spacing={2}>
-            <Text as="h1" fontSize={tv ? '3xl' : '2xl'} fontWeight={700} letterSpacing="-0.02em" noOfLines={1} data-testid="dashboard-title">
+          {/* on a phone the badges wrap below a long name rather than cutting it to "Обзор…" */}
+          <HStack spacing={2} flexWrap="wrap" rowGap={1}>
+            <Text as="h1" fontSize={tv ? '3xl' : '2xl'} fontWeight={700} letterSpacing="-0.02em" noOfLines={2} data-testid="dashboard-title">
               {dashboard.name}
             </Text>
             {!tv && (
