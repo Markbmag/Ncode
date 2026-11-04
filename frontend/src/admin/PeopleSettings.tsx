@@ -1,9 +1,9 @@
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Badge, Box, Button, Checkbox, CheckboxGroup, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, Radio, RadioGroup,
-  Select, Skeleton, Stack, Switch, Table, Tbody, Td, Text, Textarea, Th, Thead, Tooltip, Tr, VStack, Wrap, WrapItem, useToast,
+  Badge, Box, Button, Checkbox, CheckboxGroup, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, Radio, RadioGroup, Select, Skeleton, Stack, Switch, Table, Tbody, Td, Text, Textarea, Th, Thead, Tr, VStack, Wrap, WrapItem, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQuery } from '@tanstack/react-query';
 import { apiErrorMessage, http } from '../api';
 import type { SchemaV2 } from '../api';

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement, Link,
-  Select, SimpleGrid, Skeleton, Switch, Text, Textarea, Tooltip, VStack, Wrap, WrapItem, useToast,
+  Badge, Box, Button, Flex, FormControl, FormHelperText, FormLabel, HStack, IconButton, Input, InputGroup, InputLeftElement, Link, Select, SimpleGrid, Skeleton, Switch, Text, Textarea, VStack, Wrap, WrapItem, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { LoadError } from '../components/LoadError';

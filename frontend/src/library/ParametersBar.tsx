@@ -1,7 +1,7 @@
 import {
-  Box, Checkbox, Flex, FormControl, FormLabel, HStack, IconButton, Input, Popover, PopoverArrow, PopoverBody, PopoverContent,
-  PopoverTrigger, Select, Text, Tooltip, VStack,
+  Box, Checkbox, Flex, FormControl, FormLabel, HStack, IconButton, Input, Popover, PopoverArrow, PopoverBody, PopoverContent, PopoverTrigger, Select, Text, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { SettingsIcon } from '../icons';
 import type { ParamShape, ParamType, ParamValue, ParamValues, ParameterDef } from './params';
 import { t } from '../i18n/index.ts';

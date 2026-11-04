@@ -1,4 +1,7 @@
-import { Box, Button, Flex, HStack, Input, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Button, Flex, HStack, Input, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { XIcon } from '../icons';
 import { ValuePicker } from '../components/query/ValuePicker';
 import { useSchema } from '../query/useSchema';

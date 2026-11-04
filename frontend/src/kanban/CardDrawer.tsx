@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input,
-  Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, SimpleGrid,
-  Skeleton, Spinner, Text, Textarea, Tooltip, useBreakpointValue, VStack,
+  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage } from '../api';
 import { Markdown } from '../dashboards/Markdown';

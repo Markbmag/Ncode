@@ -1,5 +1,8 @@
 /** The Verified badge and the admins' "Mark as verified" action (M11), for questions and dashboards. */
-import { Badge, MenuItem, Tooltip, useToast } from '@chakra-ui/react';
+import {
+  Badge, MenuItem, useToast,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage } from '../api';
 import { BadgeCheckIcon } from '../icons';
 import { useWorkspace } from '../workspace/useWorkspace';

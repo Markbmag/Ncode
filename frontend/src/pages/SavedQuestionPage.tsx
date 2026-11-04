@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Skeleton, Text, Tooltip, VStack, useToast } from '@chakra-ui/react';
+import {
+  Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Skeleton, Text, VStack, useToast,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';

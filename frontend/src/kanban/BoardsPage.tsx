@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Badge, Box, Button, Flex, Heading, HStack, SimpleGrid, Skeleton, Tab, TabList, Tabs, Text, Tooltip, useToast, VStack } from '@chakra-ui/react';
+import {
+  Badge, Box, Button, Flex, Heading, HStack, SimpleGrid, Skeleton, Tab, TabList, Tabs, Text, useToast, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';

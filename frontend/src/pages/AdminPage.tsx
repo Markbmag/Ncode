@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Select,
-  SimpleGrid, Skeleton, Tab, TabList, TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack,
+  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Select, SimpleGrid, Skeleton, Tab, TabList, TabPanel, TabPanels, Table, Tabs, Tbody, Td, Text, Th, Thead, Tr, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { Panel } from '../admin/Panel';

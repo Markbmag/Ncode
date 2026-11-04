@@ -1,8 +1,8 @@
 import { useContext, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton,
-  Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, Tooltip, useColorMode, useToast,
+  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Spinner, Text, useColorMode, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import { apiErrorMessageAsync, http } from '../api';
 import { Visualization } from '../components/viz/Visualization';

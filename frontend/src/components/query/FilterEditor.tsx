@@ -1,4 +1,7 @@
-import { Badge, Box, Button, ButtonGroup, Checkbox, Flex, HStack, IconButton, Input, Select, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Badge, Box, Button, ButtonGroup, Checkbox, Flex, HStack, IconButton, Input, Select, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import type { ColumnType } from '../../api';
 import { PlusIcon, SlidersIcon, XIcon } from '../../icons';
 import { PARAM_OPS, paramName } from '../../library/params';

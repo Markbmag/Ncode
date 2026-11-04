@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton,
-  MenuDivider, MenuItem, MenuList, Select, Skeleton, Text, Textarea, Tooltip, useBreakpointValue, useDisclosure, useToast,
+  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Select, Skeleton, Text, Textarea, useBreakpointValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ReactGridLayout, { useContainerWidth, verticalCompactor } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';

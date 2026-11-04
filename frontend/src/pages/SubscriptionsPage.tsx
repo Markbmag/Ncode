@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import {
-  Badge, Box, Button, Flex, HStack, IconButton, Link, Skeleton, Switch, Text, Tooltip, VStack, useToast,
+  Badge, Box, Button, Flex, HStack, IconButton, Link, Skeleton, Switch, Text, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { t, tn } from '../i18n/index.ts';

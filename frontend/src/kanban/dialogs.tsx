@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
-  Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader,
-  ModalOverlay, Select, Tab, TabList, Tabs, Text, Textarea, Tooltip, useToast, VStack,
+  Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Tab, TabList, Tabs, Text, Textarea, useToast, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage } from '../api';
 import { ArchiveIcon, PlusIcon, TrashIcon, UsersIcon } from '../icons';
 import { t } from '../i18n/index.ts';

@@ -1,4 +1,7 @@
-import { Badge, Box, Flex, HStack, Progress, Text, Tooltip, VStack } from '@chakra-ui/react';
+import {
+  Badge, Box, Flex, HStack, Progress, Text, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import type { FederationInfo } from '../api';
 import { t, tn } from '../i18n/index.ts';
 import { AlertIcon } from '../icons';

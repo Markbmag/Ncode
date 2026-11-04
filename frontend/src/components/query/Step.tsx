@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Box, Flex, HStack, IconButton, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box, Flex, HStack, IconButton, Text,
+} from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import { EyeIcon } from '../../icons';
 import { PREVIEW_ROWS } from '../../query/preview';
 import { t } from '../../i18n/index.ts';

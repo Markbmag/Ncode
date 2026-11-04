@@ -1,4 +1,7 @@
-import { Badge, Box, Flex, HStack, SimpleGrid, Table, Tbody, Td, Text, Th, Thead, Tooltip, Tr, VStack } from '@chakra-ui/react';
+import {
+  Badge, Box, Flex, HStack, SimpleGrid, Table, Tbody, Td, Text, Th, Thead, Tr, VStack,
+} from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { locale, t, tn } from '../i18n/index.ts';
 import { AlertIcon } from '../icons';
 import { humanize } from '../query/draft';

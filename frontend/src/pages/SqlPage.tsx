@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SMART_DATES_DEFAULT, SMART_DATES_KEY } from '../lib/format';
 import {
-  Badge, Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Select, Skeleton, Text, Tooltip, VStack, useBreakpointValue,
+  Badge, Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Select, Skeleton, Text, VStack, useBreakpointValue,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage, http } from '../api';

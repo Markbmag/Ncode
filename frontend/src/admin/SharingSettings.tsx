@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
-  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Flex, HStack, IconButton, Input, Link, Skeleton, Switch, Text, Tooltip, VStack,
-  useToast,
+  Alert, AlertIcon as ChakraAlertIcon, Badge, Box, Button, Flex, HStack, IconButton, Input, Link, Skeleton, Switch, Text, VStack, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { CopyIcon, GlobeIcon, KeyIcon, LayoutIcon, ChartIcon, TrashIcon } from '../icons';

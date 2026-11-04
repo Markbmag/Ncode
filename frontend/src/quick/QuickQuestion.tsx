@@ -9,9 +9,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Input, Select, Skeleton, Switch, Text, Tooltip, VStack, Wrap, WrapItem,
-  useBreakpointValue,
+  Alert, AlertIcon, Box, Button, Flex, HStack, IconButton, Input, Select, Skeleton, Switch, Text, VStack, Wrap, WrapItem, useBreakpointValue,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage, http } from '../api';
 import { ResultView } from '../components/data/ResultView';
 import { Split } from '../components/layout/Split';

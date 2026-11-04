@@ -1,8 +1,8 @@
 import { Suspense, useState } from 'react';
 import {
-  Box, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, InputRightElement, Menu, MenuButton, MenuDivider, MenuGroup, MenuItem, MenuList,
-  Skeleton, Text, Tooltip, useBreakpointValue, useColorMode,
+  Box, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, InputRightElement, Menu, MenuButton, MenuDivider, MenuGroup, MenuItem, MenuList, Skeleton, Text, useBreakpointValue, useColorMode,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, Outlet, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AccountDialog } from '../account/AccountDialog';
 import { ChevronDownIcon, LogOutIcon, MailIcon, MoonIcon, SearchIcon, SunIcon, XIcon } from '../icons';

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider,
-  MenuItem, MenuList, Skeleton, Stack, Text, Tooltip, VStack, useDisclosure, useToast,
+  Badge, Box, Button, Flex, HStack, IconButton, Input, InputGroup, InputLeftElement, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Skeleton, Stack, Text, VStack, useDisclosure, useToast,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { PageHeader } from '../components/PageHeader';

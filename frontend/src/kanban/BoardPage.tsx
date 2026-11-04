@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton,
-  ModalContent, ModalHeader, ModalOverlay, Portal, Select, Skeleton, Text, Textarea, Tooltip, useToast, VStack,
+  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Portal, Select, Skeleton, Text, Textarea, useToast, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../components/Tooltip';
 import {
   closestCorners, DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useDroppable, useSensor, useSensors,
 } from '@dnd-kit/core';

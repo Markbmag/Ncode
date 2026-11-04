@@ -1,7 +1,7 @@
 import {
-  Box, Button, ButtonGroup, Checkbox, Divider, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Switch,
-  Text, Tooltip, VStack,
+  Box, Button, ButtonGroup, Checkbox, Divider, Flex, FormControl, FormLabel, HStack, IconButton, Input, Select, SimpleGrid, Switch, Text, VStack,
 } from '@chakra-ui/react';
+import { Tooltip } from '../Tooltip';
 import type { ReactNode } from 'react';
 import type { ResultColumn } from '../../api';
 import { PlusIcon, XIcon } from '../../icons';
