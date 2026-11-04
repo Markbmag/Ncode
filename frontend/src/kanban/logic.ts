@@ -523,3 +523,82 @@ export function shrunkName(name: string): string {
 export function photoTaskTitle(now: Date, word: string): string {
   return `${word} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
+
+// ---------------------------------------------------------------- calendar (K3)
+
+/** "2026-11-04" from a year, a month (0-11) and a day; days past the month roll over like Date does. */
+export function isoOf(year: number, month: number, day: number): string {
+  const d = new Date(Date.UTC(year, month, day));
+  return d.toISOString().slice(0, 10);
+}
+
+/** The weeks shown for a month: Monday first, whole weeks, 4 to 6 rows of 7 ISO dates. */
+export function monthGrid(year: number, month: number): string[][] {
+  const first = new Date(Date.UTC(year, month, 1));
+  const back = (first.getUTCDay() + 6) % 7; // days since Monday
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const rows = Math.ceil((back + daysInMonth) / 7);
+  return Array.from({ length: rows }, (_, w) => Array.from({ length: 7 }, (_, d) => isoOf(year, month, 1 - back + w * 7 + d)));
+}
+
+/** The month before or after: { year, month } with month 0-11. */
+export function shiftMonth(year: number, month: number, by: number): { year: number; month: number } {
+  const m = year * 12 + month + by;
+  return { year: Math.floor(m / 12), month: ((m % 12) + 12) % 12 };
+}
+
+/** Where a task sits on the calendar: its due date, else its start date, else nowhere. */
+export function calendarDate(card: Pick<CardSummary, 'due_date' | 'start_date'>): string | null {
+  return card.due_date ?? card.start_date ?? null;
+}
+
+/** Tasks by their calendar date, each day in board order (priority first, then position). */
+export function tasksByDate<T extends CardSummary>(cards: T[]): Map<string, T[]> {
+  const rank: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const out = new Map<string, T[]>();
+  for (const c of cards) {
+    const date = calendarDate(c);
+    if (!date) continue;
+    if (!out.has(date)) out.set(date, []);
+    out.get(date)!.push(c);
+  }
+  for (const list of out.values()) list.sort((a, b) => rank[a.priority] - rank[b.priority] || byPosition(a, b));
+  return out;
+}
+
+export interface AgendaDay<T> {
+  date: string | null; // null: the "late" group
+  cards: T[];
+}
+
+/** The phone's day-by-day list for a month: late open tasks first (from before today), then each day
+ * of the month that has tasks; today is always listed so the list starts somewhere familiar. */
+export function agenda<T extends CardSummary>(cards: T[], year: number, month: number, today: string, isDone: (c: T) => boolean): AgendaDay<T>[] {
+  const first = isoOf(year, month, 1);
+  const last = isoOf(year, month + 1, 0);
+  const late = cards.filter((c) => !isDone(c) && c.due_date !== null && c.due_date < today && c.due_date < first);
+  const byDate = tasksByDate(cards.filter((c) => {
+    const d = calendarDate(c);
+    return d !== null && d >= first && d <= last;
+  }));
+  if (today >= first && today <= last && !byDate.has(today)) byDate.set(today, []);
+  const days = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, list]) => ({ date, cards: list }));
+  return late.length ? [{ date: null, cards: late }, ...days] : days;
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const asDate = (iso: string) => new Date(`${iso}T12:00:00`);
+
+/** "November 2026" / "Ноябрь 2026" */
+export function monthTitle(year: number, month: number): string {
+  return cap(new Intl.DateTimeFormat(locale(), { month: 'long', year: 'numeric' }).format(new Date(year, month, 15)).replace(/\s*г\.$/, ''));
+}
+
+/** "Wednesday 4 November" / "Среда, 4 ноября" */
+export function dayTitle(iso: string): string {
+  return cap(new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long' }).format(asDate(iso)));
+}
+
+const WEEK_DAYS = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']; // a Monday ... Sunday
+/** Mon ... Sun / Пн ... Вс */
+export const weekdayNames = () => WEEK_DAYS.map((d) => cap(new Intl.DateTimeFormat(locale(), { weekday: 'short' }).format(asDate(d)).replace('.', '')));

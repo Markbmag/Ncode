@@ -16,14 +16,15 @@ import { apiErrorMessage } from '../api';
 import { ArchiveIcon, CheckIcon, ChevronDownIcon, EyeIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, updateColumn, useArchivedCards, useBoard } from './api';
+import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
+import { CalendarView } from './CalendarView';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
-import { ArrowLeftIcon, CameraIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
+import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
-  photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
+  dayTitle, photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
 } from './logic';
 import type { CardFilter } from './logic';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
@@ -537,6 +538,36 @@ function FirstSteps({ firstColumn, doneColumn }: { firstColumn: string; doneColu
   );
 }
 
+/** Board | Calendar (K3): the same tasks as stages or on their dates. */
+function ViewSwitch({ view, onChange, wide = false }: { view: 'board' | 'calendar'; onChange: (v: 'board' | 'calendar') => void; wide?: boolean }) {
+  const items = [
+    { key: 'board' as const, label: t('Board'), icon: <KanbanIcon boxSize={4} /> },
+    { key: 'calendar' as const, label: t('Calendar'), icon: <CalendarIcon boxSize={4} /> },
+  ];
+  return (
+    <HStack spacing={0} bg="chipBg" borderRadius="lg" p="3px" role="group" aria-label={t('Show the board as')} data-testid="view-switch" w={wide ? '100%' : undefined}>
+      {items.map((it) => (
+        <Button
+          key={it.key}
+          flex={wide ? 1 : undefined}
+          size="sm"
+          h={wide ? '40px' : '36px'}
+          fontSize="md"
+          variant={view === it.key ? 'solid' : 'ghost'}
+          bg={view === it.key ? 'cardBg' : 'transparent'}
+          boxShadow={view === it.key ? 'card' : undefined}
+          leftIcon={it.icon}
+          aria-pressed={view === it.key}
+          onClick={() => onChange(it.key)}
+          data-testid={`view-${it.key}`}
+        >
+          {it.label}
+        </Button>
+      ))}
+    </HStack>
+  );
+}
+
 // ---------------------------------------------------------------- the page
 
 function BoardSkeleton() {
@@ -561,7 +592,8 @@ export default function BoardPage() {
   const params = useParams();
   const boardId = Number(params.board);
   const cardId = params.card ? Number(params.card) : null;
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
+  const view: 'board' | 'calendar' = search.get('view') === 'calendar' ? 'calendar' : 'board';
   const q = search.get('q') ?? '';
   const navigate = useNavigate();
   const toast = useToast();
@@ -784,6 +816,43 @@ export default function BoardPage() {
     [boardId, refresh, navigate, fail, boardSearch],
   );
 
+  // ------------------------------------------------ calendar (K3): a task's date, with Undo
+  const saveDates = useCallback(
+    async (id: number, dates: { due_date: string | null; start_date: string | null }): Promise<boolean> => {
+      queryClient.setQueryData<BoardDetail>(kanbanKeys.board(boardId), (old) => (old ? { ...old, cards: old.cards.map((c) => (c.id === id ? { ...c, ...dates } : c)) } : old));
+      try {
+        await updateCard(id, dates);
+        return true;
+      } catch (err) {
+        fail(err, t('Could not save the change'));
+        return false;
+      } finally {
+        refresh();
+      }
+    },
+    [queryClient, boardId, refresh, fail],
+  );
+  const setDate = useCallback(
+    (card: CardSummary, date: string | null) => {
+      const before = { due_date: card.due_date, start_date: card.start_date };
+      // a start after the new due date would not make sense: it moves along; "no date" clears both
+      const start = date === null ? null : card.start_date && card.start_date > date ? date : card.start_date;
+      void saveDates(card.id, { due_date: date, start_date: start }).then((ok) => {
+        if (!ok) return;
+        notify(date ? t('“{title}” is now due {date}', { title: card.title, date: dayTitle(date) }) : t('“{title}” has no date now', { title: card.title }), {
+          undo: () => void saveDates(card.id, before),
+        });
+      });
+    },
+    [saveDates, notify],
+  );
+  const setView = (next: 'board' | 'calendar') => {
+    const params = new URLSearchParams(search);
+    if (next === 'calendar') params.set('view', 'calendar');
+    else params.delete('view');
+    setSearch(params, { replace: true });
+  };
+
   // ------------------------------------------------ stages and tasks
   const addCard = useCallback(
     async (column: Column, title: string) => {
@@ -887,6 +956,9 @@ export default function BoardPage() {
             </HStack>
           </Tooltip>
           <Flex flex={1} justify="flex-end" align="center" gap={2}>
+            <Box display={{ base: 'none', md: 'block' }}>
+              <ViewSwitch view={view} onChange={setView} />
+            </Box>
             <Tooltip label={t('Who works on this board')} hasArrow>
               <Button variant="ghost" onClick={() => setDialog('members')} data-testid="members-button" leftIcon={memberNames.length ? <AvatarStack names={memberNames} max={3} size="sm" /> : <UsersIcon boxSize={5} />} px={2}>
                 <Text as="span" display={{ base: 'none', lg: 'inline' }}>
@@ -919,11 +991,27 @@ export default function BoardPage() {
             {board.description}
           </Text>
         )}
+        <Box display={{ base: 'block', md: 'none' }} px={3} pb={1}>
+          <ViewSwitch view={view} onChange={setView} wide />
+        </Box>
         <FilterBar filter={filter} setFilter={setFilter} board={detail} me={me} />
       </Box>
 
-      {canEdit && totalCards === 0 && columns.length > 0 && <FirstSteps firstColumn={columns[0].name} doneColumn={doneColumn.name} />}
+      {view === 'board' && canEdit && totalCards === 0 && columns.length > 0 && <FirstSteps firstColumn={columns[0].name} doneColumn={doneColumn.name} />}
 
+      {view === 'calendar' && (
+        <Box flex={1} minH={0} pt={2}>
+          <CalendarView
+            cards={columns.flatMap((c) => (visible[c.id] ?? []).map((id) => cardsById.get(id)).filter((x): x is CardSummary => Boolean(x)))}
+            columns={columns}
+            today={today}
+            canEdit={canEdit}
+            onOpen={openCard}
+            onSetDate={setDate}
+          />
+        </Box>
+      )}
+      {view === 'board' && (
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -982,6 +1070,7 @@ export default function BoardPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
       {cardId !== null && (
         <CardDrawer
