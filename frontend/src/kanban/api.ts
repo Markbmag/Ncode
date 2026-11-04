@@ -1,7 +1,7 @@
 /** Ncode - Kanban: calls to /api/kanban/* and their react-query cache keys. */
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
-import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, MyTasks, Priority, Role } from './types';
+import type { BoardDetail, BoardSummary, Card, Column, Label, MyTasks, Priority, Repeat, Role } from './types';
 
 const BASE = '/api/kanban';
 
@@ -110,6 +110,7 @@ export interface CardInput {
   assignees?: number[];
   labels?: number[];
   archived?: boolean;
+  repeat?: Repeat | null;
 }
 
 export const createCard = async (boardId: number, body: CardInput & { column_id: number; title: string; position?: number }) =>
@@ -118,7 +119,16 @@ export const createCard = async (boardId: number, body: CardInput & { column_id:
 export const moveCardToTop = async (id: number, column_id: number) => (await http.post<Card>(`${BASE}/cards/${id}/move`, { column_id })).data;
 export const updateCard = async (id: number, body: CardInput) => (await http.patch<Card>(`${BASE}/cards/${id}`, body)).data;
 export const moveCard = async (id: number, column_id: number, position: number) =>
-  (await http.post<CardSummary>(`${BASE}/cards/${id}/move`, { column_id, position })).data;
+  (await http.post<Card>(`${BASE}/cards/${id}/move`, { column_id, position })).data;
+export const addCardLink = async (cardId: number, kind: 'dashboard' | 'question', target_id: number) =>
+  (await http.post<Card>(`${BASE}/cards/${cardId}/links`, { kind, target_id })).data;
+export const removeCardLink = async (linkId: number) => (await http.delete<Card>(`${BASE}/links/${linkId}`)).data;
+/** Undo of a move to done that made the next one of a repeating task: the copy is hidden again and the
+ * task repeats as before. */
+export async function undoRepeat(cardId: number, repeat: Repeat, nextId: number) {
+  await updateCard(nextId, { archived: true });
+  await updateCard(cardId, { repeat });
+}
 export const deleteCard = async (id: number) => {
   await http.delete(`${BASE}/cards/${id}`);
 };

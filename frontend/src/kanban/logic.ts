@@ -3,7 +3,7 @@
  * Positions between neighbours, filters, progress, due dates, colours and readable history.
  */
 import { locale, t, tn } from '../i18n/index.ts';
-import type { BoardEvent, CardSummary, Column, GroupRef, HistoryEntry, Label, Person, Priority, UserRef } from './types.ts';
+import type { BoardEvent, CardSummary, Column, GroupRef, HistoryEntry, Label, Person, Priority, Repeat, UserRef } from './types.ts';
 
 // ---------------------------------------------------------------- positions
 
@@ -340,6 +340,8 @@ function cardChange(field: string, value: unknown): string {
       return t('changed the colour');
     case 'is_done':
       return next ? t('made its tasks count as done') : t('made its tasks no longer count as done');
+    case 'repeat':
+      return next ? t('made it repeat {how}', { how: repeatLabel(str(next) as Repeat).toLowerCase() }) : t('stopped it repeating');
     default:
       return t('changed {field}', { field });
   }
@@ -396,6 +398,12 @@ export function historySentence(entry: Pick<HistoryEntry, 'user' | 'action' | 'd
       return said(user, t('edited a comment'));
     case 'comment_deleted':
       return said(user, t('deleted a comment'));
+    case 'card_repeated':
+      return said(user, t('made the next one of this repeating task, due {date}', { date: shortDate(str(d.due)) }));
+    case 'link_added':
+      return said(user, d.kind === 'question' ? t('linked the question “{name}”', { name: str(d.name) }) : t('linked the dashboard “{name}”', { name: str(d.name) }));
+    case 'link_removed':
+      return said(user, t('removed a link to Search & BI'));
     case 'attachment_added':
       return said(user, t('attached {file}', { file: str(d.filename) || t('a file') }));
     case 'attachment_deleted':
@@ -639,4 +647,10 @@ export function myGroupTitle(key: MyGroupKey): string {
     nodate: t('No date'),
     done: t('Done this week'),
   }[key];
+}
+
+// ---------------------------------------------------------------- repeating tasks (K3)
+
+export function repeatLabel(r: Repeat): string {
+  return { daily: t('Every day'), weekdays: t('Every working day (Mon–Fri)'), weekly: t('Every week'), monthly: t('Every month') }[r];
 }

@@ -75,6 +75,20 @@ export interface CardSummary {
   completed_at: number | null;
   updated_at: number;
   archived?: boolean;
+  repeat?: Repeat | null; // K3
+}
+
+/** K3: how often a task comes back once it is done. */
+export type Repeat = 'daily' | 'weekdays' | 'weekly' | 'monthly';
+export const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly'];
+
+/** K3: a task's link to a Search & BI dashboard or question; name null when the viewer may not open it. */
+export interface CardLink {
+  id: number;
+  kind: 'dashboard' | 'question';
+  target_id: number;
+  name: string | null;
+  url: string;
 }
 
 export interface ChecklistItem {
@@ -122,6 +136,8 @@ export interface Card extends CardSummary {
   comments_list: Comment[];
   attachments_list: Attachment[];
   history: HistoryEntry[];
+  links?: CardLink[];
+  next?: { id: number; due_date: string; column: string }; // after moving a repeating task to done
 }
 
 export interface BoardDetail {

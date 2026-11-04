@@ -17,11 +17,15 @@
     PATCH  /api/kanban/labels/{id}               {name?, color?} -> label
     DELETE /api/kanban/labels/{id}
     POST   /api/kanban/boards/{id}/cards         {column_id, title, description?, priority?, start_date?, due_date?,
-                                                  assignees?, labels?, position?} -> card (at the top by default)
+                                                  assignees?, labels?, position?, repeat?} -> card (at the top by default)
     GET    /api/kanban/cards/{id}                -> card
     PATCH  /api/kanban/cards/{id}                {title?, description?, priority?, start_date?, due_date?, assignees?,
-                                                  labels?, archived?} -> card
-    POST   /api/kanban/cards/{id}/move           {column_id, position?} -> card
+                                                  labels?, archived?, repeat?} -> card
+                                                 repeat: daily | weekdays | weekly | monthly | null (K3)
+    POST   /api/kanban/cards/{id}/move           {column_id, position?} -> card (+ "next": {id, due_date, column}
+                                                 when a repeating card is done and its next one was made, K3)
+    POST   /api/kanban/cards/{id}/links          {kind: "dashboard" | "question", target_id} -> card (K3)
+    DELETE /api/kanban/links/{id}                -> card
     DELETE /api/kanban/cards/{id}                an archived card, with its files
     POST   /api/kanban/cards/{id}/checklist      {text} -> card
     PATCH  /api/kanban/checklist/{id}            {text?, done?, position?} -> card
@@ -64,7 +68,7 @@ from .attachments import (
     HEAD, INLINE, THUMB_MAX, FileStore, clean_filename, content_matches, extension, new_name, thumb_kind, type_for,
 )
 from .events import BoardEvents
-from .store import KanbanStore
+from .store import KanbanStore, LinkNames
 
 PING_SEC = 30
 SAMPLE = 8192  # bytes of a text file checked for binary content
@@ -78,6 +82,7 @@ SAFE_HEADERS = {
 Color = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(#[0-9a-fA-F]{6}|[a-z]{2,10}(\.[0-9]{2,3})?)$")]
 Priority = Literal["low", "normal", "high", "urgent"]
 Position = Annotated[float, Field(allow_inf_nan=False)]
+Repeat = Literal["daily", "weekdays", "weekly", "monthly"]
 
 
 def _text(max_len: int) -> Any:
@@ -145,6 +150,7 @@ class CardIn(_In):
     assignees: list[int] = Field(default_factory=list, max_length=50)
     labels: list[int] = Field(default_factory=list, max_length=50)
     position: Position | None = None
+    repeat: Repeat | None = None
 
 
 class CardPatch(_In):
@@ -156,6 +162,12 @@ class CardPatch(_In):
     assignees: list[int] | None = Field(default=None, max_length=50)
     labels: list[int] | None = Field(default=None, max_length=50)
     archived: bool | None = None
+    repeat: Repeat | None = None        # null: no longer repeats
+
+
+class LinkIn(_In):
+    kind: Literal["dashboard", "question"]
+    target_id: int
 
 
 class MoveIn(_In):
@@ -205,11 +217,12 @@ def register_kanban_routes(
     settings: Settings,
     current_user: Callable[..., User],
     user_from_token: Callable[[str | None], User | None],
+    link_names: LinkNames | None = None,
 ) -> KanbanStore:
     files = FileStore(Path(app_db.path).parent / "kanban")
     files.sweep_partial()
     events = BoardEvents()
-    store = KanbanStore(app_db.engine, files, events)
+    store = KanbanStore(app_db.engine, files, events, link_names)
     router = APIRouter(prefix="/api/kanban", tags=["kanban"])
 
     # ------------------------------------------------------------------ boards
@@ -301,6 +314,14 @@ def register_kanban_routes(
             if key in changes and changes[key] is None:
                 del changes[key]
         return store.update_card(user, card_id, changes)
+
+    @router.post("/cards/{card_id}/links")
+    def add_link(card_id: int, body: LinkIn, user: User = Depends(current_user)):
+        return store.add_link(user, card_id, body.kind, body.target_id)
+
+    @router.delete("/links/{link_id}")
+    def remove_link(link_id: int, user: User = Depends(current_user)):
+        return store.remove_link(user, link_id)
 
     @router.post("/cards/{card_id}/move")
     def move_card(card_id: int, body: MoveIn, user: User = Depends(current_user)):

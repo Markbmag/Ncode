@@ -1,4 +1,4 @@
-"""Kanban tables (migration 0010). In the app's one MetaData so the migration test compares them."""
+"""Kanban tables (migrations 0010, 0012). In the app's one MetaData so the migration test compares them."""
 
 from __future__ import annotations
 
@@ -64,6 +64,7 @@ cards_table = Table(
     Column("position", Float, nullable=False),
     Column("archived", Boolean, nullable=False, default=False),
     Column("completed_at", Float),
+    Column("repeat", String(16)),                    # K3: daily | weekdays | weekly | monthly (migration 0012)
     Column("created_by", Integer),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
@@ -135,4 +136,15 @@ activity_table = Table(  # history: who did what, when
     Column("created_at", Float, nullable=False),
     Index("ix_kanban_activity_board_time", "board_id", "created_at"),
     Index("ix_kanban_activity_card_time", "card_id", "created_at"),
+)
+
+card_links_table = Table(  # K3: a task points at a Search & BI dashboard or question (migration 0012)
+    "kanban_card_links",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("card_id", Integer, ForeignKey("kanban_cards.id"), nullable=False, index=True),
+    Column("kind", String(16), nullable=False),      # "dashboard" | "question"
+    Column("target_id", Integer, nullable=False),
+    Column("added_by", Integer),
+    Column("created_at", Float, nullable=False),
 )

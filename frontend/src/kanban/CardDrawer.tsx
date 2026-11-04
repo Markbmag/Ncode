@@ -1,31 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
+  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, Select, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, DownloadIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../icons';
 import { t } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import {
-  addChecklistItem, addComment, deleteAttachment, deleteCard, deleteChecklistItem, deleteComment, downloadAttachment, kanbanKeys, updateCard,
-  updateChecklistItem, updateComment, useCard, useFileUrl,
+  addCardLink, addChecklistItem, addComment, deleteAttachment, deleteCard, deleteChecklistItem, deleteComment, downloadAttachment, kanbanKeys, updateCard,
+  removeCardLink, updateChecklistItem, updateComment, useCard, useFileUrl,
 } from './api';
 import type { CardInput } from './api';
 import {
-  AlignLeftIcon, ArrowDownIcon, ArrowUpIcon, CalendarIcon, CameraIcon, FileIcon, FlagIcon, HistoryIcon, ListChecksIcon, MessageIcon, PaperclipIcon, TagIcon,
-  UserIcon,
+  AlignLeftIcon, ArrowDownIcon, ArrowUpIcon, BarChartIcon, CalendarIcon, CameraIcon, FileIcon, FlagIcon, HistoryIcon, ListChecksIcon, MessageIcon, PaperclipIcon, TagIcon,
+  LinkIcon, RepeatIcon, UserIcon,
 } from './icons';
 import {
   byPosition, colorHex, dueState, dueText, formatSize, fullTime, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
-  priorityLabel, progressOf, progressText, timeAgo, todayIso, UPLOAD_ACCEPT, withAlpha,
+  priorityLabel, progressOf, progressText, repeatLabel, timeAgo, todayIso, UPLOAD_ACCEPT, withAlpha,
 } from './logic';
+import { LinkPicker } from './LinkPicker';
 import { LabelChip, PersonAvatar, PlainText, ProgressBar } from './parts';
 import { attachFile } from './upload';
-import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column } from './types';
-import { PRIORITIES } from './types';
+import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column, Repeat } from './types';
+import { PRIORITIES, REPEATS } from './types';
 import { useNotify } from './useNotify';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -235,6 +237,8 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
       return false;
     }
   };
+  const [picking, setPicking] = useState(false); // K3: choosing a Search & BI link
+  const firstOpen = columns.find((c) => !c.is_done);
   const patch = (body: CardInput) => {
     queryClient.setQueryData<Card>(key, (old) => (old ? ({ ...old, ...body } as Card) : old));
     return run(() => updateCard(card.id, body));
@@ -518,6 +522,32 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                 {dueText(card.due_date, today, done)}
               </Text>
             )}
+            {/* K3: a task that comes back */}
+            <Box mt={3}>
+              <Text as="label" htmlFor="card-repeat" fontWeight={600} display="flex" alignItems="center" gap={1.5} mb={1}>
+                <RepeatIcon boxSize={4} color="mutedText" />
+                {t('Repeats')}
+              </Text>
+              <Select
+                id="card-repeat"
+                value={card.repeat ?? ''}
+                isDisabled={!canEdit}
+                onChange={(e) => void patch({ repeat: (e.target.value || null) as Repeat | null })}
+                data-testid="card-repeat"
+              >
+                <option value="">{t('Does not repeat')}</option>
+                {REPEATS.map((r) => (
+                  <option key={r} value={r}>
+                    {repeatLabel(r)}
+                  </option>
+                ))}
+              </Select>
+              {card.repeat && firstOpen && (
+                <Text mt={1.5} fontSize="sm" color="mutedText" data-testid="repeat-hint">
+                  {t('When it is done, the next one appears in “{stage}” with its new date, the same people and steps.', { stage: firstOpen.name })}
+                </Text>
+              )}
+            </Box>
           </Section>
 
           {/* priority and labels */}
@@ -669,6 +699,48 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
             </VStack>
             {!card.attachments_list.length && !canEdit && <Text color="mutedText">{t('No photos or files.')}</Text>}
           </Section>
+
+          {/* K3: links to Search & BI */}
+          {(canEdit || (card.links?.length ?? 0) > 0) && (
+            <Section icon={<BarChartIcon boxSize={5} />} title={t('Search & BI')} testId="links">
+              <VStack align="stretch" spacing={2}>
+                {(card.links ?? []).map((link) => (
+                  <Flex key={link.id} align="center" gap={2} p={2.5} borderRadius="lg" bg="chipBg" data-testid="card-link">
+                    <LinkIcon boxSize={4} color="mutedText" flexShrink={0} />
+                    <Box flex={1} minW={0}>
+                      <Text fontSize="sm" color="mutedText">
+                        {link.kind === 'dashboard' ? t('Dashboard') : t('Question')}
+                      </Text>
+                      {link.name ? (
+                        <Text as={RouterLink} to={link.url} fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} textDecoration="underline" noOfLines={2} data-testid="card-link-open">
+                          {link.name}
+                        </Text>
+                      ) : (
+                        <Text color="mutedText">{link.kind === 'dashboard' ? t('A dashboard you cannot open') : t('A question you cannot open')}</Text>
+                      )}
+                    </Box>
+                    {canEdit && (
+                      <IconButton aria-label={t('Remove the link')} size="sm" variant="ghost" icon={<XIcon boxSize={4} />} onClick={() => void run(() => removeCardLink(link.id))} data-testid="card-link-remove" />
+                    )}
+                  </Flex>
+                ))}
+                {canEdit && (
+                  <Button variant="subtle" leftIcon={<PlusIcon boxSize={4} />} alignSelf="flex-start" onClick={() => setPicking(true)} data-testid="add-link">
+                    {t('Link a dashboard or question')}
+                  </Button>
+                )}
+              </VStack>
+              {picking && (
+                <LinkPicker
+                  onClose={() => setPicking(false)}
+                  onPick={(kind, id) => {
+                    setPicking(false);
+                    void run(() => addCardLink(card.id, kind, id));
+                  }}
+                />
+              )}
+            </Section>
+          )}
 
           {/* comments */}
           <Section icon={<MessageIcon boxSize={5} />} title={t('Comments')} testId="comments">

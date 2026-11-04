@@ -16,7 +16,7 @@ import { apiErrorMessage } from '../api';
 import { ArchiveIcon, CheckIcon, ChevronDownIcon, EyeIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
+import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, undoRepeat, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
 import { CalendarView } from './CalendarView';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
@@ -28,7 +28,7 @@ import {
 } from './logic';
 import type { CardFilter } from './logic';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
-import type { BoardDetail, BoardEvent, CardSummary, Column, Priority } from './types';
+import type { BoardDetail, BoardEvent, Card, CardSummary, Column, Priority } from './types';
 import { PRIORITIES } from './types';
 import { useBoardSocket } from './useBoardSocket';
 import { useNotify } from './useNotify';
@@ -680,14 +680,13 @@ export default function BoardPage() {
 
   /** Moves a task; the board shows it at once, before the server answers. */
   const shift = useCallback(
-    async (id: number, columnId: number, position: number): Promise<boolean> => {
+    async (id: number, columnId: number, position: number): Promise<Card | null> => {
       queryClient.setQueryData<BoardDetail>(kanbanKeys.board(boardId), (old) => (old ? { ...old, cards: applyMove(old.cards, id, columnId, position, doneColumns) } : old));
       try {
-        await moveCard(id, columnId, position);
-        return true;
+        return await moveCard(id, columnId, position);
       } catch (err) {
         fail(err, t('Could not move the task'));
-        return false;
+        return null;
       } finally {
         refresh();
       }
@@ -702,10 +701,18 @@ export default function BoardPage() {
       if (!card) return;
       const before = { column: card.column_id, position: card.position };
       const target = columns.find((c) => c.id === columnId);
-      void shift(id, columnId, position).then((ok) => {
-        if (ok && before.column !== columnId) {
-          notify(t('Moved “{title}” to {column}', { title: card.title, column: target?.name ?? '' }), { undo: () => void shift(id, before.column, before.position) });
+      void shift(id, columnId, position).then((res) => {
+        if (!res || before.column === columnId) return;
+        const next = res.next;
+        if (next && card.repeat) {
+          // K3: a repeating task came back; Undo also takes the new one away again
+          const repeat = card.repeat;
+          notify(t('Moved “{title}” to {column}. It repeats: the next one is due {date}.', { title: card.title, column: target?.name ?? '', date: dayTitle(next.due_date) }), {
+            undo: () => void undoRepeat(id, repeat, next.id).then(() => shift(id, before.column, before.position)),
+          });
+          return;
         }
+        notify(t('Moved “{title}” to {column}', { title: card.title, column: target?.name ?? '' }), { undo: () => void shift(id, before.column, before.position) });
       });
     },
     [queryClient, boardId, columns, shift, notify],

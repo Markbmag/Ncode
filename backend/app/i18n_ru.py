@@ -574,6 +574,8 @@ RU: dict[str, str] = {
     # ---------------------------------------------------------------- app/kanban (Ncode - Kanban)
     "Board not found": "Доска не найдена",
     "Card not found": "Карточка не найдена",
+    "Link not found": "Ссылка не найдена",
+    "Unknown link": "Неизвестная ссылка",
     "Column not found": "Колонка не найдена",
     "Label not found": "Метка не найдена",
     "Step not found": "Шаг плана действий не найден",

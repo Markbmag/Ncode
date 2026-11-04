@@ -7,11 +7,11 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { CheckIcon } from '../icons';
 import { t } from '../i18n/index.ts';
-import { kanbanKeys, moveCardToTop, useBoard, useMyTasks } from './api';
+import { kanbanKeys, moveCardToTop, undoRepeat, useBoard, useMyTasks } from './api';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { UserIcon } from './icons';
-import { colorHex, myGroups, myGroupTitle, todayIso } from './logic';
+import { colorHex, dayTitle, myGroups, myGroupTitle, todayIso } from './logic';
 import { EmptyState } from './parts';
 import type { CardSummary, MyTasks } from './types';
 import { useNotify } from './useNotify';
@@ -69,7 +69,15 @@ export default function MyTasksPage() {
       const target = board?.columns.find((c) => c.id === columnId);
       const before = card.column_id;
       try {
-        await moveCardToTop(card.id, columnId);
+        const res = await moveCardToTop(card.id, columnId);
+        const next = res.next;
+        if (next && card.repeat) {
+          const repeat = card.repeat;
+          notify(t('Moved “{title}” to {column}. It repeats: the next one is due {date}.', { title: card.title, column: target?.name ?? '', date: dayTitle(next.due_date) }), {
+            undo: () => void undoRepeat(card.id, repeat, next.id).then(() => moveCardToTop(card.id, before)).then(() => board && refresh(board.id)),
+          });
+          return;
+        }
         notify(t('Moved “{title}” to {column}', { title: card.title, column: target?.name ?? '' }), {
           undo: () => void moveCardToTop(card.id, before).then(() => board && refresh(board.id)),
         });

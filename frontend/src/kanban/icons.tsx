@@ -102,3 +102,5 @@ export const CheckCircleIcon = make(
 );
 export const ArrowUpIcon = make(<path d="m5 12 7-7 7 7M12 19V5" />);
 export const ArrowDownIcon = make(<path d="M12 5v14M19 12l-7 7-7-7" />);
+export const RepeatIcon = make(<path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />);
+export const LinkIcon = make(<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />);
