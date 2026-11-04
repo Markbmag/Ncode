@@ -13,13 +13,19 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 
 ## Tasks
 
-- **+ Add a task** at the top of a stage. Click a task to open it; changes save by themselves.
-- **What needs to be done**, **Who** (several people), **When** (start and due date; late tasks turn
-  red and say "3 days late"), **How important** (Low · Normal · High · Urgent), **Labels**.
+- **+ Add a task** at the top of a stage. Click a task to open it; changes save by themselves
+  ("Saved" shows after each change).
+- At the top: the task's **stage** (tap to move it), a green **Done** button and **×** to close.
+- Then the name and the details (click to change), and one card with the facts: **Who** (several
+  people), **Due** (late tasks turn red and say "3 days late"; *Start date and repeat…* below it),
+  **Importance** (Low · Normal · High · Urgent) and **Labels**.
 - **Steps**: the action plan. Tick steps as they are done; the task and the board show
   "2 of 5 steps done" with a bar.
 - **Photos and files**: *Add photo or file* (on a phone this opens the camera). Up to 15 MB each.
-- **Comments** and **History** (who did what, when) at the bottom.
+- **Comments** at the bottom. **More** under them holds the **History** (who did what, when), the links
+  to Search & BI (they move up when a task has some) and *Remove from the board*.
+- Each step has one **⋯** menu (change the text, move up or down, remove); a photo opens large, with
+  *Download* and *Delete*.
 - Move a task with **Move to…** on the task, or drag it. A note at the bottom offers **Undo**.
 - *Remove from the board* hides a task (it can be brought back from *Hidden tasks*).
 - Descriptions and comments show exactly what was typed; web addresses become links.

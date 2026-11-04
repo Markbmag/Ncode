@@ -12,6 +12,7 @@ test('a weekly task comes back when it is done; Undo takes the new one away', as
   await signIn(page, 'carol', `/kanban/b/${board.id}/c/${card.id}`);
 
   const drawer = page.getByTestId('card-drawer');
+  await drawer.getByTestId('date-more').click(); // start date and repeat sit under the due date
   await drawer.getByTestId('card-repeat').selectOption('weekly');
   await expect(drawer.getByTestId('repeat-hint')).toContainText('the next one appears in “To do”');
   await drawer.getByTestId('checklist-item').locator('label').first().click();
@@ -47,6 +48,7 @@ test('a task links a dashboard; it opens from the task', async ({ page }) => {
   await signIn(page, 'carol', `/kanban/b/${board.id}/c/${card.id}`);
 
   const drawer = page.getByTestId('card-drawer');
+  await drawer.getByTestId('card-more').click(); // no links yet: linking is under "More"
   await drawer.getByTestId('add-link').click();
   await page.getByTestId('link-search').fill(name);
   await page.getByTestId('link-option').filter({ hasText: name }).click();

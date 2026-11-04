@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, Select, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
+  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, Select, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, DownloadIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../icons';
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, DownloadIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../icons';
 import { t } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import {
@@ -16,7 +16,7 @@ import {
 } from './api';
 import type { CardInput } from './api';
 import {
-  AlignLeftIcon, ArrowDownIcon, ArrowUpIcon, BarChartIcon, CalendarIcon, CameraIcon, FileIcon, FlagIcon, HistoryIcon, ListChecksIcon, MessageIcon, PaperclipIcon, TagIcon,
+  ArrowDownIcon, ArrowUpIcon, BarChartIcon, CalendarIcon, CameraIcon, FileIcon, FlagIcon, HistoryIcon, ListChecksIcon, MessageIcon, PaperclipIcon, TagIcon,
   LinkIcon, RepeatIcon, UserIcon,
 } from './icons';
 import {
@@ -34,16 +34,33 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 function Section({ icon, title, right, children, testId }: { icon: ReactNode; title: string; right?: ReactNode; children: ReactNode; testId?: string }) {
   return (
-    <Box as="section" data-testid={testId} borderTop="1px solid" borderColor="lineColor" pt={5}>
-      <Flex align="center" gap={2.5} mb={3}>
+    <Box as="section" data-testid={testId}>
+      <Flex align="center" gap={2} mb={2.5} minH="32px">
         <Box color="brand.400">{icon}</Box>
-        <Text as="h3" fontSize="lg" fontWeight={700} flex={1}>
+        <Text as="h3" fontSize="md" fontWeight={700} flex={1}>
           {title}
         </Text>
         {right}
       </Flex>
       {children}
     </Box>
+  );
+}
+
+/** One line of the facts card: an icon and a word on the left, the value (and its button) on the right. */
+function FactRow({ icon, label, children, last = false }: { icon: ReactNode; label: string; children: ReactNode; last?: boolean }) {
+  return (
+    <Flex gap={3} py={2.5} align="flex-start" borderBottom={last ? undefined : '1px solid'} borderColor="lineColor" data-testid="fact-row">
+      <HStack spacing={2} w={{ base: '96px', md: '120px' }} flexShrink={0} color="mutedText" pt="5px">
+        {icon}
+        <Text fontWeight={600} fontSize="sm">
+          {label}
+        </Text>
+      </HStack>
+      <Box flex={1} minW={0}>
+        {children}
+      </Box>
+    </Flex>
   );
 }
 
@@ -60,7 +77,7 @@ function Thumb({ attachment, onOpen }: { attachment: Attachment; onOpen: () => v
   );
 }
 
-function Preview({ images, index, setIndex, onClose }: { images: Attachment[]; index: number; setIndex: (i: number) => void; onClose: () => void }) {
+function Preview({ images, index, setIndex, onClose, onDelete }: { images: Attachment[]; index: number; setIndex: (i: number) => void; onClose: () => void; onDelete?: (a: Attachment) => void }) {
   const current = images[index];
   const file = useFileUrl(current?.url);
   if (!current) return null;
@@ -86,6 +103,11 @@ function Preview({ images, index, setIndex, onClose }: { images: Attachment[]; i
             <Button leftIcon={<DownloadIcon boxSize={4} />} onClick={() => void downloadAttachment(current.url, current.filename).catch(() => undefined)}>
               {t('Download')}
             </Button>
+            {onDelete && (
+              <Button leftIcon={<TrashIcon boxSize={4} />} colorScheme="red" variant="solid" onClick={() => onDelete(current)} data-testid="preview-delete">
+                {t('Delete')}
+              </Button>
+            )}
           </HStack>
         </ModalBody>
       </ModalContent>
@@ -124,20 +146,23 @@ function StepRow({ item, index, count, canEdit, onToggle, onText, onMove, onDele
         </Box>
       )}
       {canEdit && !editing && (
-        <HStack spacing={0.5} opacity={{ base: 1, md: 0.35 }} _groupHover={{ opacity: 1 }} sx={{ '&:focus-within': { opacity: 1 } }}>
-          <Tooltip label={t('Move the step up')} hasArrow>
-            <IconButton aria-label={t('Move the step up')} size="sm" variant="ghost" icon={<ArrowUpIcon boxSize={4} />} isDisabled={index === 0} onClick={() => onMove(-1)} />
-          </Tooltip>
-          <Tooltip label={t('Move the step down')} hasArrow>
-            <IconButton aria-label={t('Move the step down')} size="sm" variant="ghost" icon={<ArrowDownIcon boxSize={4} />} isDisabled={index === count - 1} onClick={() => onMove(1)} />
-          </Tooltip>
-          <Tooltip label={t('Change the text')} hasArrow>
-            <IconButton aria-label={t('Change the text')} size="sm" variant="ghost" icon={<PencilIcon boxSize={4} />} onClick={() => setEditing(true)} />
-          </Tooltip>
-          <Tooltip label={t('Remove the step')} hasArrow>
-            <IconButton aria-label={t('Remove the step')} size="sm" variant="ghost" icon={<TrashIcon boxSize={4} />} onClick={onDelete} />
-          </Tooltip>
-        </HStack>
+        <Menu isLazy placement="bottom-end">
+          <MenuButton as={IconButton} aria-label={t('More for the step “{text}”', { text: item.text })} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} color="mutedText" data-testid="step-menu" />
+          <MenuList zIndex={1700} fontSize="md">
+            <MenuItem icon={<PencilIcon boxSize={4} />} onClick={() => setEditing(true)}>
+              {t('Change the text')}
+            </MenuItem>
+            <MenuItem icon={<ArrowUpIcon boxSize={4} />} isDisabled={index === 0} onClick={() => onMove(-1)}>
+              {t('Move the step up')}
+            </MenuItem>
+            <MenuItem icon={<ArrowDownIcon boxSize={4} />} isDisabled={index === count - 1} onClick={() => onMove(1)}>
+              {t('Move the step down')}
+            </MenuItem>
+            <MenuItem icon={<TrashIcon boxSize={4} />} color="red.500" onClick={onDelete} data-testid="step-remove">
+              {t('Remove the step')}
+            </MenuItem>
+          </MenuList>
+        </Menu>
       )}
     </Flex>
   );
@@ -209,7 +234,8 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
   const [editingComment, setEditingComment] = useState<{ id: number; body: string } | null>(null);
   const [uploading, setUploading] = useState(0);
   const [preview, setPreview] = useState<number | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showMore, setShowMore] = useState(false); // history, links, removing: out of the way
+  const [dateMore, setDateMore] = useState(Boolean(card.start_date || card.repeat)); // start date and repeat
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -334,23 +360,81 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
     if (await run(() => addComment(card.id, body), t('Could not save the comment'))) setComment('');
   };
 
+  const removeFile = (a: Attachment) => {
+    if (window.confirm(t('Delete the file “{file}” from this task? This cannot be undone.', { file: a.filename }))) void run(() => deleteAttachment(a.id));
+  };
+
   const hide = async () => {
     if (!(await run(() => updateCard(card.id, { archived: true })))) return;
     onClose();
     notify(t('Hid the task “{title}”', { title: card.title }), { undo: () => void updateCard(card.id, { archived: false }).then(refresh) });
   };
 
+  const doneColumn = columns.find((c) => c.is_done);
+  const stageColor = colorHex(column?.color, column?.is_done ? '#22c55e' : '#94a3b8');
+  const hasLinks = (card.links?.length ?? 0) > 0;
+  const docs = files; // documents get a row; pictures show once, as pictures
+  const linkPicker = picking && (
+    <LinkPicker
+      onClose={() => setPicking(false)}
+      onPick={(kind, id) => {
+        setPicking(false);
+        void run(() => addCardLink(card.id, kind, id));
+      }}
+    />
+  );
+  const linksList = (
+    <VStack align="stretch" spacing={2}>
+      {(card.links ?? []).map((link) => (
+        <Flex key={link.id} align="center" gap={2} p={2.5} borderRadius="lg" bg="chipBg" data-testid="card-link">
+          <LinkIcon boxSize={4} color="mutedText" flexShrink={0} />
+          <Box flex={1} minW={0}>
+            <Text fontSize="sm" color="mutedText">
+              {link.kind === 'dashboard' ? t('Dashboard') : t('Question')}
+            </Text>
+            {link.name ? (
+              <Text as={RouterLink} to={link.url} fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} textDecoration="underline" noOfLines={2} data-testid="card-link-open">
+                {link.name}
+              </Text>
+            ) : (
+              <Text color="mutedText">{link.kind === 'dashboard' ? t('A dashboard you cannot open') : t('A question you cannot open')}</Text>
+            )}
+          </Box>
+          {canEdit && (
+            <IconButton aria-label={t('Remove the link')} size="sm" variant="ghost" icon={<XIcon boxSize={4} />} onClick={() => void run(() => removeCardLink(link.id))} data-testid="card-link-remove" />
+          )}
+        </Flex>
+      ))}
+      {canEdit && (
+        <Button variant="subtle" leftIcon={<PlusIcon boxSize={4} />} alignSelf="flex-start" onClick={() => setPicking(true)} data-testid="add-link">
+          {t('Link a dashboard or question')}
+        </Button>
+      )}
+    </VStack>
+  );
+
   return (
     <>
       <DrawerHeader borderBottom="1px solid" borderColor="lineColor" px={{ base: 4, md: 6 }} py={3} borderTop="5px solid" borderTopColor={done ? '#22c55e' : accent}>
-        <Flex align="center" gap={2} wrap="wrap">
+        <Flex align="center" gap={2}>
           {canEdit ? (
             <Menu isLazy placement="bottom-start">
-              <Tooltip label={t('Move this task to another stage')} hasArrow>
-                <MenuButton as={Button} variant="subtle" rightIcon={<ChevronDownIcon boxSize={4} />} data-testid="card-column">
-                  {t('Stage: {name}', { name: column?.name ?? '' })}
-                </MenuButton>
-              </Tooltip>
+              <MenuButton
+                as={Button}
+                variant="outline"
+                borderRadius="full"
+                borderColor={withAlpha(stageColor, 0.7)}
+                bg={withAlpha(stageColor, 0.14)}
+                rightIcon={<ChevronDownIcon boxSize={4} />}
+                leftIcon={done ? <CheckIcon boxSize={4} color="#16a34a" /> : <Box w="10px" h="10px" borderRadius="full" bg={stageColor} />}
+                minW={0}
+                aria-label={t('Stage: {name}', { name: column?.name ?? '' })}
+                data-testid="card-column"
+              >
+                <Text as="span" noOfLines={1}>
+                  {column?.name}
+                </Text>
+              </MenuButton>
               <MenuList zIndex={1700} fontSize="md">
                 <Text px={3} py={1} fontSize="sm" color="mutedText">
                   {t('Move to…')}
@@ -367,51 +451,76 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
               </MenuList>
             </Menu>
           ) : (
-            <Text fontWeight={600} color="mutedText">
-              {t('Stage: {name}', { name: column?.name ?? '' })}
-            </Text>
+            <HStack spacing={2} px={3} py={1.5} borderRadius="full" bg={withAlpha(stageColor, 0.14)} fontWeight={600} data-testid="card-column">
+              <Box w="10px" h="10px" borderRadius="full" bg={stageColor} />
+              <Text as="span">{column?.name}</Text>
+            </HStack>
           )}
-          {card.archived && (
-            <Text fontWeight={700} color="orange.500">
-              {t('Hidden')}
-            </Text>
-          )}
-          <Box flex={1} />
-          <Text fontSize="sm" color={saveState === 'error' ? 'red.500' : 'mutedText'} data-testid="save-state" aria-live="polite">
-            {saveState === 'saving' ? t('Saving…') : saveState === 'saved' ? t('Saved') : saveState === 'error' ? t('Not saved') : canEdit ? t('Changes save by themselves') : ''}
+          <Text fontSize="sm" color={saveState === 'error' ? 'red.500' : 'mutedText'} data-testid="save-state" aria-live="polite" display={saveState === 'idle' ? 'none' : 'block'}>
+            {saveState === 'saving' ? t('Saving…') : saveState === 'saved' ? t('Saved') : saveState === 'error' ? t('Not saved') : ''}
           </Text>
-          <Button variant="subtle" leftIcon={<XIcon boxSize={4} />} onClick={onClose} data-testid="card-close">
-            {t('Close')}
-          </Button>
+          <Box flex={1} />
+          {canEdit && !done && doneColumn && (
+            <Button bg="#16a34a" color="white" _hover={{ bg: '#15803d' }} _active={{ bg: '#166534' }} leftIcon={<CheckIcon boxSize={4} />} onClick={() => onMove(card, doneColumn.id)} data-testid="mark-done">
+              {t('Done')}
+            </Button>
+          )}
+          <Tooltip label={t('Close')} hasArrow>
+            <IconButton aria-label={t('Close')} variant="subtle" icon={<XIcon boxSize={5} />} onClick={onClose} data-testid="card-close" />
+          </Tooltip>
         </Flex>
       </DrawerHeader>
 
       <DrawerBody px={{ base: 4, md: 6 }} py={5}>
-        <VStack align="stretch" spacing={6}>
-          {/* what */}
-          <Box as="section">
-            <Flex align="center" gap={2.5} mb={3}>
-              <Box color="brand.400">
-                <AlignLeftIcon boxSize={5} />
-              </Box>
-              <Text as="h3" fontSize="lg" fontWeight={700}>
-                {t('What needs to be done')}
+        <VStack align="stretch" spacing={5}>
+          {card.archived && (
+            <Flex align="center" gap={3} p={3} borderRadius="xl" bg="rgba(249,115,22,0.12)" border="1px solid" borderColor="rgba(249,115,22,0.4)" wrap="wrap" data-testid="hidden-banner">
+              <Text fontWeight={700} flex={1} minW="180px">
+                {t('This task is not on the board.')}
               </Text>
+              {canRestore && (
+                <HStack>
+                  <Button leftIcon={<RefreshIcon boxSize={4} />} onClick={() => void run(() => updateCard(card.id, { archived: false })).then((ok) => ok && notify(t('The task is back on the board')))} data-testid="restore-card">
+                    {t('Bring back')}
+                  </Button>
+                  <Button
+                    colorScheme="red"
+                    variant="ghost"
+                    leftIcon={<TrashIcon boxSize={4} />}
+                    onClick={() => {
+                      if (window.confirm(t('Delete the task “{title}” for good? Its steps, comments, photos and files are deleted too. This cannot be undone.', { title: card.title }))) {
+                        void run(() => deleteCard(card.id)).then((ok) => {
+                          if (!ok) return;
+                          onClose();
+                          notify(t('Deleted the task “{title}”', { title: card.title }));
+                        });
+                      }
+                    }}
+                    data-testid="delete-card"
+                  >
+                    {t('Delete for good')}
+                  </Button>
+                </HStack>
+              )}
             </Flex>
-            {canEdit ? (
-              <VStack align="stretch" spacing={3}>
-                {nameIt && (
-                  <HStack spacing={3} align="center">
-                    {images[0] && (
-                      <Box w="72px" flexShrink={0}>
-                        <Thumb attachment={images[0]} onOpen={() => setPreview(0)} />
-                      </Box>
-                    )}
-                    <Text fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} data-testid="name-it-hint">
-                      {t('The photo is added. Give the task a short name:')}
-                    </Text>
-                  </HStack>
+          )}
+
+          {/* what: the name and the details, as text you click to change */}
+          <Box>
+            {nameIt && (
+              <HStack spacing={3} align="center" mb={2}>
+                {images[0] && (
+                  <Box w="72px" flexShrink={0}>
+                    <Thumb attachment={images[0]} onOpen={() => setPreview(0)} />
+                  </Box>
                 )}
+                <Text fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} data-testid="name-it-hint">
+                  {t('The photo is added. Give the task a short name:')}
+                </Text>
+              </HStack>
+            )}
+            {canEdit ? (
+              <>
                 <Textarea
                   autoFocus={nameIt}
                   onFocus={nameIt ? (e) => e.currentTarget.select() : undefined}
@@ -419,11 +528,19 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   onChange={(e) => setTitle(e.target.value.replace(/\n/g, ' '))}
                   onBlur={saveTitle}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), (e.target as HTMLTextAreaElement).blur())}
-                  fontSize="18px"
-                  fontWeight={700}
+                  variant="unstyled"
+                  px={2}
+                  py={1}
+                  mx={-2}
+                  w="calc(100% + 16px)"
+                  borderRadius="lg"
+                  _hover={{ bg: 'panelHover' }}
+                  _focus={{ bg: 'panelHover', boxShadow: '0 0 0 2px var(--chakra-colors-brand-400)' }}
+                  fontSize="22px"
+                  fontWeight={750}
+                  lineHeight="1.3"
                   rows={1}
                   resize="none"
-                  minH="48px"
                   sx={{ fieldSizing: 'content' }}
                   maxLength={300}
                   aria-label={t('Task')}
@@ -433,15 +550,29 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   onBlur={saveDescription}
-                  rows={4}
-                  placeholder={t('More details (optional): what, where, how…')}
+                  variant="unstyled"
+                  px={2}
+                  py={1.5}
+                  mx={-2}
+                  mt={1}
+                  w="calc(100% + 16px)"
+                  borderRadius="lg"
+                  bg={description ? undefined : 'transparent'}
+                  _hover={{ bg: 'panelHover' }}
+                  _focus={{ bg: 'panelHover', boxShadow: '0 0 0 2px var(--chakra-colors-brand-400)' }}
+                  color={description ? 'bodyText' : 'mutedText'}
+                  minH="40px"
+                  rows={1}
+                  resize="none"
+                  sx={{ fieldSizing: 'content' }}
+                  placeholder={t('Add details (optional): what, where, how…')}
                   aria-label={t('More details')}
                   data-testid="description-input"
                 />
-              </VStack>
+              </>
             ) : (
-              <Box>
-                <Text fontSize="18px" fontWeight={700} data-testid="card-title">
+              <>
+                <Text fontSize="22px" fontWeight={750} lineHeight="1.3" data-testid="card-title">
                   {card.title}
                 </Text>
                 {card.description ? (
@@ -449,168 +580,171 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                     <PlainText text={card.description} />
                   </Box>
                 ) : null}
-              </Box>
+              </>
             )}
           </Box>
 
-          {/* who */}
-          <Section icon={<UserIcon boxSize={5} />} title={t('Who does it')}>
-            <Flex gap={2} wrap="wrap" align="center">
-              {card.assignees.map((id) => {
-                const name = personName(id, detail.people);
-                return (
-                  <HStack key={id} spacing={2} pl={1} pr={canEdit ? 1 : 3} py={1} borderRadius="full" bg="chipBg" data-testid="assignee">
-                    <PersonAvatar name={name} size="sm" />
-                    <Text fontWeight={600}>{name}</Text>
-                    {canEdit && (
-                      <Tooltip label={t('Take {name} off this task', { name })} hasArrow>
-                        <IconButton aria-label={t('Take {name} off this task', { name })} size="sm" variant="ghost" borderRadius="full" icon={<XIcon boxSize={3.5} />} onClick={() => void patch({ assignees: card.assignees.filter((x) => x !== id) })} />
-                      </Tooltip>
-                    )}
-                  </HStack>
-                );
-              })}
-              {canEdit && (
-                <Menu closeOnSelect={false} isLazy>
-                  <MenuButton as={Button} variant="subtle" leftIcon={<PlusIcon boxSize={4} />} data-testid="assignees-button">
-                    {card.assignees.length ? t('Add or remove people') : t('Choose who does it')}
-                  </MenuButton>
-                  <MenuList zIndex={1700} maxH="50vh" overflowY="auto">
-                    <MenuOptionGroup type="checkbox" value={card.assignees.map(String)} onChange={(v) => void patch({ assignees: (Array.isArray(v) ? v : [v]).map(Number) })}>
-                      {people.map((p) => (
-                        <MenuItemOption key={p.id} value={String(p.id)} fontSize="md">
-                          <HStack>
-                            <PersonAvatar name={p.username} size="xs" />
-                            <Text as="span">{p.username}</Text>
-                          </HStack>
-                        </MenuItemOption>
-                      ))}
-                    </MenuOptionGroup>
-                  </MenuList>
-                </Menu>
-              )}
-              {!canEdit && !card.assignees.length && <Text color="mutedText">{t('Nobody yet')}</Text>}
-            </Flex>
-          </Section>
+          {/* who, when, how important, labels: one card of facts */}
+          <Box border="1px solid" borderColor="lineColor" borderRadius="xl" px={{ base: 3, md: 4 }} py={1} data-testid="card-facts">
+            <FactRow icon={<UserIcon boxSize={4} />} label={t('Who')}>
+              <Flex gap={1.5} wrap="wrap" align="center">
+                {card.assignees.map((id) => {
+                  const name = personName(id, detail.people);
+                  return (
+                    <HStack key={id} spacing={1.5} pl={1} pr={canEdit ? 0.5 : 2.5} py={0.5} borderRadius="full" bg="chipBg" data-testid="assignee">
+                      <PersonAvatar name={name} size="xs" />
+                      <Text fontWeight={600}>{name}</Text>
+                      {canEdit && (
+                        <IconButton aria-label={t('Take {name} off this task', { name })} size="xs" variant="ghost" borderRadius="full" icon={<XIcon boxSize={3} />} onClick={() => void patch({ assignees: card.assignees.filter((x) => x !== id) })} />
+                      )}
+                    </HStack>
+                  );
+                })}
+                {canEdit && (
+                  <Menu closeOnSelect={false} isLazy>
+                    <MenuButton as={Button} size="sm" variant="ghost" leftIcon={<PlusIcon boxSize={3.5} />} color="brand.500" _dark={{ color: 'brand.200' }} data-testid="assignees-button">
+                      {card.assignees.length ? t('Add') : t('Choose who does it')}
+                    </MenuButton>
+                    <MenuList zIndex={1700} maxH="50vh" overflowY="auto">
+                      <MenuOptionGroup type="checkbox" value={card.assignees.map(String)} onChange={(v) => void patch({ assignees: (Array.isArray(v) ? v : [v]).map(Number) })}>
+                        {people.map((p) => (
+                          <MenuItemOption key={p.id} value={String(p.id)} fontSize="md">
+                            <HStack>
+                              <PersonAvatar name={p.username} size="xs" />
+                              <Text as="span">{p.username}</Text>
+                            </HStack>
+                          </MenuItemOption>
+                        ))}
+                      </MenuOptionGroup>
+                    </MenuList>
+                  </Menu>
+                )}
+                {!canEdit && !card.assignees.length && <Text color="mutedText">{t('Nobody yet')}</Text>}
+              </Flex>
+            </FactRow>
 
-          {/* when */}
-          <Section icon={<CalendarIcon boxSize={5} />} title={t('When')}>
-            <SimpleGrid columns={2} spacing={3}>
-              <Box>
-                <Text as="label" htmlFor="card-start" fontWeight={600} display="block" mb={1}>
-                  {t('Starts')}
-                </Text>
-                <Input id="card-start" type="date" value={card.start_date ?? ''} isReadOnly={!canEdit} onChange={(e) => void patch({ start_date: e.target.value || null })} data-testid="card-start" />
-              </Box>
-              <Box>
-                <Text as="label" htmlFor="card-due" fontWeight={600} display="block" mb={1}>
-                  {t('Due')}
-                </Text>
+            <FactRow icon={<CalendarIcon boxSize={4} />} label={t('Due')}>
+              <Flex gap={2} align="center" wrap="wrap">
                 <Input
                   id="card-due"
                   type="date"
+                  size="sm"
+                  w="auto"
+                  minW="150px"
+                  borderRadius="md"
                   value={card.due_date ?? ''}
                   isReadOnly={!canEdit}
                   onChange={(e) => void patch({ due_date: e.target.value || null })}
                   borderColor={due === 'overdue' ? 'red.500' : undefined}
+                  aria-label={t('Due')}
                   data-testid="card-due"
                 />
-              </Box>
-            </SimpleGrid>
-            {card.due_date && (
-              <Text mt={2} fontWeight={700} color={due === 'overdue' ? 'red.500' : due === 'today' || due === 'soon' ? 'orange.500' : due === 'done' ? 'green.500' : 'mutedText'} data-testid="due-text">
-                {dueText(card.due_date, today, done)}
-              </Text>
-            )}
-            {/* K3: a task that comes back */}
-            <Box mt={3}>
-              <Text as="label" htmlFor="card-repeat" fontWeight={600} display="flex" alignItems="center" gap={1.5} mb={1}>
-                <RepeatIcon boxSize={4} color="mutedText" />
-                {t('Repeats')}
-              </Text>
-              <Select
-                id="card-repeat"
-                value={card.repeat ?? ''}
-                isDisabled={!canEdit}
-                onChange={(e) => void patch({ repeat: (e.target.value || null) as Repeat | null })}
-                data-testid="card-repeat"
-              >
-                <option value="">{t('Does not repeat')}</option>
-                {REPEATS.map((r) => (
-                  <option key={r} value={r}>
-                    {repeatLabel(r)}
-                  </option>
+                {card.due_date && (
+                  <Text fontWeight={700} fontSize="sm" color={due === 'overdue' ? 'red.500' : due === 'today' || due === 'soon' ? 'orange.500' : due === 'done' ? 'green.500' : 'mutedText'} data-testid="due-text">
+                    {dueText(card.due_date, today, done)}
+                  </Text>
+                )}
+              </Flex>
+              {!dateMore && canEdit && (
+                <Button size="xs" variant="link" mt={1.5} color="mutedText" fontWeight={500} onClick={() => setDateMore(true)} data-testid="date-more">
+                  {t('Start date and repeat…')}
+                </Button>
+              )}
+              {dateMore && (
+                <VStack align="stretch" spacing={2} mt={2}>
+                  <Flex gap={2} align="center" wrap="wrap">
+                    <Text as="label" htmlFor="card-start" fontSize="sm" fontWeight={600} minW="70px">
+                      {t('Starts')}
+                    </Text>
+                    <Input id="card-start" type="date" size="sm" w="auto" minW="150px" borderRadius="md" value={card.start_date ?? ''} isReadOnly={!canEdit} onChange={(e) => void patch({ start_date: e.target.value || null })} data-testid="card-start" />
+                  </Flex>
+                  <Flex gap={2} align="center" wrap="wrap">
+                    <Text as="label" htmlFor="card-repeat" fontSize="sm" fontWeight={600} minW="70px" display="flex" alignItems="center" gap={1}>
+                      <RepeatIcon boxSize={3.5} color="mutedText" />
+                      {t('Repeats')}
+                    </Text>
+                    <Select id="card-repeat" size="sm" w="auto" borderRadius="md" value={card.repeat ?? ''} isDisabled={!canEdit} onChange={(e) => void patch({ repeat: (e.target.value || null) as Repeat | null })} data-testid="card-repeat">
+                      <option value="">{t('Does not repeat')}</option>
+                      {REPEATS.map((r) => (
+                        <option key={r} value={r}>
+                          {repeatLabel(r)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Flex>
+                  {card.repeat && firstOpen && (
+                    <Text fontSize="sm" color="mutedText" data-testid="repeat-hint">
+                      {t('When it is done, the next one appears in “{stage}” with its new date, the same people and steps.', { stage: firstOpen.name })}
+                    </Text>
+                  )}
+                </VStack>
+              )}
+            </FactRow>
+
+            <FactRow icon={<FlagIcon boxSize={4} />} label={t('Importance')}>
+              <Menu isLazy>
+                <MenuButton
+                  as={Button}
+                  size="sm"
+                  variant="outline"
+                  isDisabled={!canEdit}
+                  borderColor={withAlpha(PRIORITY_COLOR[card.priority], 0.6)}
+                  bg={withAlpha(PRIORITY_COLOR[card.priority], 0.12)}
+                  leftIcon={<Box w="9px" h="9px" borderRadius="full" bg={PRIORITY_COLOR[card.priority]} />}
+                  rightIcon={canEdit ? <ChevronDownIcon boxSize={4} /> : undefined}
+                  _disabled={{ opacity: 1, cursor: 'default' }}
+                  data-testid="card-priority"
+                >
+                  {priorityLabel(card.priority)}
+                </MenuButton>
+                <MenuList zIndex={1700} fontSize="md">
+                  <MenuOptionGroup type="radio" value={card.priority} onChange={(v) => v !== card.priority && void patch({ priority: v as (typeof PRIORITIES)[number] })}>
+                    {PRIORITIES.map((p) => (
+                      <MenuItemOption key={p} value={p} data-testid={`priority-${p}`}>
+                        <HStack spacing={2}>
+                          <Box w="10px" h="10px" borderRadius="full" bg={PRIORITY_COLOR[p]} />
+                          <Text as="span">{priorityLabel(p)}</Text>
+                        </HStack>
+                      </MenuItemOption>
+                    ))}
+                  </MenuOptionGroup>
+                </MenuList>
+              </Menu>
+            </FactRow>
+
+            <FactRow icon={<TagIcon boxSize={4} />} label={t('Labels')} last>
+              <Flex gap={1.5} wrap="wrap" align="center">
+                {cardLabels.map((l) => (
+                  <LabelChip key={l.id} label={l} />
                 ))}
-              </Select>
-              {card.repeat && firstOpen && (
-                <Text mt={1.5} fontSize="sm" color="mutedText" data-testid="repeat-hint">
-                  {t('When it is done, the next one appears in “{stage}” with its new date, the same people and steps.', { stage: firstOpen.name })}
-                </Text>
-              )}
-            </Box>
-          </Section>
+                {canEdit && (
+                  <Menu closeOnSelect={false} isLazy>
+                    <MenuButton as={Button} size="sm" variant="ghost" leftIcon={<PlusIcon boxSize={3.5} />} color="brand.500" _dark={{ color: 'brand.200' }} data-testid="labels-pick">
+                      {cardLabels.length ? t('Change') : t('Add a label')}
+                    </MenuButton>
+                    <MenuList zIndex={1700}>
+                      {detail.labels.length ? (
+                        <MenuOptionGroup type="checkbox" value={card.labels.map(String)} onChange={(v) => void patch({ labels: (Array.isArray(v) ? v : [v]).map(Number) })}>
+                          {detail.labels.map((l) => (
+                            <MenuItemOption key={l.id} value={String(l.id)}>
+                              <LabelChip label={l} />
+                            </MenuItemOption>
+                          ))}
+                        </MenuOptionGroup>
+                      ) : (
+                        <Text px={3} py={2} color="mutedText" maxW="280px">
+                          {t('The board has no labels yet: add them with More → Labels at the top of the board.')}
+                        </Text>
+                      )}
+                    </MenuList>
+                  </Menu>
+                )}
+                {!canEdit && !cardLabels.length && <Text color="mutedText">{t('None')}</Text>}
+              </Flex>
+            </FactRow>
+          </Box>
 
-          {/* priority and labels */}
-          <Section icon={<FlagIcon boxSize={5} />} title={t('How important')}>
-            <Flex gap={2} wrap="wrap" role="radiogroup" aria-label={t('Priority')} data-testid="card-priority">
-              {PRIORITIES.map((p) => {
-                const active = card.priority === p;
-                const color = PRIORITY_COLOR[p];
-                return (
-                  <Button
-                    key={p}
-                    role="radio"
-                    aria-checked={active}
-                    isDisabled={!canEdit && !active}
-                    onClick={() => canEdit && !active && void patch({ priority: p })}
-                    variant="outline"
-                    borderColor={active ? color : 'lineColor'}
-                    bg={active ? withAlpha(color, 0.16) : 'transparent'}
-                    color={active ? color : 'mutedText'}
-                    leftIcon={active ? <CheckIcon boxSize={4} /> : <Box w="10px" h="10px" borderRadius="full" bg={color} />}
-                    _hover={canEdit ? { bg: withAlpha(color, 0.1) } : undefined}
-                    data-testid={`priority-${p}`}
-                  >
-                    {priorityLabel(p)}
-                  </Button>
-                );
-              })}
-            </Flex>
-            <HStack mt={4} spacing={2} align="center" wrap="wrap">
-              <TagIcon boxSize={4} color="mutedText" />
-              <Text fontWeight={600} mr={1}>
-                {t('Labels')}
-              </Text>
-              {cardLabels.map((l) => (
-                <LabelChip key={l.id} label={l} />
-              ))}
-              {canEdit && (
-                <Menu closeOnSelect={false} isLazy>
-                  <MenuButton as={Button} size="sm" variant="subtle" leftIcon={<PlusIcon boxSize={3.5} />} data-testid="labels-pick">
-                    {cardLabels.length ? t('Change labels') : t('Add a label')}
-                  </MenuButton>
-                  <MenuList zIndex={1700}>
-                    {detail.labels.length ? (
-                      <MenuOptionGroup type="checkbox" value={card.labels.map(String)} onChange={(v) => void patch({ labels: (Array.isArray(v) ? v : [v]).map(Number) })}>
-                        {detail.labels.map((l) => (
-                          <MenuItemOption key={l.id} value={String(l.id)}>
-                            <LabelChip label={l} />
-                          </MenuItemOption>
-                        ))}
-                      </MenuOptionGroup>
-                    ) : (
-                      <Text px={3} py={2} color="mutedText" maxW="280px">
-                        {t('The board has no labels yet: add them with More → Labels at the top of the board.')}
-                      </Text>
-                    )}
-                  </MenuList>
-                </Menu>
-              )}
-              {!canEdit && !cardLabels.length && <Text color="mutedText">{t('None')}</Text>}
-            </HStack>
-          </Section>
-
-          {/* steps */}
+          {/* steps: the action plan */}
           <Section
             icon={<ListChecksIcon boxSize={5} />}
             title={t('Steps')}
@@ -638,41 +772,49 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
               ))}
             </VStack>
             {canEdit && (
-              <Flex mt={2} gap={2} direction={{ base: 'column', sm: 'row' }}>
-                <Input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addItem()} placeholder={t('A step, e.g. “Order the parts”')} maxLength={500} aria-label={t('New step')} data-testid="new-step" />
+              <Flex mt={2} gap={2}>
+                <Input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void addItem()} placeholder={items.length ? t('Another step…') : t('A step, e.g. “Order the parts”')} maxLength={500} aria-label={t('New step')} data-testid="new-step" />
                 <Button onClick={() => void addItem()} isDisabled={!newItem.trim()} leftIcon={<PlusIcon boxSize={4} />} flexShrink={0} data-testid="add-step">
-                  {t('Add a step')}
+                  {t('Add')}
                 </Button>
               </Flex>
             )}
             {!canEdit && !items.length && <Text color="mutedText">{t('No steps yet.')}</Text>}
           </Section>
 
-          {/* photos and files */}
-          <Section icon={<PaperclipIcon boxSize={5} />} title={t('Photos and files')} testId="attachments">
+          {/* photos and files: pictures once, documents as rows */}
+          <Section
+            icon={<PaperclipIcon boxSize={5} />}
+            title={t('Photos and files')}
+            testId="attachments"
+            right={
+              canEdit ? (
+                <HStack spacing={2}>
+                  <Button size="sm" variant="subtle" leftIcon={<CameraIcon boxSize={4} />} onClick={() => cameraInput.current?.click()} display={{ base: 'inline-flex', md: 'none' }} data-testid="take-photo">
+                    {t('Photo')}
+                  </Button>
+                  <Button size="sm" variant="subtle" leftIcon={uploading ? <Spinner size="xs" /> : <PlusIcon boxSize={4} />} onClick={() => fileInput.current?.click()} data-testid="add-file">
+                    {uploading ? t('Adding…') : t('Add')}
+                  </Button>
+                </HStack>
+              ) : undefined
+            }
+          >
             <input ref={fileInput} type="file" multiple accept={UPLOAD_ACCEPT} hidden onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} data-testid="file-input" />
             <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} data-testid="camera-input" />
-            {canEdit && (
-              <Flex gap={2} mb={3} wrap="wrap">
-                <Button size="lg" flex={1} minW="200px" variant="subtle" border="1px dashed" borderColor="lineColor" leftIcon={uploading ? <Spinner size="sm" /> : <PaperclipIcon boxSize={5} />} onClick={() => fileInput.current?.click()} data-testid="add-file">
-                  {uploading ? t('Adding…') : t('Add photo or file')}
-                </Button>
-                <Button size="lg" variant="subtle" leftIcon={<CameraIcon boxSize={5} />} onClick={() => cameraInput.current?.click()} display={{ base: 'inline-flex', md: 'none' }} data-testid="take-photo">
-                  {t('Take a photo')}
-                </Button>
-              </Flex>
-            )}
             {images.length > 0 && (
-              <SimpleGrid columns={{ base: 3, md: 4 }} spacing={2} mb={3}>
+              <SimpleGrid columns={{ base: 3, md: 4 }} spacing={2} mb={docs.length ? 3 : 0}>
                 {images.map((a, i) => (
                   <Thumb key={a.id} attachment={a} onOpen={() => setPreview(i)} />
                 ))}
               </SimpleGrid>
             )}
             <VStack align="stretch" spacing={1}>
-              {[...files, ...images].map((a) => (
+              {docs.map((a) => (
                 <Flex key={a.id} align="center" gap={3} px={2} py={2} borderRadius="lg" _hover={{ bg: 'panelHover' }} data-testid="attachment-row">
-                  <Box color="mutedText">{isImage(a.content_type) ? <CameraIcon boxSize={5} /> : <FileIcon boxSize={5} />}</Box>
+                  <Box color="mutedText">
+                    <FileIcon boxSize={5} />
+                  </Box>
                   <Box flex={1} minW={0}>
                     <Text fontWeight={600} noOfLines={1}>
                       {a.filename}
@@ -686,59 +828,19 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   </Tooltip>
                   {canEdit && (
                     <Tooltip label={t('Delete {file}', { file: a.filename })} hasArrow>
-                      <IconButton
-                        aria-label={t('Delete {file}', { file: a.filename })}
-                        variant="ghost"
-                        icon={<TrashIcon boxSize={4} />}
-                        onClick={() => window.confirm(t('Delete the file “{file}” from this task? This cannot be undone.', { file: a.filename })) && void run(() => deleteAttachment(a.id))}
-                      />
+                      <IconButton aria-label={t('Delete {file}', { file: a.filename })} variant="ghost" icon={<TrashIcon boxSize={4} />} onClick={() => removeFile(a)} />
                     </Tooltip>
                   )}
                 </Flex>
               ))}
             </VStack>
-            {!card.attachments_list.length && !canEdit && <Text color="mutedText">{t('No photos or files.')}</Text>}
+            {!card.attachments_list.length && <Text color="mutedText">{canEdit ? t('None yet.') : t('No photos or files.')}</Text>}
           </Section>
 
-          {/* K3: links to Search & BI */}
-          {(canEdit || (card.links?.length ?? 0) > 0) && (
+          {/* links to Search & BI: in the main part when there are some */}
+          {hasLinks && (
             <Section icon={<BarChartIcon boxSize={5} />} title={t('Search & BI')} testId="links">
-              <VStack align="stretch" spacing={2}>
-                {(card.links ?? []).map((link) => (
-                  <Flex key={link.id} align="center" gap={2} p={2.5} borderRadius="lg" bg="chipBg" data-testid="card-link">
-                    <LinkIcon boxSize={4} color="mutedText" flexShrink={0} />
-                    <Box flex={1} minW={0}>
-                      <Text fontSize="sm" color="mutedText">
-                        {link.kind === 'dashboard' ? t('Dashboard') : t('Question')}
-                      </Text>
-                      {link.name ? (
-                        <Text as={RouterLink} to={link.url} fontWeight={600} color="brand.600" _dark={{ color: 'brand.200' }} textDecoration="underline" noOfLines={2} data-testid="card-link-open">
-                          {link.name}
-                        </Text>
-                      ) : (
-                        <Text color="mutedText">{link.kind === 'dashboard' ? t('A dashboard you cannot open') : t('A question you cannot open')}</Text>
-                      )}
-                    </Box>
-                    {canEdit && (
-                      <IconButton aria-label={t('Remove the link')} size="sm" variant="ghost" icon={<XIcon boxSize={4} />} onClick={() => void run(() => removeCardLink(link.id))} data-testid="card-link-remove" />
-                    )}
-                  </Flex>
-                ))}
-                {canEdit && (
-                  <Button variant="subtle" leftIcon={<PlusIcon boxSize={4} />} alignSelf="flex-start" onClick={() => setPicking(true)} data-testid="add-link">
-                    {t('Link a dashboard or question')}
-                  </Button>
-                )}
-              </VStack>
-              {picking && (
-                <LinkPicker
-                  onClose={() => setPicking(false)}
-                  onPick={(kind, id) => {
-                    setPicking(false);
-                    void run(() => addCardLink(card.id, kind, id));
-                  }}
-                />
-              )}
+              {linksList}
             </Section>
           )}
 
@@ -793,14 +895,22 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                 );
               })}
               {canEdit ? (
-                <Flex gap={3}>
-                  <PersonAvatar name={ws.user.username} size="sm" />
-                  <Box flex={1}>
-                    <Textarea value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === 'Enter' && void sendComment()} rows={2} placeholder={t('Write a comment…')} aria-label={t('Write a comment…')} data-testid="comment-input" />
-                    <Button mt={2} onClick={() => void sendComment()} isDisabled={!comment.trim()} leftIcon={<MessageIcon boxSize={4} />} data-testid="comment-send">
-                      {t('Add the comment')}
-                    </Button>
-                  </Box>
+                <Flex gap={2} align="flex-end">
+                  <Textarea
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === 'Enter' && void sendComment()}
+                    rows={1}
+                    minH="44px"
+                    resize="none"
+                    sx={{ fieldSizing: 'content' }}
+                    placeholder={t('Write a comment…')}
+                    aria-label={t('Write a comment…')}
+                    data-testid="comment-input"
+                  />
+                  <Button onClick={() => void sendComment()} isDisabled={!comment.trim()} leftIcon={<MessageIcon boxSize={4} />} flexShrink={0} h="44px" data-testid="comment-send">
+                    {t('Send')}
+                  </Button>
                 </Flex>
               ) : (
                 !comments.length && <Text color="mutedText">{t('No comments yet.')}</Text>
@@ -808,79 +918,73 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
             </VStack>
           </Section>
 
-          {/* history */}
-          <Section
-            icon={<HistoryIcon boxSize={5} />}
-            title={t('History')}
-            right={
-              <Button size="sm" variant="ghost" rightIcon={<ChevronDownIcon boxSize={4} transform={showHistory ? 'rotate(180deg)' : undefined} />} onClick={() => setShowHistory(!showHistory)} data-testid="history-tab">
-                {showHistory ? t('Hide the history') : t('Show who did what')}
-              </Button>
-            }
-          >
-            <Collapse in={showHistory} animateOpacity>
-              <VStack align="stretch" spacing={3} data-testid="history">
-                {history.map((h) => {
-                  const who = personName(h.user, detail.people);
-                  return (
-                    <Flex key={h.id} gap={3} align="flex-start" data-testid="history-entry">
-                      <PersonAvatar name={who} size="xs" />
-                      <Box flex={1} minW={0}>
-                        <Text>{historySentence(h, { people: detail.people, columns, labels: detail.labels })}</Text>
-                        <Tooltip label={fullTime(h.created_at)} hasArrow>
-                          <Text fontSize="sm" color="mutedText" display="inline-block">
-                            {timeAgo(h.created_at)}
-                          </Text>
-                        </Tooltip>
-                      </Box>
-                    </Flex>
-                  );
-                })}
-                {!history.length && <Text color="mutedText">{t('Nothing happened yet.')}</Text>}
+          {/* the rest, out of the way: links, history, who made it, removing */}
+          <Box borderTop="1px solid" borderColor="lineColor" pt={3}>
+            <Button variant="ghost" w="100%" justifyContent="space-between" rightIcon={<ChevronDownIcon boxSize={5} transform={showMore ? 'rotate(180deg)' : undefined} />} onClick={() => setShowMore(!showMore)} data-testid="card-more">
+              <HStack spacing={2.5}>
+                <MoreIcon boxSize={4} />
+                <Text as="span">{canEdit ? t('More: history, links, remove') : t('More: history')}</Text>
+              </HStack>
+            </Button>
+            <Collapse in={showMore} animateOpacity>
+              <VStack align="stretch" spacing={5} pt={3}>
+                {!hasLinks && canEdit && (
+                  <Box data-testid="links">
+                    <Text fontWeight={700} mb={1} display="flex" alignItems="center" gap={2}>
+                      <BarChartIcon boxSize={4} color="brand.400" />
+                      {t('Search & BI')}
+                    </Text>
+                    <Text fontSize="sm" color="mutedText" mb={2}>
+                      {t('Point this task at a dashboard or question, e.g. the scrap figures it is about.')}
+                    </Text>
+                    {linksList}
+                  </Box>
+                )}
+                <Box data-testid="history-tab">
+                  <Text fontWeight={700} mb={2} display="flex" alignItems="center" gap={2}>
+                    <HistoryIcon boxSize={4} color="brand.400" />
+                    {t('History')}
+                  </Text>
+                  <VStack align="stretch" spacing={3} data-testid="history">
+                    {history.map((h) => {
+                      const who = personName(h.user, detail.people);
+                      return (
+                        <Flex key={h.id} gap={3} align="flex-start" data-testid="history-entry">
+                          <PersonAvatar name={who} size="xs" />
+                          <Box flex={1} minW={0}>
+                            <Text>{historySentence(h, { people: detail.people, columns, labels: detail.labels })}</Text>
+                            <Tooltip label={fullTime(h.created_at)} hasArrow>
+                              <Text fontSize="sm" color="mutedText" display="inline-block">
+                                {timeAgo(h.created_at)}
+                              </Text>
+                            </Tooltip>
+                          </Box>
+                        </Flex>
+                      );
+                    })}
+                    {!history.length && <Text color="mutedText">{t('Nothing happened yet.')}</Text>}
+                  </VStack>
+                  <Text fontSize="sm" color="mutedText" mt={3}>
+                    {t('Created by {user} {when}', { user: personName(card.created_by, detail.people), when: timeAgo(card.created_at) })}
+                  </Text>
+                </Box>
+                {canEdit && !card.archived && (
+                  <Box>
+                    <Button variant="subtle" leftIcon={<TrashIcon boxSize={4} />} onClick={() => void hide()} data-testid="archive-card">
+                      {t('Remove from the board')}
+                    </Button>
+                    <Text fontSize="sm" color="mutedText" mt={1.5}>
+                      {t('The task disappears from the board; you can bring it back from More → Hidden tasks.')}
+                    </Text>
+                  </Box>
+                )}
               </VStack>
             </Collapse>
-          </Section>
+          </Box>
         </VStack>
       </DrawerBody>
-
-      {(canEdit || (card.archived && canRestore)) && (
-        <DrawerFooter borderTop="1px solid" borderColor="lineColor" justifyContent="space-between" gap={2} px={{ base: 4, md: 6 }}>
-          <Text fontSize="sm" color="mutedText" noOfLines={1}>
-            {t('Created by {user} {when}', { user: personName(card.created_by, detail.people), when: timeAgo(card.created_at) })}
-          </Text>
-          {card.archived ? (
-            <HStack>
-              <Button leftIcon={<RefreshIcon boxSize={4} />} onClick={() => void run(() => updateCard(card.id, { archived: false })).then((ok) => ok && notify(t('The task is back on the board')))} data-testid="restore-card">
-                {t('Bring back')}
-              </Button>
-              <Button
-                colorScheme="red"
-                variant="ghost"
-                leftIcon={<TrashIcon boxSize={4} />}
-                onClick={() => {
-                  if (window.confirm(t('Delete the task “{title}” for good? Its steps, comments, photos and files are deleted too. This cannot be undone.', { title: card.title }))) {
-                    void run(() => deleteCard(card.id)).then((ok) => {
-                      if (!ok) return;
-                      onClose();
-                      notify(t('Deleted the task “{title}”', { title: card.title }));
-                    });
-                  }
-                }}
-                data-testid="delete-card"
-              >
-                {t('Delete for good')}
-              </Button>
-            </HStack>
-          ) : (
-            <Tooltip label={t('The task disappears from the board; you can bring it back from More → Hidden tasks.')} hasArrow>
-              <Button variant="subtle" leftIcon={<TrashIcon boxSize={4} />} onClick={() => void hide()} data-testid="archive-card">
-                {t('Remove from the board')}
-              </Button>
-            </Tooltip>
-          )}
-        </DrawerFooter>
-      )}
-      {preview !== null && <Preview images={images} index={preview} setIndex={setPreview} onClose={() => setPreview(null)} />}
+      {linkPicker}
+      {preview !== null && <Preview images={images} index={preview} setIndex={setPreview} onClose={() => setPreview(null)} onDelete={canEdit ? (a) => { setPreview(null); removeFile(a); } : undefined} />}
     </>
   );
 }

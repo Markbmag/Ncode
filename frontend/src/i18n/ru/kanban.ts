@@ -365,4 +365,16 @@ export const KANBAN: Record<string, string> = {
   'made the next one of this repeating task, due {date}': 'создал(а) следующую повторяющуюся задачу на {date}',
   'removed a link to Search & BI': 'убрал(а) ссылку на «Поиск и BI»',
   'stopped it repeating': 'отключил(а) повтор',
+  // the simpler task page
+  'Add details (optional): what, where, how…': 'Добавьте подробности (необязательно): что, где, как…',
+  'Another step…': 'Ещё шаг…',
+  'Importance': 'Важность',
+  'More: history': 'Ещё: история',
+  'More: history, links, remove': 'Ещё: история, ссылки, убрать',
+  'None yet.': 'Пока ничего.',
+  'Point this task at a dashboard or question, e.g. the scrap figures it is about.': 'Привяжите к задаче дашборд или вопрос, например показатели брака, о которых она.',
+  'Send': 'Отправить',
+  'Start date and repeat…': 'Дата начала и повтор…',
+  'This task is not on the board.': 'Этой задачи нет на доске.',
+  'More for the step “{text}”': 'Ещё для шага «{text}»',
 };

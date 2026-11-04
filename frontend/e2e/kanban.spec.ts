@@ -145,11 +145,15 @@ test('a board from scratch: stages, tasks, drag and drop, steps, comment, photo;
   await drawer.getByTestId('file-input').setInputFiles({ name: 'pump.png', mimeType: 'image/png', buffer: PNG });
   await expect(drawer.getByTestId('attachment-thumb')).toHaveCount(1);
   await expect(drawer.getByTestId('attachment-thumb').locator('img')).toBeVisible();
-  await expect(drawer.getByTestId('attachment-row').filter({ hasText: 'pump.png' })).toBeVisible();
+  // a picture shows once, as a picture; its name is in the picture viewer
+  await drawer.getByTestId('attachment-thumb').click();
+  await expect(page.getByTestId('preview-image')).toBeVisible();
+  await expect(page.getByText('pump.png · 1/1')).toBeVisible();
+  await page.keyboard.press('Escape');
 
   // it saved by itself; the history tells who did what
   await expect(drawer.getByTestId('save-state')).toHaveText('Saved');
-  await drawer.getByTestId('history-tab').click();
+  await drawer.getByTestId('card-more').click(); // history, links and removing are under "More"
   await expect(drawer.getByTestId('history')).toContainText('carol moved the task from To do to In progress');
   await expect(drawer.getByTestId('history')).toContainText('carol ticked off the step “Drain the tank”');
   await expect(drawer.getByTestId('history')).toContainText('carol attached pump.png');
@@ -247,14 +251,16 @@ test('moving without dragging: "Move to…", Undo, and removing a task with Undo
   await expect(cardIn(page, 'In progress', 'Sweep the floor')).toBeAttached();
 
   // priority as words, due date in plain words
-  await drawer.getByTestId('priority-urgent').click();
-  await expect(drawer.getByTestId('priority-urgent')).toHaveAttribute('aria-checked', 'true');
+  await drawer.getByTestId('card-priority').click();
+  await page.getByTestId('priority-urgent').click();
+  await expect(drawer.getByTestId('card-priority')).toHaveText('Urgent');
   const d = new Date(Date.now() - 3 * 86_400_000);
   const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   await drawer.getByTestId('card-due').fill(iso);
   await expect(drawer.getByTestId('due-text')).toHaveText('3 days late');
 
   // removing it from the board can be undone
+  await drawer.getByTestId('card-more').click();
   await drawer.getByTestId('archive-card').click();
   await expect(page.getByTestId('card-drawer')).toHaveCount(0);
   await expect(page.getByTestId('card-face')).toHaveCount(0);
