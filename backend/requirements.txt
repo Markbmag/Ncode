@@ -10,6 +10,7 @@ xlsxwriter>=3.2     # Excel export of results (streams rows, constant memory)
 duckdb>=1.5.5,<1.6  # multi-source questions and uploaded files run in an in-process DuckDB
 openpyxl>=3.1       # reads uploaded Excel files
 tzdata>=2025.2      # time zones for schedules (Windows has no time zone database of its own)
+pillow>=12.3.0,<13  # chart images in emails (M15); wheels for Python 3.13 / 3.14 on Windows and Linux. Optional: without it emails show HTML bars
 
 # Database drivers - keep only the ones you need
 pymysql>=1.1            # MySQL / MariaDB

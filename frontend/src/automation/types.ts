@@ -23,6 +23,8 @@ export interface SubOptions {
   rows: number;
   skip_empty: boolean;
   message: string;
+  /** M15 "Follow": a digest of the biggest changes vs. the day / week before, instead of the cards */
+  digest?: 'day' | 'week' | null;
 }
 
 export interface AlertCondition {
@@ -33,10 +35,12 @@ export interface AlertCondition {
 }
 
 export type TargetType = 'dashboard' | 'question';
+/** What can be followed (a digest, M15): a metric too. */
+export type FollowTargetType = TargetType | 'metric';
 
 export interface SubscriptionBody {
   name: string;
-  target_type: TargetType;
+  target_type: FollowTargetType;
   target_id: number;
   schedule: Schedule;
   recipients: Recipients;
@@ -95,6 +99,7 @@ export interface SubscriptionOptions {
 
 export interface Preview {
   html: string;
+  summary?: string[]; // a digest's sentences
   text: string;
   alert: { met: boolean; note: string } | null;
   empty: boolean;

@@ -22,6 +22,7 @@ from .settings import EmailSettings
 TIMEOUT_SEC = 20
 MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
 Files = list[tuple[str, bytes, str]]
+Inline = list[tuple[str, bytes]]  # chart images (M15): (Content-ID without <>, PNG bytes), linked as "cid:..." from the HTML
 
 
 class DeliveryError(Exception):
@@ -35,7 +36,7 @@ def one_line(text: str, limit: int = 200) -> str:
 
 # ---------------------------------------------------------------- email
 
-def build_email(cfg: EmailSettings, to: str, subject: str, html: str, text: str, files: Files) -> EmailMessage:
+def build_email(cfg: EmailSettings, to: str, subject: str, html: str, text: str, files: Files, inline: Inline | None = None) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = one_line(subject)
     msg["From"] = formataddr((one_line(cfg.from_name, 120), cfg.from_address))
@@ -46,6 +47,11 @@ def build_email(cfg: EmailSettings, to: str, subject: str, html: str, text: str,
     msg["Auto-Submitted"] = "auto-generated"  # out-of-office replies stay away
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
+    if inline:  # the HTML part becomes multipart/related: the HTML and the pictures it shows
+        html_part = msg.get_payload()[1]
+        for cid, data in inline:
+            html_part.add_related(data, maintype="image", subtype="png", cid=f"<{cid}>",
+                                  filename=f"{cid.split('@', 1)[0]}.png", disposition="inline")
     for name, data, mime in files:
         main, _, sub = mime.partition("/")
         msg.add_attachment(data, maintype=main, subtype=sub or "octet-stream", filename=name)
@@ -80,6 +86,7 @@ def _reason(exc: BaseException) -> str:
 
 def send_email(
     cfg: EmailSettings, password: str | None, recipients: list[str], subject: str, html: str, text: str, files: Files,
+    inline: Inline | None = None,
 ) -> dict[str, str]:
     """One message per recipient (nobody sees the others' addresses). Returns {address: "sent" | error}."""
     if not cfg.configured:
@@ -94,11 +101,11 @@ def send_email(
     try:
         for address in recipients:
             try:
-                refused = server.send_message(build_email(cfg, address, subject, html, text, files))
+                refused = server.send_message(build_email(cfg, address, subject, html, text, files, inline))
                 outcome[address] = "sent" if not refused else f"refused: {refused}"
             except smtplib.SMTPServerDisconnected:
                 server = _smtp(cfg, password)  # some servers close after N messages
-                server.send_message(build_email(cfg, address, subject, html, text, files))
+                server.send_message(build_email(cfg, address, subject, html, text, files, inline))
                 outcome[address] = "sent"
             except (smtplib.SMTPException, OSError) as exc:
                 outcome[address] = f"error: {_reason(exc)}"

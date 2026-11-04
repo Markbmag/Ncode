@@ -8,7 +8,7 @@ import { apiErrorMessage } from '../api';
 import { t, tn } from '../i18n/index.ts';
 import { subscriptions, useSubscriptions } from '../automation/api';
 import { StatusBadge } from '../automation/SubscriptionsDrawer';
-import { describeAlert, describeSchedule, recipientCount, timeAgo } from '../automation/logic';
+import { describeAlert, describeSchedule, digestLabel, recipientCount, timeAgo } from '../automation/logic';
 import type { Subscription } from '../automation/types';
 import { PageHeader } from '../components/PageHeader';
 import { BellIcon, LayoutIcon, ChartIcon, MailIcon, SendIcon, TrashIcon } from '../icons';
@@ -94,7 +94,8 @@ function Item({ sub }: { sub: Subscription }) {
       toast({ status: 'error', title: what, description: apiErrorMessage(e, t('Please try again')) });
     }
   };
-  const path = `/${sub.target_type === 'dashboard' ? 'dashboards' : 'questions'}/${sub.target_id}?subscriptions=1`;
+  // a followed metric (M15) lives in the glossary; dashboards and questions open with their subscriptions
+  const path = sub.target_type === 'metric' ? '/glossary' : `/${sub.target_type === 'dashboard' ? 'dashboards' : 'questions'}/${sub.target_id}?subscriptions=1`;
   return (
     <Flex
       align={{ base: 'flex-start', md: 'center' }}
@@ -117,6 +118,7 @@ function Item({ sub }: { sub: Subscription }) {
             </Link>
             <StatusBadge status={sub.running ? 'running' : sub.last_status} />
             {!sub.enabled && <Badge fontSize="2xs">{t('paused')}</Badge>}
+            {sub.options.digest && <Badge fontSize="2xs" colorScheme="purple" data-testid="digest-badge">{digestLabel(sub.options.digest)}</Badge>}
           </HStack>
           <HStack spacing={1} fontSize="xs" color="mutedText" wrap="wrap">
             {sub.target_type === 'dashboard' ? <LayoutIcon boxSize={3} /> : <ChartIcon boxSize={3} />}

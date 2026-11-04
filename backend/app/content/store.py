@@ -29,6 +29,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from ..appdb import User, groups_table, users_table
+from . import history
 from .tables import (
     collections_table, dashboard_cards_table, dashboards_table, datasets_table, favorites_table, item_views_table,
     permissions_table, questions_table, share_links_table, subscription_runs_table, subscriptions_table,
@@ -125,6 +126,14 @@ class Question:
     @property
     def verified(self) -> dict[str, Any] | None:
         return {"by": self.verified_by, "at": self.verified_at} if self.verified_by else None
+
+
+def question_data(q: Question) -> dict[str, Any]:
+    """What a saved version of a question keeps (M15)."""
+    return {
+        "name": q.name, "description": q.description, "kind": q.kind, "connection": q.connection,
+        "spec": q.spec, "viz": q.viz, "parameters": q.parameters,
+    }
 
 
 def query_identity(kind: str, connection: str, spec: dict[str, Any], parameters: list[dict[str, Any]]) -> str:
@@ -244,6 +253,7 @@ class ContentStore:
     def __init__(self, engine: Engine):
         self.engine = engine
         self.on_files_deleted: Any = None  # set by app/federation: removes uploaded files of deleted datasets
+        self.history_keep = history.DEFAULT_KEEP  # versions kept per question / dashboard (NCODE_HISTORY_KEEP, M15)
 
     # ------------------------------------------------------------------ snapshot
     def snapshot(self) -> Snapshot:
@@ -613,19 +623,29 @@ class ContentStore:
         self._require(snap, user, collection_id, "edit")
         self._require_open(snap, collection_id)
         now = time.time()
+        clean = {
+            "name": _clean_name(name, 200), "description": (description or "").strip() or None, "kind": kind,
+            "connection": connection, "spec": spec, "viz": viz, "parameters": parameters or [],
+        }
         with self.engine.begin() as conn:
             qid = conn.execute(
                 insert(questions_table).values(
-                    name=_clean_name(name, 200), description=(description or "").strip() or None,
+                    name=clean["name"], description=clean["description"],
                     collection_id=collection_id, connection=connection, kind=kind,
                     spec=json.dumps(spec), viz=json.dumps(viz) if viz is not None else None,
                     parameters=json.dumps(parameters or []), owner_id=user.id, archived=False,
                     import_key=import_key, created_at=now, updated_at=now, updated_by=user.username,
                 )
             ).inserted_primary_key[0]
+            history.record(conn, "question", int(qid), json.loads(json.dumps(clean)), [["created"]],
+                           saved_by=user.username, saved_at=now, keep=self.history_keep)
         return self.get_question(user, int(qid))
 
-    def update_question(self, user: User, qid: int, base_updated_at: float | None = None, **changes: Any) -> Question:
+    def update_question(
+        self, user: User, qid: int, base_updated_at: float | None = None, restored: int | None = None, **changes: Any
+    ) -> Question:
+        """Save changes. One that changes what the question is keeps a new version (M15);
+        `restored` = the number of the version being brought back."""
         current = self.get_question(user, qid, "edit")
         check_base("question", current.updated_at, current.updated_by, base_updated_at)
         snap = self.snapshot()
@@ -658,10 +678,32 @@ class ContentStore:
             if before != after:  # a changed query is no longer the answer that was checked (M11)
                 values.update(verified_by=None, verified_at=None)
         if values:
-            values.update(updated_at=time.time(), updated_by=user.username)
+            now = time.time()
+            values.update(updated_at=now, updated_by=user.username)
+            before = question_data(current)
+            after = {**before, **{k: json.loads(values[k]) if k in ("spec", "viz", "parameters") and values[k] is not None else values[k]
+                                  for k in history.QUESTION_FIELDS if k in values}}
             with self.engine.begin() as conn:
                 conn.execute(update(questions_table).where(questions_table.c.id == qid).values(**values))
+                if after != before:
+                    history.record(
+                        conn, "question", qid, after,
+                        [["restored", restored]] if restored is not None else history.question_changes(before, after),
+                        saved_by=user.username, saved_at=now, keep=self.history_keep,
+                        before=before, before_by=current.updated_by, before_at=current.updated_at,
+                    )
         return self.get_question(user, qid)
+
+    def question_versions(self, user: User, qid: int) -> list[dict[str, Any]]:
+        self.get_question(user, qid)  # must be visible
+        return history.versions(self.engine, "question", qid)
+
+    def question_version(self, user: User, qid: int, number: int) -> dict[str, Any]:
+        self.get_question(user, qid)
+        found = history.version(self.engine, "question", qid, number)
+        if found is None:
+            raise NotFound("Version")
+        return found
 
     def set_verified(self, user: User, qid: int, on: bool) -> Question:
         """Mark a question as the official answer (admins), or take the mark away. The question
@@ -724,6 +766,7 @@ def forget_items(conn: Any, target_type: str, ids: list[int]) -> None:
     conn.execute(delete(item_views_table).where(  # "recently viewed" on home pages (M11)
         item_views_table.c.item_type == target_type, item_views_table.c.item_id.in_(ids)
     ))
+    history.forget(conn, target_type, ids)  # their saved versions (M15)
 
 
 def forget_user(conn: Any, user_id: int, username: str) -> None:

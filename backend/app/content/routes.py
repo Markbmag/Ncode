@@ -17,6 +17,10 @@
     POST   /api/questions/{id}/run                  {"params": {...}, "wait_ms", "refresh"} -> a query task
     PUT    /api/questions/{id}/favorite             star; DELETE to unstar
     POST   /api/questions/{id}/verify               (admins) "the official answer"; DELETE to take it away
+    GET    /api/questions/{id}/versions             history (M15): every saved version, newest first
+    GET    /api/questions/{id}/versions/{n}         one version with the question as it was saved ("data")
+    POST   /api/questions/{id}/versions/{n}/run     run that version (as RunIn) without restoring it
+    POST   /api/questions/{id}/versions/{n}/restore bring it back (edit rights); itself a new version
 
     GET    /api/library/archive                     archived collections and questions
     GET    /api/library/people                      user names and roles to share with
@@ -33,10 +37,15 @@ New items cannot go into an archived collection (409): they would vanish from vi
 Verified (M11): every question carries "verified": {"by", "at"} or null. A save that changes
 what the question computes (spec / SQL, kind, connection, parameters) takes the mark away;
 renaming, moving or a new chart keep it. Searches and collections put verified questions first.
+Restoring an older version follows the same rule.
+
+History (M15, app/content/history.py): a version is {"version", "saved_by", "saved_at",
+"summary": "Changed the filters and the chart", "current"}; the newest NCODE_HISTORY_KEEP are kept.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -178,6 +187,7 @@ def register_content_routes(
     require_connection: Callable[[str, User], None],
 ) -> ContentStore:
     store = ContentStore(app_db.engine)
+    store.history_keep = settings.history_keep
     dashboard_store = DashboardStore(store)
     router = APIRouter(tags=["library"])
 
@@ -397,6 +407,61 @@ def register_content_routes(
         app_db.audit(user.username, "question_unverify", phrase=f"question {qid}", status="ok")
         return question_json(q)
 
+    # ------------------------------------------------------------------ history (M15)
+    @router.get("/api/questions/{qid}/versions")
+    def question_versions(qid: int, user: User = Depends(current_user)):
+        try:
+            return {"versions": store.question_versions(user, qid), "keep": store.history_keep}
+        except ContentError as exc:
+            raise fail(exc) from exc
+
+    @router.get("/api/questions/{qid}/versions/{number}")
+    def question_version(qid: int, number: int, user: User = Depends(current_user)):
+        try:
+            return store.question_version(user, qid, number)
+        except ContentError as exc:
+            raise fail(exc) from exc
+
+    @router.post("/api/questions/{qid}/versions/{number}/run")
+    def run_question_version(qid: int, number: int, body: RunIn, user: User = Depends(current_user)):
+        try:
+            q = store.get_question(user, qid)
+            data = store.question_version(user, qid, number)["data"]
+        except ContentError as exc:
+            raise fail(exc) from exc
+        old = dataclasses.replace(
+            q, kind=data["kind"], connection=data.get("connection") or "", spec=data.get("spec") or {},
+            parameters=data.get("parameters") or [],
+        )
+        return run_saved(user, old, body.params, [], body.wait_ms, body.refresh, {"question_id": q.id, "version": number})
+
+    @router.post("/api/questions/{qid}/versions/{number}/restore")
+    def restore_question_version(qid: int, number: int, user: User = Depends(current_user)):
+        try:
+            current = store.get_question(user, qid, "edit")
+            data = store.question_version(user, qid, number)["data"]
+        except ContentError as exc:
+            raise fail(exc) from exc
+        kind = data.get("kind") or current.kind
+        try:
+            defs = [ParameterDef(**p) for p in data.get("parameters") or []]
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail=f"Version {number} cannot be restored: {exc.errors()[0]['msg']}") from exc
+        # checked like a save: the tables, columns and SQL must still work
+        connection, spec, defs = validate(user, kind, data.get("connection") or None, data.get("spec") or {}, defs)
+        check_viz(data.get("viz"))
+        try:
+            saved = store.update_question(
+                user, qid, restored=number, name=data.get("name") or current.name, description=data.get("description"),
+                kind=kind, connection=connection, spec=spec, viz=data.get("viz"), parameters=[d.model_dump() for d in defs],
+            )
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "question_restore", phrase=f"question {qid}: version {number}", status="ok")
+        if current.verified_by and not saved.verified_by:
+            app_db.audit(user.username, "question_unverify", phrase=f"question {qid}: the query changed", status="ok")
+        return question_json(saved)
+
     @router.delete("/api/questions/{qid}")
     def delete_question(qid: int, user: User = Depends(current_user)):
         try:
@@ -510,4 +575,5 @@ def register_content_routes(
     )
     # subscriptions and public links (M8) run saved content through the same checks
     app.state.content = ContentServices(store=store, dashboards=dashboard_store, run_saved=run_saved, start_card=start_card)
+    app.state.federation = federation  # dashboard templates (app/templates_mfg.py) check and preview with it
     return store

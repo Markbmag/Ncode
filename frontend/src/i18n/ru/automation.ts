@@ -241,4 +241,23 @@ export const AUTOMATION: Record<string, string> = {
   // M11: home page, menu, share dialog, empty states
   '“Line output” every Monday at 7:00, by email to you and your team.': '«Выпуск линий» каждый понедельник в 7:00 — на почту вам и вашей команде.',
   'Send “{name}” on a schedule…': 'Отправлять «{name}» по расписанию…',
+  // M15: Follow (FollowButton.tsx, logic.ts, SubscriptionsPage.tsx)
+  'Daily digest': 'Сводка за день',
+  'Weekly digest': 'Сводка за неделю',
+  'Follow': 'Следить',
+  'Following': 'Вы следите',
+  'Unfollow': 'Не следить',
+  'Could not follow': 'Не удалось подписаться на сводку',
+  'Could not unfollow': 'Не удалось отключить сводку',
+  'You follow “{name}”: a digest comes every morning': 'Вы следите за «{name}»: сводка будет приходить каждое утро',
+  'You follow “{name}”: a digest comes every Monday': 'Вы следите за «{name}»: сводка будет приходить по понедельникам',
+  'You do not follow “{name}” any more': 'Вы больше не следите за «{name}»',
+  'You get a {digest} of “{name}” by email: the biggest changes in a few sentences.':
+    'Вам на почту приходит {digest} по «{name}»: главные изменения в нескольких предложениях.',
+  'Get the biggest changes by email': 'Главные изменения — на почту',
+  'A short email in plain sentences, for example: “Scrap on the paint line rose 18 % vs. the week before, mostly paint drips.”':
+    'Короткое письмо простыми словами, например: «Брак на линии окраски: рост на 18 % к предыдущей неделе, больше всего — подтёки краски».',
+  'Email is not set up yet. An admin sets it up under Admin → Delivery.': 'Почта ещё не настроена. Администратор настраивает её в разделе Администрирование → Доставка.',
+  'Every morning: yesterday vs. the day before': 'Каждое утро: вчера по сравнению с позавчера',
+  'Every Monday: last week vs. the week before': 'По понедельникам: прошлая неделя по сравнению с позапрошлой',
 };

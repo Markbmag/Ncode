@@ -9,6 +9,9 @@
     POST   /api/dashboards/{id}/duplicate
     PUT    /api/dashboards/{id}/favorite               (DELETE to remove the star)
     POST   /api/dashboards/{id}/verify                 (admins) "the official one"; DELETE to take it away (M11)
+    GET    /api/dashboards/{id}/versions               history (M15): every saved version, newest first
+    GET    /api/dashboards/{id}/versions/{n}           one version ("data") + the questions on its cards ("questions")
+    POST   /api/dashboards/{id}/versions/{n}/restore   bring it back (edit rights); itself a new version
     POST   /api/dashboards/{id}/cards/{key}/run        {"filters": {"period": ["2026-01-01", "2026-03-31"]}, "wait_ms", "refresh"}
 
 A card run applies the dashboard's filter values to the card's question (parameters or
@@ -225,6 +228,40 @@ def register_dashboard_routes(
         except ContentError as exc:
             raise fail(exc) from exc
         app_db.audit(user.username, "dashboard_unverify", phrase=f"dashboard {did}", status="ok")
+        return full(user, d)
+
+    @router.get("/api/dashboards/{did}/versions")
+    def versions(did: int, user: User = Depends(current_user)):
+        try:
+            return {"versions": store.versions(user, did), "keep": store.content.history_keep}
+        except ContentError as exc:
+            raise fail(exc) from exc
+
+    @router.get("/api/dashboards/{did}/versions/{number}")
+    def version(did: int, number: int, user: User = Depends(current_user)):
+        try:
+            found = store.version(user, did, number)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        questions: dict[str, Any] = {}
+        for card in found["data"].get("cards") or []:
+            qid = card.get("question_id")
+            if qid is not None and str(qid) not in questions:
+                try:
+                    q: Question | None = store.content.get_question(user, qid)
+                except ContentError:
+                    q = None
+                info = _question_info(q, qid)
+                questions[str(qid)] = {k: info.get(k) for k in ("state", "id", "name", "kind")}
+        return {**found, "questions": questions}
+
+    @router.post("/api/dashboards/{did}/versions/{number}/restore")
+    def restore_version(did: int, number: int, user: User = Depends(current_user)):
+        try:
+            d = store.restore_version(user, did, number)
+        except ContentError as exc:
+            raise fail(exc) from exc
+        app_db.audit(user.username, "dashboard_restore", phrase=f"dashboard {did}: version {number}", status="ok")
         return full(user, d)
 
     @router.put("/api/dashboards/{did}/favorite")

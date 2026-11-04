@@ -75,7 +75,8 @@ export default function SavedQuestionPage() {
       />
     );
   if (q.kind !== 'federated' && !usable) return <NoDatabase q={q} />;
-  if (!editing) return <QuestionView key={q.id} q={q} onEdit={canEdit ? () => setEditing(true) : null} />;
+  // a new saved version (a restored one, M15) is shown afresh: its result, its chart
+  if (!editing) return <QuestionView key={`${q.id}-${q.updated_at}`} q={q} onEdit={canEdit ? () => setEditing(true) : null} />;
   return (
     <EditorModeContext.Provider value={editorMode}>
       {q.kind === 'federated' ? (

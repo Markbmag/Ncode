@@ -19,7 +19,8 @@ from ..appdb import AppDB, User
 from ..content.store import ContentError
 from ..query.runner import QueryRunner
 from ..results import ResultEnvelope
-from . import channels
+from . import channels, charts
+from .digest import build_digest
 from .render import CardOut, Report, attachments, email_html, plain_text, slack_payload, teams_payload, telegram_text, webhook_payload
 from .settings import SettingsStore
 from .store import AlertCondition, Subscription, SubscriptionIn, SubscriptionStore
@@ -71,8 +72,12 @@ class Engine:
     def __init__(
         self, *, app_db: AppDB, settings_store: SettingsStore, subs: SubscriptionStore, runner: QueryRunner,
         content: Callable[[], Any], statement_timeout_sec: int,
+        semantic: Any = None, registry: Any = None, email_language: str = "en",
     ):
         self.app_db = app_db
+        self.semantic = semantic          # digests of a metric (M15): its definition and date column
+        self.registry = registry
+        self.email_language = email_language  # digests: the language when the person has none stored
         self.settings = settings_store
         self.subs = subs
         self.runner = runner
@@ -112,6 +117,8 @@ class Engine:
         return self.settings.site_url()
 
     def build(self, owner: User, body: SubscriptionIn, sub_id: int | None) -> Outcome:
+        if body.options.digest:  # M15: the biggest changes in sentences (app/automation/digest.py)
+            return build_digest(self, owner, body, sub_id)
         site = self._site()
         extra = {"subscription_id": sub_id} if sub_id else {"subscription_preview": True}
         tz = ZoneInfo(body.schedule.timezone)
@@ -209,9 +216,11 @@ class Engine:
         if addresses:
             cfg = self.settings.get("email")
             subject = (f"🔔 {report.title}: {outcome.alert_note}" if outcome.alert_met else report.title)
+            pictures = charts.pictures(report, report.lang)  # M15: chart images, linked by Content-ID
+            html = email_html(report, {i: (f"cid:{p.cid}", p.alt, p.width) for i, p in pictures.items()})
             try:
                 sent = channels.send_email(cfg, self.settings.secret("email"), addresses, subject,
-                                           email_html(report), plain_text(report), files)
+                                           html, plain_text(report), files, [(p.cid, p.data) for p in pictures.values()])
                 results += [{"channel": f"email {a}", "status": s} for a, s in sent.items()]
             except channels.DeliveryError as exc:
                 results += [{"channel": f"email {a}", "status": f"error: {exc}"} for a in addresses]

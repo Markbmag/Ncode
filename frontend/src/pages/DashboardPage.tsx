@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge, Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Select, Skeleton, Text, Textarea, useBreakpointValue, useDisclosure, useToast,
+  Badge, Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerFooter, DrawerHeader, DrawerOverlay, Flex, FormControl, FormLabel, HStack, IconButton, Input, Link, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Select, Skeleton, Text, Textarea, useBreakpointValue, useDisclosure, useToast,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -14,24 +14,33 @@ import { withBase } from '../library/conflict';
 import { useEditConflict } from '../library/ConflictDialog';
 import {
   ArchiveIcon, BellIcon, ChartIcon, GlobeIcon, ChevronRightIcon, CopyIcon, FolderIcon, LayoutIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, SaveIcon,
-  SlidersIcon, StarIcon, XIcon,
+  HistoryIcon, SlidersIcon, StarIcon, XIcon,
 } from '../icons';
 import { DialogShell, MoveDialog } from '../library/dialogs';
 import { ShareButton } from '../library/ShareItem';
 import { VerifiedBadge, VerifyMenuItem } from '../library/VerifiedBadge';
+import { HistoryDrawer } from '../library/HistoryDrawer';
+import { UndoButtons } from '../components/query/UndoButtons';
+import { useConfirmChange } from '../components/query/useConfirmChange';
+import { HISTORY_LIMIT, amend, canRedo, canUndo, record, redo, startHistory, undo } from '../query/history';
+import type { History } from '../query/history';
+import { useUndoKeys } from '../query/useDraftHistory';
 import { markStep } from '../home/checklist';
 import { SubscriptionsDrawer } from '../automation/SubscriptionsDrawer';
+import { FollowButton } from '../automation/FollowButton';
 import { ShareDialog } from '../sharing/ShareDialog';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { cardQueue, dashboards, useDashboard } from '../dashboards/api';
 import { DashboardCard } from '../dashboards/DashboardCard';
 import { AddQuestionDialog, CardDialog, FiltersDialog } from '../dashboards/EditDialogs';
 import { FilterBar } from '../dashboards/FilterBar';
+import { dataAsOf, filtersLabel, phoneCards } from '../dashboards/phone';
+import { useNow } from '../dashboards/useNow';
 import { LoadError } from '../components/LoadError';
 import { applyToSearch } from '../dashboards/filterValues';
 import type { FilterUpdate } from '../dashboards/filterValues';
 import {
-  DEFAULT_SIZE, addTab, applyLayout, cardsOnTab, newKey, placeNew, removeTab, runValues, toDefinition, valuesFromSearch,
+  DEFAULT_SIZE, addTab, applyLayout, cardsOnTab, newKey, placeNew, removeTab, runValues, shownValue, toDefinition, valuesFromSearch,
 } from '../dashboards/logic';
 import type { FilterValues } from '../dashboards/logic';
 import { REFRESH_CHOICES } from '../dashboards/types';
@@ -69,8 +78,10 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const [search, setSearch] = useSearchParams();
   const canEdit = dashboard.access === 'edit';
   const definitionOf = (d: Dashboard): Definition => ({ filters: d.filters, tabs: d.tabs, cards: d.cards, settings: d.settings });
-  // set while editing; a new dashboard opens in edit mode (?edit=1)
-  const [draft, setDraft] = useState<Definition | null>(() => (search.get('edit') === '1' && canEdit ? definitionOf(dashboard) : null));
+  // set while editing, with undo / redo of every change (M15); a new dashboard opens in edit mode (?edit=1)
+  const [edits, setEdits] = useState<History<Definition> | null>(() => (search.get('edit') === '1' && canEdit ? startHistory(definitionOf(dashboard)) : null));
+  const draft = edits?.present ?? null;
+  const setDraft = useCallback((d: Definition | null) => setEdits(d ? startHistory(d) : null), []);
   // the version the draft was started from: a save on top of someone else's newer one is refused (409)
   const [base, setBase] = useState<number>(dashboard.updated_at);
   const conflict = useEditConflict();
@@ -90,6 +101,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   const details = useDisclosure();
   const move = useDisclosure();
   const share = useDisclosure();
+  const history = useDisclosure(); // saved versions (M15)
   const [subsOpen, setSubsOpen] = useState(() => search.get('subscriptions') === '1');
   const [editingCard, setEditingCard] = useState<DashCard | null>(null);
   const [renamingTab, setRenamingTab] = useState<string | null>(null);
@@ -151,7 +163,23 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
     setBase(dashboard.updated_at);
     setDraft(definitionOf(dashboard));
   };
-  const change = useCallback((fn: (d: Definition) => Definition) => setDraft((d) => (d ? fn(d) : d)), []);
+  // every change is one undo step (no merging: these are separate clicks, not typing)
+  const change = useCallback((fn: (d: Definition) => Definition) => setEdits((h) => (h ? record(h, fn(h.present), Date.now(), HISTORY_LIMIT, 0) : h)), []);
+  // the grid tidying itself up (cards moving up after one was removed) is part of the change before
+  const tidy = useCallback((fn: (d: Definition) => Definition) => setEdits((h) => (h ? amend(h, fn(h.present)) : h)), []);
+  const undoEdit = useCallback(() => setEdits((h) => (h ? undo(h) : h)), []);
+  const redoEdit = useCallback(() => setEdits((h) => (h ? redo(h) : h)), []);
+  useUndoKeys(undoEdit, redoEdit, editing);
+  const confirmCancel = useConfirmChange();
+  const cancelEdit = () => {
+    if (!edits || !canUndo(edits)) return setDraft(null);
+    confirmCancel.ask({
+      title: t('Throw away your changes?'),
+      body: t('The dashboard stays as it was last saved. What you changed since you started editing is not kept.'),
+      confirmLabel: t('Discard changes'),
+      onConfirm: () => setDraft(null),
+    });
+  };
   const tabCards = cardsOnTab(def, activeTab);
   const addCard = (card: Omit<DashCard, 'key' | 'layout' | 'tab'>) =>
     change((d) => {
@@ -161,8 +189,8 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
     });
   const replaceCard = (next: DashCard) => change((d) => ({ ...d, cards: d.cards.map((c) => (c.key === next.key ? next : c)) }));
   const removeCard = (key: string) => change((d) => ({ ...d, cards: d.cards.filter((c) => c.key !== key) }));
-  const onLayout = (layout: Layout) =>
-    change((d) => {
+  const onLayout = (layout: Layout, byHand: boolean) =>
+    (byHand ? change : tidy)((d) => {
       const updated = applyLayout(cardsOnTab(d, activeTab), [...layout]);
       if (updated === cardsOnTab(d, activeTab)) return d;
       const byKey = new Map(updated.map((c) => [c.key, c]));
@@ -201,6 +229,25 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
   // ------------------------------------------------------------------ grid
   const { width, containerRef, mounted } = useContainerWidth();
   const stacked = (useBreakpointValue({ base: true, md: false }, { ssr: false }) ?? false) && !editing;
+  // "data as of" (M15): each card says when its rows were read; the header tells the oldest on screen
+  const [readTimes, setReadTimes] = useState<Record<string, number>>({});
+  const onReadAt = useCallback((key: string, at: number | null) => setReadTimes((prev) => {
+    if (at === null) {
+      if (!(key in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[key];
+      return rest;
+    }
+    return prev[key] === at ? prev : { ...prev, [key]: at };
+  }), []);
+  const now = useNow();
+  const asOf = dataAsOf(tabCards.flatMap((c) => (readTimes[c.key] === undefined ? [] : [readTimes[c.key]])), now);
+  // on a phone the filters fold into one button with a sheet from the bottom
+  const phoneFilters = useDisclosure();
+  const filtersSet = def.filters.filter((f) => {
+    const shown = shownValue(f, values);
+    return Array.isArray(shown) ? shown.some((v) => v !== '') : shown !== '';
+  }).length;
   const layout: Layout = tabCards.map((c) => ({
     i: c.key, x: c.layout.x, y: c.layout.y, w: c.layout.w, h: c.layout.h, minW: 2, minH: c.kind === 'heading' ? 1 : 2,
   }));
@@ -218,6 +265,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       onEdit={() => setEditingCard(c)}
       onRemove={() => removeCard(c.key)}
       onChange={replaceCard}
+      onReadAt={onReadAt}
     />
   );
 
@@ -269,6 +317,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
         <Box flex={1} />
         {editing ? (
           <HStack spacing={2} wrap="wrap" className="no-print">
+            <UndoButtons history={{ undo: undoEdit, redo: redoEdit, canUndo: !!edits && canUndo(edits), canRedo: !!edits && canRedo(edits), revision: 0 }} />
             <Button size="sm" variant="subtle" leftIcon={<ChartIcon boxSize={4} />} onClick={addQuestion.onOpen} data-testid="add-question-card">
               {t('Question')}
             </Button>
@@ -284,8 +333,8 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
             <Button size="sm" variant="subtle" leftIcon={<LayoutIcon boxSize={4} />} onClick={() => change((d) => addTab(d, t('Tab {n}', { n: d.tabs.length + (d.tabs.length ? 1 : 2) })))} data-testid="add-tab">
               {t('Tab')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
-              {t('Cancel')}
+            <Button size="sm" variant="ghost" onClick={cancelEdit} data-testid="cancel-dashboard-edit">
+              {t('Cancel changes')}
             </Button>
             <Button size="sm" variant="brand" leftIcon={<SaveIcon boxSize={4} />} onClick={() => void save()} isLoading={saving} data-testid="save-dashboard">
               {t('Save')}
@@ -293,10 +342,17 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
           </HStack>
         ) : (
           <HStack spacing={2} wrap="wrap" className="no-print">
+            {asOf && (
+              <Text fontSize="sm" color="mutedText" whiteSpace="nowrap" data-testid="dashboard-data-as-of">
+                {asOf}
+              </Text>
+            )}
             <Tooltip label={t('Last refreshed {time}', { time: new Date(lastRefresh).toLocaleTimeString(locale()) })} hasArrow>
-              <IconButton aria-label={t('Refresh all cards')} size="sm" variant="subtle" icon={<RefreshIcon boxSize={4} />} onClick={refreshAll} data-testid="refresh-dashboard" />
+              <Button size={{ base: 'md', md: 'sm' }} variant="subtle" leftIcon={<RefreshIcon boxSize={4} />} onClick={refreshAll} aria-label={t('Refresh all cards')} data-testid="refresh-dashboard">
+                {t('Refresh all')}
+              </Button>
             </Tooltip>
-            <Select size="sm" w="170px" value={refreshEvery} onChange={(e) => setRefreshEvery(Number(e.target.value))} aria-label={t('Auto-refresh')} data-testid="auto-refresh">
+            <Select size="sm" w="170px" rootProps={{ display: { base: 'none', md: 'block' }, w: 'auto' }} value={refreshEvery} onChange={(e) => setRefreshEvery(Number(e.target.value))} aria-label={t('Auto-refresh')} data-testid="auto-refresh">
               {REFRESH_CHOICES.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.value ? t('Every {interval}', { interval: r.label }) : t('Auto-refresh off')}
@@ -311,10 +367,11 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                     questionIds: dashboard.cards.map((c) => c.question_id), params: dashboard.filters.map((f) => ({ name: f.id, label: f.label })),
                   }}
                 />
+                <FollowButton target={{ type: 'dashboard', id: dashboard.id, name: dashboard.name }} />
                 <Tooltip label={t('Subscriptions: send it by email or to a chat')} hasArrow>
-                  <IconButton aria-label={t('Subscriptions')} size="sm" variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
+                  <IconButton aria-label={t('Subscriptions')} size={{ base: 'md', md: 'sm' }} variant="subtle" icon={<BellIcon boxSize={4} />} onClick={() => setSubsOpen(true)} data-testid="dashboard-subscriptions" />
                 </Tooltip>
-                <Button size="sm" variant="subtle" onClick={enterTv} data-testid="tv-mode">
+                <Button size="sm" variant="subtle" display={{ base: 'none', md: 'inline-flex' }} onClick={enterTv} data-testid="tv-mode">
                   {t('TV mode')}
                 </Button>
                 {canEdit && (
@@ -323,7 +380,7 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                   </Button>
                 )}
                 <Menu isLazy placement="bottom-end">
-                  <MenuButton as={IconButton} aria-label={t('More actions')} size="sm" variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="dashboard-menu" />
+                  <MenuButton as={IconButton} aria-label={t('More actions')} size={{ base: 'md', md: 'sm' }} variant="ghost" icon={<MoreIcon boxSize={4} />} data-testid="dashboard-menu" />
                   <MenuList fontSize="sm">
                     <MenuItem onClick={() => window.print()}>{t('Print / save as PDF')}</MenuItem>
                     {ws.isAdmin && (
@@ -333,6 +390,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
                     )}
                     <MenuItem icon={<CopyIcon boxSize={4} />} onClick={() => void act(t('Could not duplicate'), async () => navigate(`/dashboards/${(await dashboards.duplicate(dashboard.id)).id}`))}>
                       {t('Duplicate')}
+                    </MenuItem>
+                    <MenuItem icon={<HistoryIcon boxSize={4} />} onClick={history.onOpen} data-testid="dashboard-history">
+                      {t('History')}
                     </MenuItem>
                     <VerifyMenuItem kind="dashboard" id={dashboard.id} verified={dashboard.verified} />
                     {canEdit && (
@@ -372,10 +432,32 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       </Flex>
 
       {/* filters */}
-      {def.filters.length > 0 && (
+      {def.filters.length > 0 && !stacked && (
         <Box mb={3}>
           <FilterBar filters={def.filters} values={values} onChange={setValues} cards={def.cards} />
         </Box>
+      )}
+      {def.filters.length > 0 && stacked && (
+        <>
+          <Button w="100%" size="lg" variant="subtle" mb={3} leftIcon={<SlidersIcon boxSize={5} />} onClick={phoneFilters.onOpen} className="no-print" data-testid="phone-filters">
+            {filtersLabel(filtersSet)}
+          </Button>
+          <Drawer isOpen={phoneFilters.isOpen} onClose={phoneFilters.onClose} placement="bottom">
+            <DrawerOverlay />
+            <DrawerContent borderTopRadius="2xl" maxH="85vh" data-testid="filters-sheet">
+              <DrawerCloseButton size="lg" />
+              <DrawerHeader fontSize="lg">{t('Filters')}</DrawerHeader>
+              <DrawerBody>
+                <FilterBar filters={def.filters} values={values} onChange={setValues} cards={def.cards} stacked />
+              </DrawerBody>
+              <DrawerFooter>
+                <Button size="lg" w="100%" variant="brand" onClick={phoneFilters.onClose} data-testid="filters-sheet-done">
+                  {t('Show the cards')}
+                </Button>
+              </DrawerFooter>
+            </DrawerContent>
+          </Drawer>
+        </>
       )}
 
       {/* tabs */}
@@ -442,14 +524,13 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
       {/* the measured box is always there: the grid library measures its width once, on mount */}
       <Box ref={containerRef} mx={stacked ? 0 : `-${MARGIN}px`} className={editing ? 'dash-grid editing' : 'dash-grid'}>
         {stacked ? (
-          <Box display="flex" flexDirection="column" gap={3}>
-            {[...tabCards]
-              .sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x)
-              .map((c) => (
-                <Box key={c.key} h={c.kind === 'heading' ? 'auto' : `${Math.max(c.layout.h, 4) * ROW_HEIGHT}px`}>
-                  {renderCard(c)}
-                </Box>
-              ))}
+          // one card per row in the grid's reading order; number cards two per row (M15)
+          <Box display="grid" gridTemplateColumns="repeat(2, minmax(0, 1fr))" gap={3} data-testid="dashboard-phone">
+            {phoneCards(tabCards).map(({ card: c, span, height }) => (
+              <Box key={c.key} gridColumn={`span ${span}`} minW={0} h={height === null ? 'auto' : `${height}px`}>
+                {renderCard(c)}
+              </Box>
+            ))}
           </Box>
         ) : (
           mounted &&
@@ -461,7 +542,9 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
               dragConfig={{ enabled: editing, handle: '.card-drag', cancel: '.no-drag' }}
               resizeConfig={{ enabled: editing }}
               compactor={verticalCompactor}
-              onLayoutChange={(l) => editing && onLayout(l)}
+              onLayoutChange={(l) => editing && onLayout(l, false)}
+              onDragStop={(l) => editing && onLayout(l, true)}
+              onResizeStop={(l) => editing && onLayout(l, true)}
             >
               {tabCards.map((c) => (
                 <div key={c.key}>{renderCard(c)}</div>
@@ -473,6 +556,8 @@ function DashboardView({ dashboard }: { dashboard: Dashboard }) {
 
       <PrintStyles />
       {conflict.dialog}
+      {confirmCancel.dialog}
+      <HistoryDrawer kind="dashboard" id={dashboard.id} isOpen={history.isOpen} onClose={history.onClose} canEdit={canEdit} />
 
       {/* dialogs */}
       <AddQuestionDialog

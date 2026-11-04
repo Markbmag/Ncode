@@ -212,6 +212,10 @@ RU: dict[str, str] = {
     "{d!r} is not a domain": "{d!r} — не домен",
     "the site address starts with http:// or https://": "адрес сайта начинается с http:// или https://",
     "alerts watch a question, not a dashboard": "оповещения следят за вопросом, а не за дашбордом",
+    "a digest is not an alert": "сводка не может быть оповещением",
+    "a metric can only be followed (a digest)": "за метрикой можно только следить (сводка)",
+    "The metric is gone or not shared with the subscription's owner any more":
+        "Метрика удалена или больше не доступна владельцу подписки",
     "No such subscription": "Такой подписки нет",
     "{e!r} is not an email address": "{e!r} — не адрес электронной почты",
     "give the value to compare with": "укажите значение для сравнения",
@@ -287,6 +291,10 @@ RU: dict[str, str] = {
     "Unknown question kind {q.kind!r}": "Неизвестный вид вопроса {q.kind!r}",
     "Collection not found": "Коллекция не найдена",
     "Question not found": "Вопрос не найден",
+    "Version not found": "Версия не найдена",
+    "Version {number} shows a question that is not shared with you. Ask its owner or an administrator to restore it":
+        "В версии {number} есть вопрос, к которому у вас нет доступа. Попросите его владельца или администратора восстановить её",
+    "Version {number} cannot be restored: {exc.errors()[0]['msg']}": "Версию {number} нельзя восстановить: {exc.errors()[0]['msg']}",
     "{what} not found": "Не найдено: {what}",
     "Someone else{who} saved this {what} after you opened it. Reload to see their version, or save again without the check to overwrite it.":
         "Пока вы редактировали ({what}), кто-то другой{who} сохранил свою версию. Обновите страницу, чтобы увидеть её, "
@@ -600,6 +608,8 @@ RU: dict[str, str] = {
     "The preview is too large": "Миниатюра слишком большая",
     "The preview must be a JPEG, PNG or WebP image": "Миниатюра должна быть изображением JPEG, PNG или WebP",
     "The file is missing on the server": "Файл отсутствует на сервере",
+    # ---------------------------------------------------------------- app/templates_mfg.py (M15)
+    "Unknown template": "Неизвестный шаблон",
 }
 
 # Single words that fill a {placeholder} of another message ("Someone else saved this {what} ...").
@@ -667,4 +677,25 @@ PYDANTIC: dict[str, str] = {
     "JSON decode error": "Ошибка разбора JSON",
     "Value error, {msg}": "{msg}",
     "Assertion failed, {msg}": "{msg}",
+}
+
+# What changed in a saved version of a question or dashboard (app/content/history.py, M15):
+# "Изменили фильтры и график", "Добавили 2 карточки". The nouns are in the accusative.
+HISTORY: dict = {
+    "created": "Создали",
+    "baseline": "Как было до начала истории",
+    "saved": "Сохранили",
+    "renamed": "переименовали",
+    "restored": "восстановили версию {n}",
+    "changed": "изменили {what}",
+    "added": ("добавили {n} карточку", "добавили {n} карточки", "добавили {n} карточек"),
+    "removed": ("убрали {n} карточку", "убрали {n} карточки", "убрали {n} карточек"),
+    "nouns": {
+        "description": "описание", "query": "запрос", "tables": "таблицы", "custom columns": "вычисляемые столбцы",
+        "columns": "столбцы", "totals": "итоги", "grouping": "группировку", "filters": "фильтры",
+        "sorting": "сортировку", "row limit": "число строк", "calculations": "расчёты", "SQL": "SQL",
+        "database": "базу данных", "parameters": "параметры", "chart": "график", "tabs": "вкладки",
+        "layout": "расположение карточек", "texts": "тексты", "card settings": "настройки карточек",
+        "auto-refresh": "автообновление",
+    },
 }

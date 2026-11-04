@@ -1,5 +1,5 @@
 import {
-  Box, Button, Flex, HStack, Input, Text,
+  Box, Button, Flex, Input, Text,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { XIcon } from '../icons';
@@ -21,33 +21,50 @@ interface Props {
   onChange: (update: FilterUpdate | FilterValues) => void;
   /** the dashboard's cards: a list or text filter offers the values of the first card's column it is connected to (M12) */
   cards?: DashCard[];
+  /** M15: one filter under the other, full width and larger (the phone's filter sheet) */
+  stacked?: boolean;
 }
 
 /** The dashboard's filters; changing one re-runs the cards it is mapped to. Values live in the URL. */
-export function FilterBar({ filters, values, onChange, cards }: Props) {
+export function FilterBar({ filters, values, onChange, cards, stacked = false }: Props) {
   if (filters.length === 0) return null;
   const changed = filters.some((f) => values[f.id] !== undefined);
+  const size = stacked ? 'md' : 'sm';
+  const width = (w: string) => (stacked ? '100%' : w);
   return (
-    <Flex gap={4} wrap="wrap" align="flex-end" bg="panelBg" border="1px solid" borderColor="lineColor" borderRadius="xl" px={4} py={3} data-testid="filter-bar">
+    <Flex
+      gap={4}
+      wrap="wrap"
+      direction={stacked ? 'column' : 'row'}
+      align={stacked ? 'stretch' : 'flex-end'}
+      bg={stacked ? undefined : 'panelBg'}
+      border={stacked ? undefined : '1px solid'}
+      borderColor="lineColor"
+      borderRadius="xl"
+      px={stacked ? 0 : 4}
+      py={stacked ? 0 : 3}
+      data-testid="filter-bar"
+    >
       {filters.map((f) => {
         const shown = shownValue(f, values);
         const picker = cards ? pickerColumn(f, cards) : null;
         return (
           <Box key={f.id}>
-            <Text fontSize="2xs" fontWeight={700} color="faintText" textTransform="uppercase" letterSpacing="0.06em" mb={1}>
+            <Text fontSize={stacked ? 'sm' : '2xs'} fontWeight={700} color="faintText" textTransform={stacked ? undefined : 'uppercase'} letterSpacing={stacked ? undefined : '0.06em'} mb={1}>
               {f.label}
               {f.required && ' *'}
             </Text>
             {f.type === 'date_range' ? (
-              <HStack spacing={1}>
+              <Flex gap={stacked ? 2 : 1} direction={stacked ? 'column' : 'row'}>
                 {[0, 1].map((i) => {
                   const pair = Array.isArray(shown) ? shown : ['', ''];
                   return (
                     <Input
                       key={i}
-                      size="sm"
+                      size={size}
                       type="date"
-                      w="150px"
+                      w={stacked ? undefined : '150px'}
+                      minW={0}
                       value={pair[i] ?? ''}
                       onChange={(e) => onChange(setRangeEnd(f, i as 0 | 1, e.target.value))}
                       aria-label={i === 0 ? t('{label} from', { label: f.label }) : t('{label} to', { label: f.label })}
@@ -55,13 +72,13 @@ export function FilterBar({ filters, values, onChange, cards }: Props) {
                     />
                   );
                 })}
-              </HStack>
+              </Flex>
             ) : picker ? (
-              <PickedFilter filter={f} shown={shown} picker={picker} onChange={onChange} />
+              <PickedFilter filter={f} shown={shown} picker={picker} onChange={onChange} stacked={stacked} />
             ) : (
               <Input
-                size="sm"
-                w={f.type === 'category' ? '220px' : '170px'}
+                size={size}
+                w={width(f.type === 'category' ? '220px' : '170px')}
                 type={f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'}
                 placeholder={f.type === 'category' ? 'a, b, c' : t('any')}
                 value={Array.isArray(shown) ? shown.join(', ') : shown}
@@ -75,7 +92,7 @@ export function FilterBar({ filters, values, onChange, cards }: Props) {
       })}
       {changed && (
         <Tooltip label={t('Back to the default values')} hasArrow>
-          <Button size="sm" variant="ghost" leftIcon={<XIcon boxSize={3} />} onClick={() => onChange({})}>
+          <Button size={size} variant="ghost" alignSelf={stacked ? 'flex-start' : undefined} leftIcon={<XIcon boxSize={3} />} onClick={() => onChange({})}>
             {t('Reset')}
           </Button>
         </Tooltip>
@@ -85,7 +102,8 @@ export function FilterBar({ filters, values, onChange, cards }: Props) {
 }
 
 /** A list or text filter with the values of the column it narrows (the first card connected to it). */
-function PickedFilter({ filter, shown, picker, onChange }: {
+function PickedFilter({ filter, shown, picker, onChange, stacked = false }: {
+  stacked?: boolean;
   filter: DashFilter;
   shown: string | string[];
   picker: NonNullable<ReturnType<typeof pickerColumn>>;
@@ -95,11 +113,12 @@ function PickedFilter({ filter, shown, picker, onChange }: {
   const spec = picker.spec as unknown as QuerySpec;
   const source = schema.data ? valueSourceOf(spec, { tables: schema.data.tables, relationships: schema.data.relationships }, picker.ref) : null;
   const multiple = filter.type === 'category';
+  const w = stacked ? '100%' : multiple ? '220px' : '170px';
   if (!source)
     return (
       <Input
-        size="sm"
-        w={multiple ? '220px' : '170px'}
+        size={stacked ? 'md' : 'sm'}
+        w={w}
         placeholder={multiple ? 'a, b, c' : t('any')}
         value={Array.isArray(shown) ? shown.join(', ') : shown}
         onChange={(e) => onChange(setFilterValue(filter.id, e.target.value))}
@@ -115,7 +134,8 @@ function PickedFilter({ filter, shown, picker, onChange }: {
       value={multiple ? (Array.isArray(shown) ? shown : shown ? [shown] : []) : Array.isArray(shown) ? shown.join(', ') : shown}
       onChange={(v) => onChange(setFilterValue(filter.id, Array.isArray(v) ? v.map(String) : String(v ?? '')))}
       multiple={multiple}
-      w={multiple ? '220px' : '170px'}
+      w={w}
+      size={stacked ? 'md' : 'sm'}
       placeholder={multiple ? 'a, b, c' : t('any')}
       aria-label={filter.label}
       testId={`filter-${filter.id}`}

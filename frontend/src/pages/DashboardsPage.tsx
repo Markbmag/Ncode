@@ -16,6 +16,7 @@ import { localDateText } from '../viz/format';
 import { t } from '../i18n/index.ts';
 import { LoadError } from '../components/LoadError';
 import { InlineHint } from '../components/InlineHint';
+import { TemplateDialog } from '../templates/TemplateDialog';
 
 function ago(ts: number): string {
   const s = Date.now() / 1000 - ts;
@@ -30,6 +31,7 @@ function ago(ts: number): string {
 export default function DashboardsPage() {
   const [text, setText] = useState('');
   const create = useDisclosure();
+  const fromTemplate = useDisclosure(); // M15: ready-made manufacturing dashboards
   const query = text.trim();
   const favorites = useDashboards({ favorites: true });
   const all = useDashboards({ q: query || undefined, limit: 200 });
@@ -39,9 +41,14 @@ export default function DashboardsPage() {
         title={t('Dashboards')}
         subtitle={t('Saved questions, text and headings on one page, with shared filters.')}
         actions={
-          <Button size="sm" variant="brand" leftIcon={<PlusIcon boxSize={4} />} onClick={create.onOpen} data-testid="new-dashboard">
-            {t('New dashboard')}
-          </Button>
+          <Flex gap={2} wrap="wrap">
+            <Button size="sm" variant="outline" leftIcon={<LayoutIcon boxSize={4} />} onClick={fromTemplate.onOpen} data-testid="new-from-template">
+              {t('From a template')}
+            </Button>
+            <Button size="sm" variant="brand" leftIcon={<PlusIcon boxSize={4} />} onClick={create.onOpen} data-testid="new-dashboard">
+              {t('New dashboard')}
+            </Button>
+          </Flex>
         }
       />
       <InputGroup>
@@ -83,6 +90,7 @@ export default function DashboardsPage() {
         ))}
       </Panel>
       <NewDashboardDialog isOpen={create.isOpen} onClose={create.onClose} />
+      <TemplateDialog isOpen={fromTemplate.isOpen} onClose={fromTemplate.onClose} />
     </VStack>
   );
 }

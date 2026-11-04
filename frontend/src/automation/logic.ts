@@ -1,6 +1,6 @@
 /** Pure helpers for subscriptions and alerts: describing schedules, defaults, validation. */
 import { lang, t } from '../i18n/index.ts';
-import type { AlertCondition, Recipients, Schedule, SubscriptionBody, TargetType } from './types';
+import type { AlertCondition, FollowTargetType, Recipients, Schedule, Subscription, SubscriptionBody, TargetType } from './types';
 
 export const DAY_NAMES = [t('Monday'), t('Tuesday'), t('Wednesday'), t('Thursday'), t('Friday'), t('Saturday'), t('Sunday')];
 export const DAY_SHORT = [t('Mon'), t('Tue'), t('Wed'), t('Thu'), t('Fri'), t('Sat'), t('Sun')];
@@ -167,3 +167,33 @@ export const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   partial: { label: t('partly sent'), color: 'orange' },
   error: { label: t('failed'), color: 'red' },
 };
+
+// ---------------------------------------------------------------- Follow (M15): a digest is a subscription
+
+export type DigestEvery = 'day' | 'week';
+export const DIGEST_HOUR = 7;
+
+/** A digest to the person's own address: every morning (yesterday) or every Monday (last week), at 07:00 here. */
+export function followBody(target_type: FollowTargetType, target_id: number, me: string, every: DigestEvery, timezone = browserTimeZone()): SubscriptionBody {
+  return {
+    name: '',
+    target_type,
+    target_id,
+    schedule: { every: every === 'day' ? 'day' : 'week', hour: DIGEST_HOUR, minute: 0, days: every === 'day' ? ALL_DAYS : [0], monthday: 1, timezone },
+    recipients: { ...emptyRecipients(), users: [me] },
+    options: { filters: {}, attach: 'none', rows: 10, skip_empty: false, message: '', digest: every },
+    alert: null,
+    enabled: true,
+  };
+}
+
+/** The person's own digest of this target, if they follow it. */
+export function followingOf(subs: Subscription[], me: string): Subscription | null {
+  return subs.find((s) => !!s.options.digest && s.can_manage && s.owner === me && s.recipients.users.includes(me)) ?? null;
+}
+
+export function digestLabel(every: DigestEvery | null | undefined): string | null {
+  if (every === 'day') return t('Daily digest');
+  if (every === 'week') return t('Weekly digest');
+  return null;
+}

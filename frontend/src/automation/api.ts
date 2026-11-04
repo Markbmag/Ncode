@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
 import { queryClient } from '../lib/queryClient';
-import type { Preview, Subscription, SubscriptionBody, SubscriptionOptions, TargetType } from './types';
+import type { FollowTargetType, Preview, Subscription, SubscriptionBody, SubscriptionOptions } from './types';
 
 export const automationKeys = {
   all: ['automation'] as const,
@@ -16,7 +16,7 @@ export const automationKeys = {
 let sentAt = 0;
 const recentlySent = () => Date.now() - sentAt < 60_000;
 
-export function useSubscriptions(params: { target_type?: TargetType; target_id?: number; all?: boolean }, enabled = true) {
+export function useSubscriptions(params: { target_type?: FollowTargetType; target_id?: number; all?: boolean }, enabled = true) {
   return useQuery({
     queryKey: automationKeys.list(params),
     enabled,

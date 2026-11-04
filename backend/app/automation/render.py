@@ -1,7 +1,9 @@
 """What a subscription sends: one report rendered for each channel.
 
 Email gets an HTML page (tables and bar lists drawn with HTML tables, so every mail
-client shows them; no images, no scripts) plus a plain-text part. Slack, Teams and
+client shows them; no scripts) plus a plain-text part. Bar, line and number charts can be
+pictures instead (M15, app/automation/charts.py: PNG inline images); without one a card
+keeps its HTML bars. Slack, Teams and
 Telegram get a short text with headline numbers and the first rows; a generic
 webhook gets the data as JSON. Results can be attached as CSV or Excel.
 
@@ -13,6 +15,7 @@ from __future__ import annotations
 import csv
 import io
 import math
+import re
 from dataclasses import dataclass, field
 from html import escape
 from typing import Any
@@ -47,6 +50,32 @@ class Report:
     rows_per_card: int = 10
     alert_note: str | None = None          # "Alert: 12 rows" etc.
     footer: str = ""
+    summary: list[str] = field(default_factory=list)  # a digest's sentences (M15), above the cards
+    lang: str = "en"                       # digests follow the recipient's language; other emails are English
+
+
+# the few words of the email itself, for digests in Russian (M15)
+_RU = {
+    "open ›": "открыть ›",
+    "Open in Ncode": "Открыть в Ncode",
+    "No rows.": "Нет строк.",
+    "Open in Ncode: {url}": "Открыть в Ncode: {url}",
+}
+
+
+def _w(report: "Report", text: str) -> str:
+    return _RU.get(text, text) if report.lang == "ru" else text
+
+
+_THOUSANDS = re.compile(r"(?<=\d),(?=\d{3})")
+_DECIMAL = re.compile(r"(?<=\d)\.(?=\d)")
+
+
+def local_number(text: str, lang: str) -> str:
+    """'1,234.5' as the language writes it: Russian '1 234,5' (a no-break space keeps it on one line)."""
+    if lang != "ru":
+        return text
+    return _DECIMAL.sub(",", _THOUSANDS.sub("\u00a0", text))
 
 
 # ---------------------------------------------------------------- values
@@ -97,7 +126,11 @@ def format_value(value: Any, col: ResultColumn | None, fmt: dict[str, Any] | Non
     return text
 
 
-def label(col: ResultColumn) -> str:
+def label(col: ResultColumn, lang: str = "en") -> str:
+    if lang != "en" and isinstance(col.translations, dict):
+        own = col.translations.get(lang)
+        if isinstance(own, dict) and own.get("display_name"):
+            return str(own["display_name"])
     return col.display_name or col.name.replace("_", " ").strip().capitalize()
 
 
@@ -182,14 +215,22 @@ def _td(text: str, *, head: bool = False, right: bool = False) -> str:
     return f'<{tag} style="{style}">{escape(text)}</{tag}>'
 
 
-def _email_card(card: CardOut, rows_per_card: int) -> str:
+def _img(picture: Any) -> str:
+    """A chart picture: (src, alt, width); never wider than drawn, narrower on phones."""
+    src, alt, width = picture
+    return (f'<img src="{escape(src)}" width="{int(width)}" alt="{escape(alt)}" '
+            f'style="display:block;width:100%;max-width:{int(width)}px;height:auto;border:0;outline:none">')
+
+
+def _email_card(card: CardOut, rows_per_card: int, report: Report | None = None, picture: Any = None) -> str:
+    report = report or Report(title="")
     title = escape(card.title)
     if card.kind == "heading":
         return f'<h2 style="margin:28px 0 8px;font-size:18px;color:#111827">{title}</h2>'
     if card.kind == "text":
         body = escape(card.text or "").replace("\n", "<br>")
         return f'<p style="margin:12px 0;font-size:14px;color:#374151;line-height:1.5">{body}</p>'
-    link = f' <a href="{escape(card.url)}" style="font-size:12px;color:{BRAND};text-decoration:none">open ›</a>' if card.url else ""
+    link = f' <a href="{escape(card.url)}" style="font-size:12px;color:{BRAND};text-decoration:none">{_w(report, "open ›")}</a>' if card.url else ""
     head = f'<div style="font-size:15px;font-weight:600;color:#111827;margin:0 0 8px">{title}{link}</div>'
     box = 'style="margin:0 0 18px;padding:14px 16px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff"'
     if card.error:
@@ -199,7 +240,10 @@ def _email_card(card: CardOut, rows_per_card: int) -> str:
         return ""
     kind, info = shape(card)
     if not result.rows:
-        return f'<div {box}>{head}<div style="color:#6b7280;font-size:13px">No rows.</div></div>'
+        return f'<div {box}>{head}<div style="color:#6b7280;font-size:13px">{_w(report, "No rows.")}</div></div>'
+    if picture is not None and kind in ("kpi", "bars"):
+        more = _more(len(result.rows) - len(bar_rows(result, info, rows_per_card)), card.url) if kind == "bars" and not info["time"] else ""
+        return f'<div {box}>{head}{_img(picture)}{more}</div>'
     if kind == "kpi":
         col = result.columns[info["index"]]
         value = format_value(info["value"], col, info["format"])
@@ -248,24 +292,30 @@ def _more(hidden: int, url: str | None) -> str:
     return f'<div style="font-size:12px;color:#6b7280;margin-top:6px">{text}.</div>'
 
 
-def email_html(report: Report) -> str:
-    cards = "".join(_email_card(c, report.rows_per_card) for c in report.cards)
+def email_html(report: Report, pictures: dict[int, tuple[str, str, int]] | None = None) -> str:
+    """pictures: card index -> (src, alt, width) of its chart image ("cid:..." in the email, a data: link in the preview)."""
+    pictures = pictures or {}
+    cards = "".join(_email_card(c, report.rows_per_card, report, pictures.get(i)) for i, c in enumerate(report.cards))
+    summary = "".join(
+        f'<p style="margin:0 0 10px;font-size:16px;line-height:1.5;color:#111827">{escape(line)}</p>' for line in report.summary
+    )
+    summary = f'<div style="margin:0 0 18px" data-digest="1">{summary}</div>' if summary else ""
     alert = (f'<div style="margin:0 0 16px;padding:10px 14px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:14px">'
              f'{escape(report.alert_note)}</div>') if report.alert_note else ""
     title = escape(report.title)
     if report.url:
         title = f'<a href="{escape(report.url)}" style="color:#111827;text-decoration:none">{title}</a>'
     button = (f'<p style="margin:20px 0"><a href="{escape(report.url)}" style="display:inline-block;padding:9px 16px;'
-              f'background:{BRAND};color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px">Open in Ncode</a></p>') if report.url else ""
+              f'background:{BRAND};color:#ffffff;border-radius:8px;text-decoration:none;font-size:14px">{_w(report, "Open in Ncode")}</a></p>') if report.url else ""
     return (
-        '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+        f'<!doctype html><html lang="{escape(report.lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
         f"<title>{escape(report.title)}</title></head>"
         '<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'
         '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px 12px">'
         '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px"><tr><td>'
         f'<h1 style="margin:0 0 4px;font-size:22px;color:#111827">{title}</h1>'
         f'<div style="margin:0 0 18px;font-size:13px;color:#6b7280">{escape(report.subtitle)}</div>'
-        f"{alert}{cards}{button}"
+        f"{alert}{summary}{cards}{button}"
         f'<div style="margin-top:24px;font-size:11px;color:#9ca3af">{escape(report.footer)}</div>'
         "</td></tr></table></td></tr></table></body></html>"
     )
@@ -318,6 +368,8 @@ def plain_text(report: Report) -> str:
     out = [report.title, report.subtitle, ""]
     if report.alert_note:
         out += [report.alert_note, ""]
+    if report.summary:
+        out += [*report.summary, ""]
     for card in report.cards:
         if card.kind == "heading":
             out += ["", card.title.upper(), ""]
@@ -333,7 +385,7 @@ def plain_text(report: Report) -> str:
             out.append(card.url)
         out.append("")
     if report.url:
-        out.append(f"Open in Ncode: {report.url}")
+        out.append(_w(report, "Open in Ncode: {url}").format(url=report.url))
     out += ["", report.footer]
     return "\n".join(out)
 
@@ -351,6 +403,8 @@ def slack_payload(report: Report) -> dict[str, Any]:
     blocks: list[dict[str, Any]] = [{"type": "header", "text": {"type": "plain_text", "text": _trim(report.title, 150)}}]
     if report.alert_note:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f":bell: {md(report.alert_note)}"}})
+    if report.summary:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _trim(md("\n".join(report.summary)), 2900)}})
     for card in report.cards:
         if len(blocks) >= 45:
             break
@@ -379,6 +433,8 @@ def teams_payload(report: Report) -> dict[str, Any]:
         body.append({"type": "TextBlock", "text": report.subtitle, "isSubtle": True, "spacing": "None", "wrap": True})
     if report.alert_note:
         body.append({"type": "TextBlock", "text": report.alert_note, "color": "Warning", "wrap": True})
+    for line in report.summary:
+        body.append({"type": "TextBlock", "text": line, "wrap": True})
     for card in report.cards:
         if card.kind == "heading":
             body.append({"type": "TextBlock", "text": card.title, "weight": "Bolder", "size": "Medium", "wrap": True, "separator": True})
@@ -405,6 +461,7 @@ def telegram_text(report: Report) -> str:
     out = [f"<b>{escape(report.title)}</b>"]
     if report.alert_note:
         out.append(f"🔔 {escape(report.alert_note)}")
+    out += [escape(line) for line in report.summary]
     for card in report.cards:
         if card.kind == "heading":
             out.append(f"\n<b>{escape(card.title.upper())}</b>")
@@ -440,7 +497,8 @@ def webhook_payload(report: Report, event: dict[str, Any]) -> dict[str, Any]:
                 truncated=card.result.stats.truncated or card.result.stats.row_count > report.rows_per_card,
             )
         cards.append(item)
-    return {**event, "title": report.title, "url": report.url, "alert": report.alert_note, "cards": cards}
+    return {**event, "title": report.title, "url": report.url, "alert": report.alert_note,
+            **({"summary": report.summary} if report.summary else {}), "cards": cards}
 
 
 # ---------------------------------------------------------------- attachments
