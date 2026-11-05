@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
-  Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Tab, TabList, Tabs, Text, Textarea, useToast, VStack,
+  Box, Button, Flex, FormControl, FormLabel, HStack, IconButton, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Tab, TabList, Tabs, Text, Textarea, useToast, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage } from '../api';
@@ -10,6 +10,7 @@ import { t } from '../i18n/index.ts';
 import { createBoard, createLabel, deleteLabel, saveMembers, updateBoard, updateLabel } from './api';
 import type { MemberInput } from './api';
 import { colorHex, groupName, PALETTE, personId, personName } from './logic';
+import { Choice } from './Choice';
 import { ColorPicker, LabelChip, PersonAvatar } from './parts';
 import type { BoardDetail, BoardSummary, Label, Member, Role } from './types';
 
@@ -200,13 +201,20 @@ export function BoardSettingsDialog({ board, canManage, onClose, onSaved, onArch
           <VisibilityChoice value={secret} onChange={setSecret} />
         </FormControl>
         <FormControl isDisabled={!canManage}>
-          <FormLabel htmlFor="board-keep">{t('Finished tasks stay on the board')}</FormLabel>
-          <Select id="board-keep" value={keep} onChange={(e) => setKeep(Number(e.target.value) as 0 | 7 | 14 | 30)} data-testid="board-keep">
-            <option value={7}>{t('for 7 days')}</option>
-            <option value={14}>{t('for 14 days')}</option>
-            <option value={30}>{t('for 30 days')}</option>
-            <option value={0}>{t('always')}</option>
-          </Select>
+          <FormLabel>{t('Finished tasks stay on the board')}</FormLabel>
+          <Choice
+            value={String(keep)}
+            options={[
+              { value: '7', label: t('for 7 days') },
+              { value: '14', label: t('for 14 days') },
+              { value: '30', label: t('for 30 days') },
+              { value: '0', label: t('always') },
+            ]}
+            onChange={(v) => setKeep(Number(v) as 0 | 7 | 14 | 30)}
+            label={t('Finished tasks stay on the board')}
+            isDisabled={!canManage}
+            testId="board-keep"
+          />
           <Text fontSize="sm" color="mutedText" mt={1}>
             {t('After that they are under “Finished earlier” at the bottom of the done stage, still there to open.')}
           </Text>
@@ -326,16 +334,18 @@ export function MembersDialog({ detail, canManage, onClose, onSaved }: { detail:
                 {m.kind === 'user' ? t('Person') : t('Group')}
               </Text>
             </Box>
-            <Select
-              w="120px"
+            <Choice
+              size="sm"
               value={m.role}
+              options={[
+                { value: 'editor', label: t('Editor'), hint: t('Works on tasks and stages') },
+                { value: 'owner', label: t('Owner'), hint: t('Also chooses the members') },
+              ]}
               isDisabled={!canManage}
-              onChange={(e) => setMembers((ms) => ms.map((x) => (x.key === m.key ? { ...x, role: e.target.value as Role } : x)))}
-              aria-label={t('Role of {name}', { name: m.name })}
-            >
-              <option value="editor">{t('Editor')}</option>
-              <option value="owner">{t('Owner')}</option>
-            </Select>
+              onChange={(v) => setMembers((ms) => ms.map((x) => (x.key === m.key ? { ...x, role: v as Role } : x)))}
+              label={t('Role of {name}', { name: m.name })}
+              testId="member-role"
+            />
             {canManage && (
               <Tooltip label={t('Remove {name}', { name: m.name })} hasArrow>
                 <IconButton aria-label={t('Remove {name}', { name: m.name })} variant="ghost" icon={<TrashIcon boxSize={4} />} onClick={() => setMembers((ms) => ms.filter((x) => x.key !== m.key))} />
@@ -358,19 +368,22 @@ export function MembersDialog({ detail, canManage, onClose, onSaved }: { detail:
             </TabList>
           </Tabs>
           <HStack>
-            <Select value={pick} onChange={(e) => setPick(e.target.value)} placeholder={kind === 0 ? t('Choose a person') : t('Choose a group')} data-testid="member-pick">
-              {kind === 0
-                ? detail.people.filter((p) => p.active !== false && !takenUsers.has(p.id)).map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.username}
-                  </option>
-                ))
-                : groups.filter((g) => !takenGroups.has(g.id)).map((g) => (
-                  <option key={g.id} value={String(g.id)}>
-                    {g.name}
-                  </option>
-                ))}
-            </Select>
+            <Choice
+              flex={1}
+              minW={0}
+              justifyContent="space-between"
+              value={pick}
+              options={
+                kind === 0
+                  ? detail.people.filter((p) => p.active !== false && !takenUsers.has(p.id)).map((p) => ({ value: String(p.id), label: p.username }))
+                  : groups.filter((g) => !takenGroups.has(g.id)).map((g) => ({ value: String(g.id), label: g.name }))
+              }
+              onChange={setPick}
+              placeholder={kind === 0 ? t('Choose a person') : t('Choose a group')}
+              label={kind === 0 ? t('Choose a person') : t('Choose a group')}
+              searchable
+              testId="member-pick"
+            />
             <Button leftIcon={<PlusIcon boxSize={4} />} onClick={add} isDisabled={!pick} data-testid="add-member">
               {t('Add')}
             </Button>
@@ -417,12 +430,12 @@ export function LabelsDialog({ boardId, labels, canEdit, onClose, onChanged }: {
       <VStack align="stretch" spacing={2} mb={4}>
         {labels.map((l) => (
           <Flex key={l.id} align="center" gap={2} p={2} borderRadius="lg" _hover={{ bg: 'panelHover' }}>
-            <Box flex={1}>
+            <Box flex={1} minW={0}>
               <LabelChip label={l} />
             </Box>
             {canEdit && (
               <>
-                <Button variant="ghost" onClick={() => { setEditing(l); setName(l.name); setColor(l.color); }}>
+                <Button variant="ghost" flexShrink={0} onClick={() => { setEditing(l); setName(l.name); setColor(l.color); }}>
                   {t('Edit')}
                 </Button>
                 <IconButton aria-label={t('Delete the label {name}', { name: l.name })} title={t('Delete the label {name}', { name: l.name })} variant="ghost" icon={<TrashIcon boxSize={4} />} onClick={() => { if (window.confirm(t('Delete the label “{name}”? Tasks lose it. This cannot be undone.', { name: l.name }))) void run(() => deleteLabel(l.id)); }} />

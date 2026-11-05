@@ -1,6 +1,6 @@
 // K4: private boards and how long finished tasks stay on a board.
 import { expect, test } from '@playwright/test';
-import { API, api, signIn, token, unique, watchErrors } from './helpers';
+import { API, api, signIn, token, unique, watchErrors, choose } from './helpers';
 
 test('a board only its members see; the owner opens it to everyone later', async ({ page }) => {
   const errors = watchErrors(page);
@@ -25,7 +25,7 @@ test('a board only its members see; the owner opens it to everyone later', async
   await page.getByTestId('board-settings').click();
   await expect(page.getByTestId('visibility-members')).toHaveAttribute('aria-checked', 'true');
   await page.getByTestId('visibility-everyone').click();
-  await page.getByTestId('board-keep').selectOption('30');
+  await choose(page, 'board-keep', '30');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByTestId('board-private')).toHaveCount(0);
   const board = await api(page.request, 'alice', 'GET', `/api/kanban/boards/${boardId}`);

@@ -1,6 +1,6 @@
 // The task page, simpler (after Mark's review): the essentials first, the rest under "More".
 import { expect, test } from '@playwright/test';
-import { api, signIn, unique, watchErrors } from './helpers';
+import { api, signIn, unique, watchErrors, choose, pickDate } from './helpers';
 
 // a 1x1 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
@@ -14,8 +14,9 @@ test('a task shows the essentials; the rest is one click away', async ({ page })
   const drawer = page.getByTestId('card-drawer');
 
   // what shows at first: the name, one card of facts, steps, photos, comments
-  await expect(drawer.getByTestId('card-facts').getByTestId('fact-row')).toHaveCount(4);
-  await expect(drawer.getByTestId('card-start')).toHaveCount(0);   // start date and repeat wait under the due date
+  await expect(drawer.getByTestId('card-facts').getByTestId('fact-row')).toHaveCount(6); // who, due, start, repeats, importance, labels
+  await expect(drawer.getByTestId('edit-title')).toBeVisible();     // the name and the description say they can be changed
+  await expect(drawer.getByTestId('edit-description')).toHaveText('Add');
   await expect(drawer.getByTestId('history')).toBeHidden();       // history, links and removing wait under "More"
   await expect(drawer.getByTestId('archive-card')).toBeHidden();
   await expect(drawer.getByTestId('save-state')).toBeHidden();     // "Saved" appears only after a change
@@ -42,10 +43,40 @@ test('a task shows the essentials; the rest is one click away', async ({ page })
   await page.getByTestId('preview-delete').click();
   await expect(drawer.getByTestId('attachment-thumb')).toHaveCount(0);
 
-  // start date and repeat
-  await drawer.getByTestId('date-more').click();
-  await expect(drawer.getByTestId('card-start')).toBeVisible();
-  await expect(drawer.getByTestId('card-repeat')).toBeVisible();
+  // the name and the description, from their Change buttons
+  await drawer.getByTestId('edit-title').click();
+  await expect(drawer.getByTestId('card-title')).toBeFocused();
+  await expect(drawer.getByTestId('title-hint')).toBeVisible();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' (size L)');
+  await page.keyboard.press('Enter');
+  await expect(drawer.getByTestId('edit-title')).toBeVisible();
+  await drawer.getByTestId('edit-description').click();
+  await expect(drawer.getByTestId('description-input')).toBeFocused();
+  await page.keyboard.type('Ten pairs');
+  await drawer.getByTestId('card-facts').click({ position: { x: 5, y: 5 } });
+  await expect(drawer.getByTestId('edit-description')).toHaveText('Change');
+  await expect.poll(async () => (await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`)).description).toBe('Ten pairs');
+  expect((await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`)).title).toBe('Order new gloves (size L)');
+
+  // start date, due date and repeat: in the app's calendar, in plain words
+  const iso = (days: number) => { const d = new Date(Date.now() + days * 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  await pickDate(page, 'card-due', iso(40), drawer);
+  await drawer.getByTestId('card-start').click();                // days after the due date cannot be the start
+  await expect(page.getByTestId('card-start-limit')).toBeVisible();
+  await page.keyboard.press('Escape');                          // closes the calendar, not the task
+  await expect(page.getByTestId('card-start-picker')).toBeHidden();
+  await expect(drawer).toBeVisible();
+  await pickDate(page, 'card-start', iso(35), drawer);
+  await drawer.getByTestId('card-repeat').click();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeVisible();
+  await choose(page, 'card-repeat', 'monthly', drawer);
+  await expect(drawer.getByTestId('repeat-hint')).toBeVisible();
+  await drawer.getByTestId('card-start').click();
+  await page.getByTestId('card-start-clear').click();
+  await expect(drawer.getByTestId('card-start')).toHaveAttribute('data-value', '');
+  await expect.poll(async () => { const c = await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`); return [c.due_date, c.start_date, c.repeat]; }).toEqual([iso(40), null, 'monthly']);
 
   // More: history and removing
   await drawer.getByTestId('card-more').click();
@@ -89,7 +120,7 @@ test('anyone can be put on a task by name, not only Ncode users', async ({ page 
   // the board: filter by the name
   await drawer.getByTestId('card-close').click();
   await page.getByTestId('filter-more').click();
-  await page.getByTestId('filter-person').selectOption({ label: 'Ivan Petrov' });
+  await choose(page, 'filter-person', 'nIvan Petrov');
   await expect(page.getByTestId('card-face')).toHaveText([/Fix the gate/]);
   expect(errors).toEqual([]);
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, Select, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
+  Box, Button, Checkbox, Collapse, Drawer, DrawerBody, DrawerContent, DrawerHeader, DrawerOverlay, Flex, HStack, IconButton, Image, Input, Menu, MenuButton, MenuItem, MenuItemOption, MenuList, MenuOptionGroup, Modal, ModalBody, ModalCloseButton, ModalContent, ModalOverlay, SimpleGrid, Skeleton, Spinner, Text, Textarea, useBreakpointValue, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,12 +17,14 @@ import {
 import type { CardInput } from './api';
 import {
   ArrowDownIcon, ArrowUpIcon, BarChartIcon, CalendarIcon, CameraIcon, FileIcon, FlagIcon, HistoryIcon, ListChecksIcon, MessageIcon, PaperclipIcon, TagIcon,
-  LinkIcon, RepeatIcon, UserIcon,
+  LinkIcon, PlayIcon, RepeatIcon, UserIcon,
 } from './icons';
 import {
-  byPosition, colorHex, dueState, dueText, formatSize, fullTime, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
+  byPosition, colorHex, dateLabel, dueState, dueText, formatSize, fullTime, historySentence, isImage, personName, positionBetween, PRIORITY_COLOR,
   priorityLabel, progressOf, progressText, repeatLabel, timeAgo, todayIso, UPLOAD_ACCEPT, withAlpha,
 } from './logic';
+import { Choice } from './Choice';
+import { DateField } from './DateField';
 import { LinkPicker } from './LinkPicker';
 import { LabelChip, PersonAvatar, PlainText, ProgressBar } from './parts';
 import { attachOrQueue } from './upload';
@@ -250,7 +252,9 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
   const [uploading, setUploading] = useState(0);
   const [preview, setPreview] = useState<number | null>(null);
   const [showMore, setShowMore] = useState(false); // history, links, removing: out of the way
-  const [dateMore, setDateMore] = useState(Boolean(card.start_date || card.repeat)); // start date and repeat
+  const [editing, setEditing] = useState<'title' | 'description' | null>(null); // which text is being typed
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
@@ -433,7 +437,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
         </Flex>
       ))}
       {canEdit && (
-        <Button variant="subtle" leftIcon={<PlusIcon boxSize={4} />} alignSelf="flex-start" onClick={() => setPicking(true)} data-testid="add-link">
+        <Button variant="subtle" leftIcon={<PlusIcon boxSize={4} />} alignSelf="flex-start" maxW="100%" whiteSpace="normal" h="auto" minH="40px" py={2} textAlign="left" onClick={() => setPicking(true)} data-testid="add-link">
           {t('Link a dashboard or question')}
         </Button>
       )}
@@ -548,21 +552,35 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
             )}
             {canEdit ? (
               <>
+                <Flex align="center" gap={2} mb={1.5}>
+                  <Text as="label" htmlFor="card-title" fontSize="sm" fontWeight={700} color="mutedText">
+                    {t('Name')}
+                  </Text>
+                  {editing !== 'title' && (
+                    <Button size="xs" variant="ghost" color="brand.500" _dark={{ color: 'brand.200' }} leftIcon={<PencilIcon boxSize={3} />} onClick={() => titleRef.current?.focus()} data-testid="edit-title">
+                      {t('Change')}
+                    </Button>
+                  )}
+                </Flex>
                 <Textarea
+                  id="card-title"
+                  ref={titleRef}
                   autoFocus={nameIt}
-                  onFocus={nameIt ? (e) => e.currentTarget.select() : undefined}
+                  onFocus={(e) => {
+                    setEditing('title');
+                    if (nameIt) e.currentTarget.select();
+                  }}
                   value={title}
                   onChange={(e) => setTitle(e.target.value.replace(/\n/g, ' '))}
-                  onBlur={saveTitle}
+                  onBlur={() => {
+                    setEditing(null);
+                    saveTitle();
+                  }}
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), (e.target as HTMLTextAreaElement).blur())}
-                  variant="unstyled"
-                  px={2}
-                  py={1}
-                  mx={-2}
-                  w="calc(100% + 16px)"
+                  px={3}
+                  py={1.5}
                   borderRadius="lg"
-                  _hover={{ bg: 'panelHover' }}
-                  _focus={{ bg: 'panelHover', boxShadow: '0 0 0 2px var(--chakra-colors-brand-400)' }}
+                  cursor="text"
                   fontSize="22px"
                   fontWeight={750}
                   lineHeight="1.3"
@@ -573,27 +591,43 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   aria-label={t('Task')}
                   data-testid="card-title"
                 />
+                {editing === 'title' && (
+                  <Text fontSize="sm" color="mutedText" mt={1} data-testid="title-hint">
+                    {t('Press Enter or click outside to save.')}
+                  </Text>
+                )}
+                <Flex align="center" gap={2} mt={4} mb={1.5}>
+                  <Text as="label" htmlFor="card-description" fontSize="sm" fontWeight={700} color="mutedText">
+                    {t('Description')}
+                  </Text>
+                  {editing !== 'description' && (
+                    <Button size="xs" variant="ghost" color="brand.500" _dark={{ color: 'brand.200' }} leftIcon={<PencilIcon boxSize={3} />} onClick={() => descriptionRef.current?.focus()} data-testid="edit-description">
+                      {description ? t('Change') : t('Add')}
+                    </Button>
+                  )}
+                </Flex>
                 <Textarea
+                  ref={descriptionRef}
+                  id="card-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  onBlur={saveDescription}
-                  variant="unstyled"
-                  px={2}
-                  py={1.5}
-                  mx={-2}
-                  mt={1}
-                  w="calc(100% + 16px)"
+                  onFocus={() => setEditing('description')}
+                  onBlur={() => {
+                    setEditing(null);
+                    saveDescription();
+                  }}
+                  px={3}
+                  py={2}
                   borderRadius="lg"
-                  bg={description ? undefined : 'transparent'}
-                  _hover={{ bg: 'panelHover' }}
-                  _focus={{ bg: 'panelHover', boxShadow: '0 0 0 2px var(--chakra-colors-brand-400)' }}
+                  borderStyle={description || editing === 'description' ? 'solid' : 'dashed'}
+                  cursor="text"
                   color={description ? 'bodyText' : 'mutedText'}
-                  minH="40px"
-                  rows={1}
+                  minH="48px"
+                  rows={2}
                   resize="none"
                   sx={{ fieldSizing: 'content' }}
-                  placeholder={t('Add details (optional): what, where, how…')}
-                  aria-label={t('More details')}
+                  placeholder={t('What needs doing, where, how (not required). Click here to write.')}
+                  aria-label={t('Description')}
                   data-testid="description-input"
                 />
               </>
@@ -626,19 +660,16 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
 
             <FactRow icon={<CalendarIcon boxSize={4} />} label={t('Due')}>
               <Flex gap={2} align="center" wrap="wrap">
-                <Input
-                  id="card-due"
-                  type="date"
-                  size="sm"
-                  w="auto"
-                  minW="150px"
-                  borderRadius="md"
-                  value={card.due_date ?? ''}
-                  isReadOnly={!canEdit}
-                  onChange={(e) => void patch({ due_date: e.target.value || null })}
-                  borderColor={due === 'overdue' ? 'red.500' : undefined}
-                  aria-label={t('Due')}
-                  data-testid="card-due"
+                <DateField
+                  value={card.due_date}
+                  onChange={(v) => void patch({ due_date: v })}
+                  label={t('Due')}
+                  placeholder={canEdit ? t('Choose a date') : t('No date')}
+                  isDisabled={!canEdit}
+                  tone={due === 'overdue' ? 'red.500' : undefined}
+                  min={card.start_date}
+                  limitNote={card.start_date ? t('The due date cannot be before the start ({date}).', { date: dateLabel(card.start_date) }) : undefined}
+                  testId="card-due"
                 />
                 {card.due_date && (
                   <Text fontWeight={700} fontSize="sm" color={due === 'overdue' ? 'red.500' : due === 'today' || due === 'soon' ? 'orange.500' : due === 'done' ? 'green.500' : 'mutedText'} data-testid="due-text">
@@ -646,39 +677,34 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   </Text>
                 )}
               </Flex>
-              {!dateMore && canEdit && (
-                <Button size="xs" variant="link" mt={1.5} color="mutedText" fontWeight={500} onClick={() => setDateMore(true)} data-testid="date-more">
-                  {t('Start date and repeat…')}
-                </Button>
-              )}
-              {dateMore && (
-                <VStack align="stretch" spacing={2} mt={2}>
-                  <Flex gap={2} align="center" wrap="wrap">
-                    <Text as="label" htmlFor="card-start" fontSize="sm" fontWeight={600} minW="70px">
-                      {t('Starts')}
-                    </Text>
-                    <Input id="card-start" type="date" size="sm" w="auto" minW="150px" borderRadius="md" value={card.start_date ?? ''} isReadOnly={!canEdit} onChange={(e) => void patch({ start_date: e.target.value || null })} data-testid="card-start" />
-                  </Flex>
-                  <Flex gap={2} align="center" wrap="wrap">
-                    <Text as="label" htmlFor="card-repeat" fontSize="sm" fontWeight={600} minW="70px" display="flex" alignItems="center" gap={1}>
-                      <RepeatIcon boxSize={3.5} color="mutedText" />
-                      {t('Repeats')}
-                    </Text>
-                    <Select id="card-repeat" size="sm" w="auto" borderRadius="md" value={card.repeat ?? ''} isDisabled={!canEdit} onChange={(e) => void patch({ repeat: (e.target.value || null) as Repeat | null })} data-testid="card-repeat">
-                      <option value="">{t('Does not repeat')}</option>
-                      {REPEATS.map((r) => (
-                        <option key={r} value={r}>
-                          {repeatLabel(r)}
-                        </option>
-                      ))}
-                    </Select>
-                  </Flex>
-                  {card.repeat && firstOpen && (
-                    <Text fontSize="sm" color="mutedText" data-testid="repeat-hint">
-                      {t('When it is done, the next one appears in “{stage}” with its new date, the same people and steps.', { stage: firstOpen.name })}
-                    </Text>
-                  )}
-                </VStack>
+            </FactRow>
+
+            <FactRow icon={<PlayIcon boxSize={4} />} label={t('Starts')}>
+              <DateField
+                value={card.start_date}
+                onChange={(v) => void patch({ start_date: v })}
+                label={t('Starts')}
+                placeholder={canEdit ? t('Not required') : t('No date')}
+                isDisabled={!canEdit}
+                max={card.due_date}
+                limitNote={card.due_date ? t('The start cannot be after the due date ({date}).', { date: dateLabel(card.due_date) }) : undefined}
+                testId="card-start"
+              />
+            </FactRow>
+
+            <FactRow icon={<RepeatIcon boxSize={4} />} label={t('Repeats')}>
+              <Choice
+                value={card.repeat ?? ''}
+                options={[{ value: '', label: t('Does not repeat') }, ...REPEATS.map((r) => ({ value: r, label: repeatLabel(r) }))]}
+                onChange={(v) => void patch({ repeat: (v || null) as Repeat | null })}
+                label={t('Repeats')}
+                isDisabled={!canEdit}
+                testId="card-repeat"
+              />
+              {card.repeat && firstOpen && (
+                <Text fontSize="sm" color="mutedText" mt={1.5} data-testid="repeat-hint">
+                  {t('When it is done, the next one appears in “{stage}” with its new date, the same people and steps.', { stage: firstOpen.name })}
+                </Text>
               )}
             </FactRow>
 
@@ -949,7 +975,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
 
           {/* the rest, out of the way: links, history, who made it, removing */}
           <Box borderTop="1px solid" borderColor="lineColor" pt={3}>
-            <Button variant="ghost" w="100%" justifyContent="space-between" rightIcon={<ChevronDownIcon boxSize={5} transform={showMore ? 'rotate(180deg)' : undefined} />} onClick={() => setShowMore(!showMore)} data-testid="card-more">
+            <Button variant="ghost" w="100%" justifyContent="space-between" whiteSpace="normal" h="auto" minH="40px" py={2} textAlign="left" rightIcon={<ChevronDownIcon boxSize={5} transform={showMore ? 'rotate(180deg)' : undefined} />} onClick={() => setShowMore(!showMore)} data-testid="card-more">
               <HStack spacing={2.5}>
                 <MoreIcon boxSize={4} />
                 <Text as="span">{canEdit ? t('More: history, links, remove') : t('More: history')}</Text>

@@ -611,6 +611,11 @@ export function dayTitle(iso: string): string {
   return cap(new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long' }).format(asDate(iso)));
 }
 
+/** A chosen date in full: "Mon, 9 November 2026" / "Пн, 9 ноября 2026" (not the browser's mm/dd/yyyy) */
+export function dateLabel(iso: string): string {
+  return cap(new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }).format(asDate(iso)).replace(/\s*г\.$/, '').replace(/^(\S+)\.,?/, '$1,'));
+}
+
 const WEEK_DAYS = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']; // a Monday ... Sunday
 /** Mon ... Sun / Пн ... Вс */
 export const weekdayNames = () => WEEK_DAYS.map((d) => cap(new Intl.DateTimeFormat(locale(), { weekday: 'short' }).format(asDate(d)).replace('.', '')));

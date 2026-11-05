@@ -16,10 +16,16 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 - **+ Add a task** at the top of a stage. Click a task to open it; changes save by themselves
   ("Saved" shows after each change).
 - At the top: the task's **stage** (tap to move it), a green **Done** button and **×** to close.
-- Then the name and the details (click to change), and one card with the facts: **Who** (several
-  people: Ncode users, or anyone else by name - type "Ivan from maintenance" and press Enter; such
-  names have a dashed outline, can be filtered by on the board and are found by the search), **Due** (late tasks turn red and say "3 days late"; *Start date and repeat…* below it),
+- Then the **Name** and the **Description**, each in its own field with a *Change* button (or click
+  into the field); Enter or a click outside saves the name, the description saves by itself.
+- One card with the facts: **Who** (several people: Ncode users, or anyone else by name - type "Ivan
+  from maintenance" and press Enter; such names have a dashed outline, can be filtered by on the board
+  and are found by the search), **Due** and **Starts** (a calendar in your language, Monday first,
+  with *Today*, *Tomorrow*, *In a week* and *Remove the date*; late tasks turn red and say "3 days
+  late"; the start cannot be after the due date, the calendar greys those days out), **Repeats**,
   **Importance** (Low · Normal · High · Urgent) and **Labels**.
+- Every list to choose from (repeats, importance, the board's filters, members and their roles, how
+  long finished tasks stay) opens in the app's own look, the same on every computer and phone.
 - **Steps**: the action plan. Tick steps as they are done; the task and the board show
   "2 of 5 steps done" with a bar.
 - **Photos and files**: *Add photo or file* (on a phone this opens the camera). Up to 15 MB each.
@@ -30,7 +36,7 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 - Move a task with **Move to…** on the task, or drag it. A note at the bottom offers **Undo**.
 - *Remove from the board* hides a task (it can be brought back from *Hidden tasks*).
 - Descriptions and comments show exactly what was typed; web addresses become links.
-- **Repeats** (under *When*): every day, every working day (Mon–Fri), every week or every month. When
+- **Repeats**: every day, every working day (Mon–Fri), every week or every month. When
   the task is moved to a done stage, the next one appears in the first stage with its next date, the
   same people and labels and its steps unticked; the note says when it is due, and *Undo* takes it
   away again. Choose *Does not repeat* to end the series.

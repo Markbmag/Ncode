@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 export const API = process.env.NCODE_E2E_API || 'http://127.0.0.1:8765';
 
@@ -71,4 +71,33 @@ export async function newUser(request: APIRequestContext, prefix = 'newcomer'): 
   await api(request, 'admin', 'POST', '/api/admin/users', { username: name, password: 'newcomer-pass-1', role: 'user' });
   USERS[name] = 'newcomer-pass-1';
   return name;
+}
+
+/** Picks an option of a Kanban drop-down (the app's own menu, not a browser <select>) by its value. */
+export async function choose(page: Page, testId: string, value: string, scope: Page | Locator = page): Promise<void> {
+  await scope.getByTestId(testId).first().click();
+  const menu = page.getByTestId(`${testId}-menu`);
+  await menu.locator(`[data-testid="${testId}-option"][data-value="${value}"]`).click();
+  await expect(scope.getByTestId(testId).first()).toHaveAttribute('data-value', value);
+}
+
+/** Picks a date in a Kanban date field: opens its calendar, goes to the month, clicks the day. */
+export async function pickDate(page: Page, testId: string, iso: string, scope: Page | Locator = page): Promise<void> {
+  await scope.getByTestId(testId).click();
+  const picker = page.getByTestId(`${testId}-picker`);
+  for (let i = 0; i < 36; i++) {
+    const middle = await picker.getByTestId(`${testId}-day`).nth(15).getAttribute('data-date');
+    const shown = middle!.slice(0, 7);
+    if (shown === iso.slice(0, 7)) break;
+    await picker.getByTestId(iso.slice(0, 7) < shown ? `${testId}-prev` : `${testId}-next`).click();
+  }
+  await picker.locator(`[data-date="${iso}"]`).click();
+  await expect(scope.getByTestId(testId)).toHaveAttribute('data-value', iso);
+}
+
+/** The same, by the option's text (for people, whose values are ids). */
+export async function chooseText(page: Page, testId: string, text: string, scope: Page | Locator = page): Promise<void> {
+  await scope.getByTestId(testId).first().click();
+  await page.getByTestId(`${testId}-menu`).getByTestId(`${testId}-option`).filter({ hasText: new RegExp(`^${text}$`) }).click();
+  await expect(scope.getByTestId(testId).first()).toContainText(text);
 }
