@@ -56,6 +56,13 @@ LinkNames = Callable[[User, list[tuple[str, int]]], dict[tuple[str, int], str | 
 
 
 MAX_NAMES = 20  # people by name on one task
+DONE_KEEP_DEFAULT = 14  # K4: days a finished task stays on the board when the board says nothing
+DONE_KEEP_CHOICES = (0, 7, 14, 30)  # 0: finished tasks stay on the board
+
+
+def done_keep(board: Any) -> int:
+    v = getattr(board, "done_keep_days", None)
+    return DONE_KEEP_DEFAULT if v is None else int(v)
 
 
 def clean_names(names: Iterable[str] | None) -> list[str]:
@@ -236,7 +243,7 @@ class KanbanStore:
         if row is None:
             raise HTTPException(status_code=404, detail="Board not found")
         acc = Access(row, _roles(conn, user, [board_id]).get(board_id), user.is_admin)
-        if row.archived and not acc.can_edit:
+        if (row.archived or row.private) and not acc.can_edit:  # K4: a private board is for its members only
             raise HTTPException(status_code=404, detail="Board not found")
         if need == "read":
             return acc
@@ -322,7 +329,8 @@ class KanbanStore:
                 "member_names": sorted(member_names.get(r.id, []), key=str.lower)[:6],
                 "cards_open": counts.get((r.id, False), 0), "cards_done": counts.get((r.id, True), 0),
                 "created_at": r.created_at, "updated_at": r.updated_at, "updated_by": r.updated_by,
-                "archived": bool(r.archived),
+                "archived": bool(r.archived), "private": bool(r.private),
+                "done_keep_days": done_keep(r),
             })
         return out
 
@@ -334,16 +342,16 @@ class KanbanStore:
         with self.engine.connect() as conn:
             rows = conn.execute(select(boards_table).where(boards_table.c.archived.is_(archived))
                                 .order_by(boards_table.c.updated_at.desc(), boards_table.c.id.desc())).all()
-            if archived and not user.is_admin:
+            if not user.is_admin:
                 mine = _roles(conn, user)
-                rows = [r for r in rows if r.id in mine]
+                rows = [r for r in rows if r.id in mine or not (archived or r.private)]
             return self._board_summaries(conn, user, rows)
 
     def create_board(self, user: User, *, name: str, description: str | None, color: str | None,
-                     template: str = "basic", lang: str = "en") -> dict[str, Any]:
+                     template: str = "basic", lang: str = "en", private: bool = False) -> dict[str, Any]:
         with self._write(user) as tx:
             bid = int(tx.conn.execute(insert(boards_table).values(
-                name=name, description=description, color=color, owner_id=user.id, archived=False,
+                name=name, description=description, color=color, owner_id=user.id, archived=False, private=private,
                 created_at=tx.now, updated_at=tx.now, updated_by=user.username,
             )).inserted_primary_key[0])
             tx.conn.execute(insert(board_members_table).values(board_id=bid, user_id=user.id, role="owner"))
@@ -364,6 +372,15 @@ class KanbanStore:
             cards = conn.execute(select(cards_table).where(
                 cards_table.c.board_id == board_id, cards_table.c.archived.is_(archived_cards),
             ).order_by(cards_table.c.column_id, cards_table.c.position, cards_table.c.id)).all()
+            # K4: finished tasks leave the board after a while (they stay findable under "Finished earlier")
+            earlier = 0
+            keep = done_keep(acc.board)
+            if keep and not archived_cards:
+                done_ids = {c.id for c in columns if c.is_done}
+                cutoff = time.time() - keep * 86400
+                kept = [c for c in cards if not (c.column_id in done_ids and c.completed_at is not None and c.completed_at < cutoff)]
+                earlier = len(cards) - len(kept)
+                cards = kept
             summaries = self._summaries(conn, cards, board_id=board_id)
             assigned = {uid for c in summaries for uid in c["assignees"]}
             # everyone who can be assigned (active users), plus disabled ones still assigned here
@@ -372,7 +389,7 @@ class KanbanStore:
             ).order_by(users_table.c.username)).all()
             groups = conn.execute(select(groups_table.c.id, groups_table.c.name).order_by(groups_table.c.name)).all()
             return {
-                "board": self._board_summaries(conn, user, [acc.board])[0],
+                "board": {**self._board_summaries(conn, user, [acc.board])[0], "finished_earlier": earlier},
                 "columns": [_column_json(c) for c in columns],
                 "labels": [{"id": lb.id, "name": lb.name, "color": lb.color} for lb in labels],
                 "members": self._members(conn, board_id),
@@ -695,6 +712,12 @@ class KanbanStore:
             board_ids = sorted({r.board_id for r in rows})
             boards = conn.execute(select(boards_table).where(b.id.in_(board_ids))).all() if board_ids else []
             roles = _roles(conn, user, board_ids)
+            # K4: a private board's tasks only for its members (someone taken off the board keeps no window into it)
+            hidden = {bd.id for bd in boards if bd.private and bd.id not in roles and not user.is_admin}
+            if hidden:
+                rows = [r for r in rows if r.board_id not in hidden]
+                boards = [bd for bd in boards if bd.id not in hidden]
+                board_ids = [i for i in board_ids if i not in hidden]
             columns = conn.execute(select(columns_table).where(columns_table.c.board_id.in_(board_ids))
                                    .order_by(columns_table.c.position, columns_table.c.id)).all() if board_ids else []
             done_cols = {col.id for col in columns if col.is_done}
@@ -716,6 +739,25 @@ class KanbanStore:
                             "columns": by_board.get(bd.id, []), "labels": labels.get(bd.id, [])} for bd in boards],
                 "people": [{"id": uid, "username": names.get(uid, "?")} for uid in people],
             }
+
+    def finished_earlier(self, user: User, board_id: int, q: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """K4: the tasks that left the board because they were finished long enough ago, newest first."""
+        with self.engine.connect() as conn:
+            acc = self._access(conn, user, board_id)
+            keep = done_keep(acc.board)
+            if not keep:
+                return {"cards": [], "total": 0, "keep_days": 0}
+            done_ids = [c.id for c in conn.execute(select(columns_table.c.id).where(
+                columns_table.c.board_id == board_id, columns_table.c.is_done.is_(True)))]
+            cond = [cards_table.c.board_id == board_id, cards_table.c.archived.is_(False),
+                    cards_table.c.column_id.in_(done_ids), cards_table.c.completed_at < time.time() - keep * 86400]
+            words = [w for w in q.lower().split() if w]
+            for w in words:
+                cond.append(func.lower(cards_table.c.title).contains(w))
+            total = conn.execute(select(func.count()).select_from(cards_table).where(*cond)).scalar() or 0
+            rows = conn.execute(select(cards_table).where(*cond).order_by(cards_table.c.completed_at.desc(), cards_table.c.id.desc())
+                                .limit(limit).offset(offset)).all()
+            return {"cards": self._summaries(conn, rows), "total": total, "keep_days": keep}
 
     def board_history(self, user: User, board_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.engine.connect() as conn:

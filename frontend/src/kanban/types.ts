@@ -23,6 +23,9 @@ export interface BoardSummary {
   cards_done: number;
   updated_at: number;
   archived: boolean;
+  private?: boolean;          // K4: only its members (and admins) see it
+  done_keep_days?: number;    // K4: finished tasks leave the board after this many days; 0 = they stay
+  finished_earlier?: number;  // K4: how many left the board that way (with the board's detail)
 }
 
 export interface Column {

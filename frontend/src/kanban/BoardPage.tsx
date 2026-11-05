@@ -13,11 +13,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { ArchiveIcon, CheckIcon, ChevronDownIcon, EyeIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
+import { ArchiveIcon, CheckIcon, ChevronDownIcon, EyeIcon, LockIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, undoRepeat, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
 import { CalendarView } from './CalendarView';
+import { FinishedEarlier } from './FinishedEarlier';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
@@ -118,9 +119,11 @@ interface ColumnViewProps {
   onMoveColumn: (column: Column, by: -1 | 1) => void;
   onDeleteColumn: (column: Column) => void;
   onPhotoTask: (column: Column, file: File) => Promise<void>;
+  earlier?: number; // K4: finished tasks that left the board (shown under the done stage)
+  onEarlier?: () => void;
 }
 
-function ColumnView({ column, index, columns, ids, cardsById, total, board, today, canEdit, onOpen, onMove, onAdd, onChangeColumn, onMoveColumn, onDeleteColumn, onPhotoTask }: ColumnViewProps) {
+function ColumnView({ column, index, columns, ids, cardsById, total, board, today, canEdit, onOpen, onMove, onAdd, onChangeColumn, onMoveColumn, onDeleteColumn, onPhotoTask, earlier = 0, onEarlier }: ColumnViewProps) {
   const camera = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: colKey(column.id), data: { type: 'column' } });
@@ -360,6 +363,11 @@ function ColumnView({ column, index, columns, ids, cardsById, total, board, toda
           )}
         </Flex>
       </SortableContext>
+      {earlier > 0 && onEarlier && (
+        <Button variant="ghost" size="sm" mx={2} mb={2} color="mutedText" fontWeight={600} onClick={onEarlier} data-testid="finished-earlier">
+          {tn(earlier, 'Finished earlier: {n} task', 'Finished earlier: {n} tasks')}
+        </Button>
+      )}
     </Flex>
   );
 }
@@ -622,7 +630,7 @@ export default function BoardPage() {
   const [filterState, setFilter] = useState<CardFilter>(NO_FILTER);
   const filter = useMemo(() => ({ ...filterState, q }), [filterState, q]);
   const [drag, setDrag] = useState<{ id: number; from: number; items: Items } | null>(null);
-  const [dialog, setDialog] = useState<'members' | 'labels' | 'settings' | 'hidden' | null>(null);
+  const [dialog, setDialog] = useState<'members' | 'labels' | 'settings' | 'hidden' | 'finished' | null>(null);
   const today = todayIso();
   const scroller = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState(0); // phones: the stage in view
@@ -963,6 +971,14 @@ export default function BoardPage() {
               {board.name}
             </Heading>
           </Box>
+          {board.private && (
+            <Tooltip label={t('Only the members of this board see it')} hasArrow>
+              <Badge display="flex" alignItems="center" gap={1.5} borderRadius="full" px={2.5} py={1} bg="chipBg" color="bodyText" textTransform="none" fontSize="sm" data-testid="board-private">
+                <LockIcon boxSize={3.5} />
+                <Text as="span" display={{ base: 'none', md: 'inline' }}>{t('Members only')}</Text>
+              </Badge>
+            </Tooltip>
+          )}
           {!canEdit && (
             <Tooltip label={board.archived ? t('The board is hidden: bring it back to change it.') : t('You can look at this board; only its members change it.')} hasArrow>
               <Badge display="flex" alignItems="center" gap={1.5} borderRadius="full" px={2.5} py={1} bg="chipBg" color="bodyText" textTransform="none" fontSize="sm" data-testid="read-only">
@@ -1080,6 +1096,8 @@ export default function BoardPage() {
               onMoveColumn={moveColumn}
               onDeleteColumn={removeColumn}
               onPhotoTask={photoTask}
+              earlier={column.id === doneColumn?.id && doneColumn.is_done ? (board.finished_earlier ?? 0) : 0}
+              onEarlier={() => setDialog('finished')}
             />
           ))}
           {canEdit && <AddColumn onAdd={addColumn} />}
@@ -1129,6 +1147,7 @@ export default function BoardPage() {
       {dialog === 'members' && <MembersDialog detail={detail} canManage={canManage && !board.archived} onClose={() => setDialog(null)} onSaved={refresh} />}
       {dialog === 'labels' && <LabelsDialog boardId={boardId} labels={detail.labels} canEdit={canEdit} onClose={() => setDialog(null)} onChanged={refresh} />}
       {dialog === 'hidden' && <HiddenTasks boardId={boardId} onOpen={openCard} onClose={() => setDialog(null)} />}
+      {dialog === 'finished' && <FinishedEarlier boardId={boardId} onOpen={openCard} onClose={() => setDialog(null)} />}
       {dialog === 'settings' && (
         <BoardSettingsDialog
           board={board}

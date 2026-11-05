@@ -1,8 +1,8 @@
-"""Kanban tables (migrations 0010, 0012, 0013). In the app's one MetaData so the migration test compares them."""
+"""Kanban tables (migrations 0010, 0012, 0013, 0014). In the app's one MetaData so the migration test compares them."""
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Table, Text
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Table, Text, false
 
 from ..appdb import metadata
 
@@ -18,6 +18,8 @@ boards_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+    Column("private", Boolean, nullable=False, default=False, server_default=false()),  # K4: members only
+    Column("done_keep_days", Integer),               # K4: finished tasks leave the board after N days; 0 never, null 14
 )
 
 board_members_table = Table(  # everyone signed in sees every board; members (people or groups) edit

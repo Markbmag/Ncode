@@ -6,7 +6,7 @@ import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { ArchiveIcon, PlusIcon, RefreshIcon, TrashIcon, UsersIcon } from '../icons';
+import { ArchiveIcon, LockIcon, PlusIcon, RefreshIcon, TrashIcon, UsersIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { deleteBoard, kanbanKeys, updateBoard, useBoards, useMyTasks } from './api';
@@ -37,6 +37,12 @@ function BoardTile({ board }: { board: BoardSummary }) {
     >
       <Box h="56px" bgGradient={`linear(135deg, ${hex}, ${withAlpha(hex, 0.55)})`} position="relative">
         <Box position="absolute" inset={0} opacity={0.25} bgImage="radial-gradient(circle at 85% 20%, rgba(255,255,255,0.9) 0, transparent 40%)" />
+        {board.private && (
+          <Badge position="absolute" top={3} left={3} bg="rgba(0,0,0,0.28)" color="white" borderRadius="full" px={2} textTransform="none" fontWeight={700} display="flex" alignItems="center" gap={1} data-testid="board-tile-private">
+            <LockIcon boxSize={3} />
+            {t('Members only')}
+          </Badge>
+        )}
         {board.role && (
           <Badge position="absolute" top={3} right={3} bg="rgba(255,255,255,0.22)" color="white" borderRadius="full" px={2} textTransform="none" fontWeight={700}>
             {board.role === 'owner' ? t('You own it') : t('You are a member')}

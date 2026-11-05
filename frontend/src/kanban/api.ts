@@ -1,7 +1,7 @@
 /** Ncode - Kanban: calls to /api/kanban/* and their react-query cache keys. */
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
-import type { BoardDetail, BoardSummary, Card, Column, Label, MyTasks, Priority, Repeat, Role } from './types';
+import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, MyTasks, Priority, Repeat, Role } from './types';
 
 const BASE = '/api/kanban';
 
@@ -50,6 +50,14 @@ export function useArchivedCards(id: number, enabled: boolean) {
   });
 }
 
+/** K4: tasks that left the board because they were finished a while ago. */
+export function useFinishedEarlier(boardId: number, q: string) {
+  return useQuery({
+    queryKey: [...kanbanKeys.board(boardId), 'finished', q] as const,
+    queryFn: async () => (await http.get<{ cards: CardSummary[]; total: number; keep_days: number }>(`${BASE}/boards/${boardId}/finished`, { params: { q, limit: 100 } })).data,
+  });
+}
+
 export function useCard(id: number | null) {
   return useQuery({
     queryKey: kanbanKeys.card(id ?? 0),
@@ -66,6 +74,8 @@ export interface BoardInput {
   description?: string | null;
   color?: string | null;
   archived?: boolean;
+  private?: boolean;
+  done_keep_days?: 0 | 7 | 14 | 30;
 }
 
 export const createBoard = async (body: BoardInput & { name: string; template?: 'basic' }) =>
