@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Portal, Select, Skeleton, Text, Textarea, useToast, VStack,
+  Badge, Box, Button, Flex, Heading, HStack, IconButton, Input, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Portal, Skeleton, Text, Textarea, useToast, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import {
@@ -28,9 +28,10 @@ import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
 import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, PrinterIcon, TagIcon, TimelineIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
-  dayTitle, namedPeople, photoTaskTitle, printRow, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
+  dayTitle, namedPeople, photoTaskTitle, printRow, PRIORITY_COLOR, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
 } from './logic';
 import type { CardFilter } from './logic';
+import { Choice } from './Choice';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
 import type { BoardDetail, BoardEvent, Card, CardSummary, Column, Priority } from './types';
 import { PRIORITIES } from './types';
@@ -475,7 +476,7 @@ function FilterBar({ filter, setFilter, board, me }: { filter: CardFilter; setFi
   });
   const extra = filter.person !== null || filter.label !== null || filter.priority !== null;
   return (
-    <Flex gap={2} align="center" overflowX="auto" py={1.5} px={{ base: 3, md: 5 }} data-testid="filter-bar" sx={{ scrollbarWidth: 'none' }}>
+    <Flex gap={2} align="center" overflowX={{ base: 'auto', md: 'visible' }} wrap={{ base: 'nowrap', md: 'wrap' }} py={1.5} px={{ base: 3, md: 5 }} data-testid="filter-bar" sx={{ scrollbarWidth: 'none' }}>
       <Text as="span" fontWeight={600} color="mutedText" flexShrink={0} display={{ base: 'none', md: 'inline' }}>
         {t('Show:')}
       </Text>
@@ -492,47 +493,35 @@ function FilterBar({ filter, setFilter, board, me }: { filter: CardFilter; setFi
       </Button>
       {(more || extra) && (
         <>
-          <Select
-            w="auto"
-            minW="150px"
-            flexShrink={0}
+          <Choice
             borderRadius="full"
             value={filter.person === null ? '' : typeof filter.person === 'number' ? `u${filter.person}` : `n${filter.person}`}
-            onChange={(e) => {
-              const v = e.target.value;
-              setFilter({ ...filter, person: !v ? null : v.startsWith('u') ? Number(v.slice(1)) : v.slice(1) });
-            }}
-            aria-label={t('Person')}
-            data-testid="filter-person"
-          >
-            <option value="">{t('Anyone')}</option>
-            {board.people.filter((p) => p.active !== false).map((p) => (
-              <option key={p.id} value={`u${p.id}`}>
-                {p.username}
-              </option>
-            ))}
-            {namedPeople(board.cards).map((n) => (
-              <option key={`n${n}`} value={`n${n}`}>
-                {n}
-              </option>
-            ))}
-          </Select>
-          <Select w="auto" minW="140px" flexShrink={0} borderRadius="full" value={filter.label ?? ''} onChange={(e) => setFilter({ ...filter, label: e.target.value ? Number(e.target.value) : null })} aria-label={t('Label')} data-testid="filter-label">
-            <option value="">{t('Any label')}</option>
-            {board.labels.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </Select>
-          <Select w="auto" minW="150px" flexShrink={0} borderRadius="full" value={filter.priority ?? ''} onChange={(e) => setFilter({ ...filter, priority: (e.target.value || null) as Priority | null })} aria-label={t('Priority')} data-testid="filter-priority">
-            <option value="">{t('Any priority')}</option>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {priorityLabel(p)}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: t('Any person') },
+              ...board.people.filter((p) => p.active !== false).map((p) => ({ value: `u${p.id}`, label: p.username })),
+              ...namedPeople(board.cards).map((n) => ({ value: `n${n}`, label: n })),
+            ]}
+            onChange={(v) => setFilter({ ...filter, person: !v ? null : v.startsWith('u') ? Number(v.slice(1)) : v.slice(1) })}
+            searchable={board.people.length + namedPeople(board.cards).length > 8}
+            label={t('Person')}
+            testId="filter-person"
+          />
+          <Choice
+            borderRadius="full"
+            value={filter.label === null ? '' : String(filter.label)}
+            options={[{ value: '', label: t('Any label') }, ...board.labels.map((l) => ({ value: String(l.id), label: l.name, icon: <Box w="10px" h="10px" borderRadius="full" bg={colorHex(l.color)} /> }))]}
+            onChange={(v) => setFilter({ ...filter, label: v ? Number(v) : null })}
+            label={t('Label')}
+            testId="filter-label"
+          />
+          <Choice
+            borderRadius="full"
+            value={filter.priority ?? ''}
+            options={[{ value: '', label: t('Any priority') }, ...PRIORITIES.map((p) => ({ value: p, label: priorityLabel(p), icon: <Box w="10px" h="10px" borderRadius="full" bg={PRIORITY_COLOR[p]} /> }))]}
+            onChange={(v) => setFilter({ ...filter, priority: (v || null) as Priority | null })}
+            label={t('Priority')}
+            testId="filter-priority"
+          />
         </>
       )}
       {filterActive({ ...filter, q: '' }) && (
@@ -585,11 +574,13 @@ function ViewSwitch({ view, onChange, wide = false }: { view: View; onChange: (v
           flex={wide ? 1 : undefined}
           size="sm"
           h={wide ? '40px' : '36px'}
-          fontSize="md"
+          minW={0}
+          px={wide ? 1.5 : 3}
+          fontSize={wide ? '15px' : 'md'}
           variant={view === it.key ? 'solid' : 'ghost'}
           bg={view === it.key ? 'cardBg' : 'transparent'}
           boxShadow={view === it.key ? 'card' : undefined}
-          leftIcon={it.icon}
+          leftIcon={wide ? undefined : it.icon}
           aria-pressed={view === it.key}
           onClick={() => onChange(it.key)}
           data-testid={`view-${it.key}`}
@@ -1006,7 +997,7 @@ export default function BoardPage() {
             <IconButton aria-label={t('All boards')} variant="ghost" icon={<ArrowLeftIcon boxSize={5} />} onClick={() => navigate('/kanban')} display={{ base: 'inline-flex', md: 'none' }} />
           </Tooltip>
           <Box minW={0} flex={{ base: 1, md: 'none' }}>
-            <Heading as="h1" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em" noOfLines={{ base: 2, md: 1 }} data-testid="board-title">
+            <Heading as="h1" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="-0.02em" noOfLines={{ base: 2, md: 1 }} sx={{ overflowWrap: 'normal', wordBreak: 'normal' }} data-testid="board-title">
               {board.name}
             </Heading>
           </Box>
@@ -1047,8 +1038,8 @@ export default function BoardPage() {
             </Tooltip>
             <Menu isLazy placement="bottom-end">
               <Tooltip label={t('Labels, board settings, hidden tasks')} hasArrow>
-                <MenuButton as={Button} variant="subtle" leftIcon={<MoreIcon boxSize={4} />} data-testid="board-more">
-                  {t('More')}
+                <MenuButton as={Button} variant="subtle" leftIcon={<MoreIcon boxSize={4} />} iconSpacing={{ base: 0, sm: 2 }} aria-label={t('More')} data-testid="board-more">
+                  <Text as="span" display={{ base: 'none', sm: 'inline' }}>{t('More')}</Text>
                 </MenuButton>
               </Tooltip>
               <MenuList zIndex={1600} fontSize="md" minW="240px">

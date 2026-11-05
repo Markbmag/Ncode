@@ -436,4 +436,18 @@ export const KANBAN: Record<string, string> = {
   'Sending {n} change made without a connection…|Sending {n} changes made without a connection…': 'Отправляю {n} изменение, сделанное без связи…|Отправляю {n} изменения, сделанные без связи…|Отправляю {n} изменений, сделанных без связи…',
   'Sent {n} change made without a connection|Sent {n} changes made without a connection': 'Отправлено {n} изменение, сделанное без связи|Отправлено {n} изменения, сделанные без связи|Отправлено {n} изменений, сделанных без связи',
   'add {file}': 'добавление {file}',
+  // K5: themed drop-downs and dates, clearer task text
+  'Any person': 'Любой исполнитель',
+  'Press Enter or click outside to save.': 'Нажмите Enter или щёлкните в стороне, чтобы сохранить.',
+  'What needs doing, where, how (not required). Click here to write.': 'Что сделать, где, как (не обязательно). Нажмите здесь, чтобы написать.',
+  'Choose a date': 'Выбрать дату',
+  'Not required': 'Не обязательно',
+  'The due date cannot be before the start ({date}).': 'Срок не может быть раньше начала ({date}).',
+  'The start cannot be after the due date ({date}).': 'Начало не может быть позже срока ({date}).',
+  'Type to search': 'Начните вводить для поиска',
+  'Tomorrow': 'Завтра',
+  'In a week': 'Через неделю',
+  'Remove the date': 'Убрать дату',
+  'Works on tasks and stages': 'Работает с задачами и этапами',
+  'Also chooses the members': 'Ещё и выбирает участников',
 };

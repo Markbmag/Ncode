@@ -3,7 +3,7 @@
  * a photo, live updates in a second browser and read-only access for people who are not members.
  */
 import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
-import { API, api, expectNoHorizontalScroll, newUser, signIn, token, unique, watchErrors } from './helpers';
+import { API, api, expectNoHorizontalScroll, newUser, signIn, token, unique, watchErrors, choose, chooseText, pickDate } from './helpers';
 
 // a 2 x 2 red PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64');
@@ -100,7 +100,7 @@ test('a board from scratch: stages, tasks, drag and drop, steps, comment, photo;
 
   // alice becomes a member
   await page.getByTestId('members-button').click();
-  await page.getByTestId('member-pick').selectOption({ label: 'alice' });
+  await chooseText(page, 'member-pick', 'alice');
   await page.getByTestId('add-member').click();
   await page.getByTestId('save-members').click();
   await expect(page.getByTestId('members-list')).toBeHidden();
@@ -204,10 +204,10 @@ test('filters on a board; hide a board and bring it back', async ({ page }) => {
   await expect(page.getByTestId('card-face')).toContainText('Urgent leak');
   await page.getByTestId('filter-overdue').click();
   await page.getByTestId('filter-more').click();
-  await page.getByTestId('filter-person').selectOption({ label: 'alice' });
+  await chooseText(page, 'filter-person', 'alice');
   await expect(page.getByTestId('card-face')).toHaveCount(1);
   await expect(page.getByTestId('card-face')).toContainText('Paint the rails');
-  await page.getByTestId('filter-person').selectOption({ value: '' });
+  await choose(page, 'filter-person', '');
   await page.getByTestId('kanban-search').fill('leak');
   await expect(page.getByTestId('card-face')).toHaveCount(1);
   await page.getByTestId('kanban-search').fill('');
@@ -256,7 +256,7 @@ test('moving without dragging: "Move to…", Undo, and removing a task with Undo
   await expect(drawer.getByTestId('card-priority')).toHaveText('Urgent');
   const d = new Date(Date.now() - 3 * 86_400_000);
   const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  await drawer.getByTestId('card-due').fill(iso);
+  await pickDate(page, 'card-due', iso, drawer);
   await expect(drawer.getByTestId('due-text')).toHaveText('3 days late');
 
   // removing it from the board can be undone

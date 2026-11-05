@@ -1,6 +1,6 @@
 // K3: repeating tasks (the next one appears when one is done) and links from tasks to Search & BI.
 import { expect, test } from '@playwright/test';
-import { api, signIn, unique, watchErrors } from './helpers';
+import { api, signIn, unique, watchErrors, choose } from './helpers';
 
 test('a weekly task comes back when it is done; Undo takes the new one away', async ({ page }) => {
   const errors = watchErrors(page);
@@ -12,8 +12,7 @@ test('a weekly task comes back when it is done; Undo takes the new one away', as
   await signIn(page, 'carol', `/kanban/b/${board.id}/c/${card.id}`);
 
   const drawer = page.getByTestId('card-drawer');
-  await drawer.getByTestId('date-more').click(); // start date and repeat sit under the due date
-  await drawer.getByTestId('card-repeat').selectOption('weekly');
+  await choose(page, 'card-repeat', 'weekly', drawer);
   await expect(drawer.getByTestId('repeat-hint')).toContainText('the next one appears in “To do”');
   await drawer.getByTestId('checklist-item').locator('label').first().click();
   await expect(drawer.getByTestId('plan-progress')).toHaveText('1 of 1 steps done');
