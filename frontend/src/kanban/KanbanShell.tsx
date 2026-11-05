@@ -10,10 +10,10 @@ import { LANGUAGES, lang, setLang, t } from '../i18n/index.ts';
 import { ServiceMark, ServiceSwitcher } from '../launcher/ServiceSwitcher';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useBoards } from './api';
-import { KanbanIcon } from './icons';
+import { KanbanIcon, UserIcon } from './icons';
 import { colorHex } from './logic';
 import { PersonAvatar } from './parts';
-import { OfflineBanner } from '../pwa/OfflineBanner';
+import { KanbanOfflineBanner, OfflineSync } from './offline/OfflineSync';
 import { setAppIdentity } from '../pwa/identity';
 
 export function KanbanLogo() {
@@ -59,6 +59,9 @@ function BoardsMenu() {
       <MenuList zIndex={1600} maxH="60vh" overflowY="auto" minW="240px">
         <MenuItem icon={<KanbanIcon boxSize={4} />} onClick={() => navigate('/kanban')} fontWeight={600}>
           {t('All boards')}
+        </MenuItem>
+        <MenuItem icon={<UserIcon boxSize={4} />} onClick={() => navigate('/kanban/my')} fontWeight={600} data-testid="menu-my-tasks">
+          {t('My tasks')}
         </MenuItem>
         {(boards.data?.length ?? 0) > 0 && <MenuDivider />}
         <MenuGroup title={t('Boards')} fontSize="xs" color="faintText">
@@ -183,6 +186,7 @@ function AccountMenu() {
 
 /** Ncode - Kanban's own frame: a top bar (logo, boards, search, services, you) over the page. */
 export default function KanbanShell() {
+  const ws = useWorkspace();
   // "Add to Home Screen" here makes a Kanban icon that opens Kanban (K2)
   useEffect(() => {
     setAppIdentity('kanban');
@@ -212,7 +216,8 @@ export default function KanbanShell() {
         </Flex>
         <AccountMenu />
       </Flex>
-      <OfflineBanner />
+      <KanbanOfflineBanner />
+      <OfflineSync user={ws.user.username} />
       <Box flex={1} minH={0} position="relative">
         <Suspense fallback={<Skeleton m={6} h="200px" borderRadius="2xl" />}>
           <Outlet />

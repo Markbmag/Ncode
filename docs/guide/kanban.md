@@ -13,15 +13,75 @@ start page (Ncode remembers the choice; the ⊞ button switches back to Search &
 
 ## Tasks
 
-- **+ Add a task** at the top of a stage. Click a task to open it; changes save by themselves.
-- **What needs to be done**, **Who** (several people), **When** (start and due date; late tasks turn
-  red and say "3 days late"), **How important** (Low · Normal · High · Urgent), **Labels**.
+- **+ Add a task** at the top of a stage. Click a task to open it; changes save by themselves
+  ("Saved" shows after each change).
+- At the top: the task's **stage** (tap to move it), a green **Done** button and **×** to close.
+- Then the name and the details (click to change), and one card with the facts: **Who** (several
+  people: Ncode users, or anyone else by name - type "Ivan from maintenance" and press Enter; such
+  names have a dashed outline, can be filtered by on the board and are found by the search), **Due** (late tasks turn red and say "3 days late"; *Start date and repeat…* below it),
+  **Importance** (Low · Normal · High · Urgent) and **Labels**.
 - **Steps**: the action plan. Tick steps as they are done; the task and the board show
   "2 of 5 steps done" with a bar.
 - **Photos and files**: *Add photo or file* (on a phone this opens the camera). Up to 15 MB each.
-- **Comments** and **History** (who did what, when) at the bottom.
+- **Comments** at the bottom. **More** under them holds the **History** (who did what, when), the links
+  to Search & BI (they move up when a task has some) and *Remove from the board*.
+- Each step has one **⋯** menu (change the text, move up or down, remove); a photo opens large, with
+  *Download* and *Delete*.
 - Move a task with **Move to…** on the task, or drag it. A note at the bottom offers **Undo**.
 - *Remove from the board* hides a task (it can be brought back from *Hidden tasks*).
+- Descriptions and comments show exactly what was typed; web addresses become links.
+- **Repeats** (under *When*): every day, every working day (Mon–Fri), every week or every month. When
+  the task is moved to a done stage, the next one appears in the first stage with its next date, the
+  same people and labels and its steps unticked; the note says when it is due, and *Undo* takes it
+  away again. Choose *Does not repeat* to end the series.
+- **Search & BI**: *Link a dashboard or question* attaches a dashboard or question you may open, e.g.
+  the scrap dashboard on "Look into the scrap rise". People who may open it see its name and open it
+  from the task; others only see that there is a link.
+
+## Calendar
+
+*Board | Calendar* at the top of a board shows the same tasks (with the same filters) on a month
+calendar: each task on its due date (or its start date when it has no due date), in the colour of its
+stage, late ones in red, finished ones ticked. Drag a task to another day to change its due date, or
+from *No date* onto a day to give it one; *Undo* is in the note. On a phone the calendar is a list of
+days: late tasks first, then today and the days of the month.
+
+## Timeline
+
+*Board · Calendar · Timeline* (in Russian *График*): one row per task with a date, by stage, with a bar
+from its start to its due date, six weeks at a time (*‹ ›* move two weeks, *Today* comes back). Late
+bars are red, finished ones grey; weekends are shaded and a line marks today. Drag a bar to move both
+dates, or one of its ends to change only the start or the due date; *Undo* is in the note.
+
+## Finished tasks, private boards, print and Excel
+
+- **Finished tasks leave the board** after 14 days (board settings: 7, 14, 30 days or always). They
+  are under *Finished earlier: N tasks* at the bottom of the done stage, where they can be searched,
+  opened and moved back.
+- **Who can see the board** (when creating it, or in its settings): *Everyone in the company* or *Only
+  its members*. A members-only board shows a lock; for anyone else it does not exist - not in the
+  list, not in My tasks, not by its address. Admins see every board.
+- **Print** (board *More*, and My tasks): a plain sheet with one table per stage, an empty box to tick
+  by hand, who, due and steps - what is on the screen, filters included.
+- **Download as Excel**: one row per task with stage, who, dates, late, importance, labels, steps.
+
+## Without a connection
+
+The boards and tasks you have opened stay on the phone or computer, so Kanban opens without a
+connection (a weak spot in the hall, a cellar). Ticking steps, moving tasks (also *Done*), comments
+and photos work as usual: they show at once, marked *Waiting to be sent*, and go to the server by
+themselves when the connection is back - even if the app was closed meanwhile. The strip at the top
+says how many changes wait. Adding a new task needs the connection.
+
+On a shared phone, signing out clears everything kept on it (it asks first if changes still wait);
+someone else signing in starts empty.
+
+## My tasks
+
+*My tasks* (on the boards page, with the number of late tasks, and in the boards menu) lists
+everything assigned to you on all boards: *Late · Today · Next 7 days · Later · No date · Done this
+week*. Each task shows its board and stage; *Done* and *Move to…* work right there, and a task opens
+on the same page.
 
 ## Working together
 
@@ -46,9 +106,7 @@ stay signed in.
   becomes a new task in that stage, and the name ("Photo 14:05") is ready to be typed over. Big
   photos are made smaller on the phone first (about 1 MB instead of 4, quicker over mobile data;
   the location stored in the photo is left out).
-- **No connection** (a weak spot in the hall): the app still opens and says *No connection* at the
-  top. What is on the screen stays; changes need the connection, and the board catches up by itself
-  when it is back. Nothing is stored on the phone except the app itself.
+- **No connection** (a weak spot in the hall): see *Without a connection* below.
 - Text fields are large enough that the iPhone does not zoom in while you type.
 
 ## For administrators
@@ -60,3 +118,5 @@ stay signed in.
   `NCODE_TLS=internal`, each phone must trust Caddy's certificate once - see
   [Install → HTTPS on a LAN](install.md). Over plain `http://` the icon still opens Kanban full
   screen; it just needs the connection to start.
+- Without a connection, Kanban keeps the boards and tasks a person has opened in the browser's storage
+  on that device (and the changes waiting to be sent, photos included). Signing out clears it.

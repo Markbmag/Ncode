@@ -47,11 +47,12 @@ export async function api(request: APIRequestContext, who: Who, method: string, 
 }
 
 /** Fails the test on uncaught page errors and console errors other than expected HTTP refusals. */
-export function watchErrors(page: Page): string[] {
+export function watchErrors(page: Page, expected: RegExp[] = []): string[] {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/\b(40\d|409|429)\b/.test(m.text())) errors.push(`console: ${m.text()}`);
+    if (m.type() !== 'error' || /\b(40\d|409|429)\b/.test(m.text()) || expected.some((re) => re.test(m.text()))) return;
+    errors.push(`console: ${m.text()}`);
   });
   return errors;
 }

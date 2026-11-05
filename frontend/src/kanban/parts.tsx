@@ -1,7 +1,7 @@
 /** Small building blocks of the Kanban pages: avatars, chips, progress bar, colour picker, empty state. */
 import type { ReactNode } from 'react';
 import {
-  Avatar, Box, Button, Flex, HStack, SimpleGrid, Text, VStack,
+  Avatar, Box, Button, Flex, HStack, Link, SimpleGrid, Text, VStack,
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { CheckIcon, PlusIcon } from '../icons';
@@ -11,7 +11,9 @@ import { ClockIcon, FlagIcon } from './icons';
 import type { Label, Priority } from './types';
 
 export function PersonAvatar({ name, size = 'xs' }: { name: string; size?: '2xs' | 'xs' | 'sm' | 'md' }) {
-  return <Avatar size={size} name={name} bg={avatarColor(name)} color="white" fontWeight={700} />;
+  // initials from the words that start with a letter: "Oleg (electrician)" -> "OE", not "O("
+  const lettersOnly = name.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim() || name;
+  return <Avatar size={size} name={lettersOnly} bg={avatarColor(name)} color="white" fontWeight={700} />;
 }
 
 /** Overlapping avatars, "+3" when there are more than `max`. */
@@ -168,5 +170,23 @@ export function EmptyState({ icon, title, text, action, onAction, testId }: { ic
         </Button>
       )}
     </VStack>
+  );
+}
+
+/** Text exactly as it was typed: line breaks kept, web addresses clickable, no formatting codes. */
+export function PlainText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/g);
+  return (
+    <Text as="div" whiteSpace="pre-wrap" overflowWrap="anywhere">
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <Link key={i} href={part} isExternal color="brand.500" _dark={{ color: 'brand.200' }} textDecoration="underline">
+            {part}
+          </Link>
+        ) : (
+          part
+        ),
+      )}
+    </Text>
   );
 }

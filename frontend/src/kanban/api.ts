@@ -1,7 +1,7 @@
 /** Ncode - Kanban: calls to /api/kanban/* and their react-query cache keys. */
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api';
-import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, Priority, Role } from './types';
+import type { BoardDetail, BoardSummary, Card, CardSummary, Column, Label, MyTasks, Priority, Repeat, Role } from './types';
 
 const BASE = '/api/kanban';
 
@@ -11,7 +11,18 @@ export const kanbanKeys = {
   board: (id: number) => ['kanban', 'board', id] as const,
   card: (id: number) => ['kanban', 'card', id] as const,
   file: (url: string) => ['kanban', 'file', url] as const,
+  my: ['kanban', 'my'] as const,
 };
+
+/** My tasks on every board (K3); refreshed every minute and when the window comes back. */
+export function useMyTasks() {
+  return useQuery({
+    queryKey: kanbanKeys.my,
+    queryFn: async () => (await http.get<MyTasks>(`${BASE}/my`)).data,
+    staleTime: 5_000,
+    refetchInterval: 60_000,
+  });
+}
 
 export function useBoards(archived = false) {
   return useQuery({
@@ -39,6 +50,14 @@ export function useArchivedCards(id: number, enabled: boolean) {
   });
 }
 
+/** K4: tasks that left the board because they were finished a while ago. */
+export function useFinishedEarlier(boardId: number, q: string) {
+  return useQuery({
+    queryKey: [...kanbanKeys.board(boardId), 'finished', q] as const,
+    queryFn: async () => (await http.get<{ cards: CardSummary[]; total: number; keep_days: number }>(`${BASE}/boards/${boardId}/finished`, { params: { q, limit: 100 } })).data,
+  });
+}
+
 export function useCard(id: number | null) {
   return useQuery({
     queryKey: kanbanKeys.card(id ?? 0),
@@ -55,6 +74,8 @@ export interface BoardInput {
   description?: string | null;
   color?: string | null;
   archived?: boolean;
+  private?: boolean;
+  done_keep_days?: 0 | 7 | 14 | 30;
 }
 
 export const createBoard = async (body: BoardInput & { name: string; template?: 'basic' }) =>
@@ -97,15 +118,28 @@ export interface CardInput {
   start_date?: string | null;
   due_date?: string | null;
   assignees?: number[];
+  assignee_names?: string[];
   labels?: number[];
   archived?: boolean;
+  repeat?: Repeat | null;
 }
 
 export const createCard = async (boardId: number, body: CardInput & { column_id: number; title: string; position?: number }) =>
   (await http.post<Card>(`${BASE}/boards/${boardId}/cards`, body)).data;
+/** To the top of a stage (the server picks the place). */
+export const moveCardToTop = async (id: number, column_id: number) => (await http.post<Card>(`${BASE}/cards/${id}/move`, { column_id })).data;
 export const updateCard = async (id: number, body: CardInput) => (await http.patch<Card>(`${BASE}/cards/${id}`, body)).data;
 export const moveCard = async (id: number, column_id: number, position: number) =>
-  (await http.post<CardSummary>(`${BASE}/cards/${id}/move`, { column_id, position })).data;
+  (await http.post<Card>(`${BASE}/cards/${id}/move`, { column_id, position })).data;
+export const addCardLink = async (cardId: number, kind: 'dashboard' | 'question', target_id: number) =>
+  (await http.post<Card>(`${BASE}/cards/${cardId}/links`, { kind, target_id })).data;
+export const removeCardLink = async (linkId: number) => (await http.delete<Card>(`${BASE}/links/${linkId}`)).data;
+/** Undo of a move to done that made the next one of a repeating task: the copy is hidden again and the
+ * task repeats as before. */
+export async function undoRepeat(cardId: number, repeat: Repeat, nextId: number) {
+  await updateCard(nextId, { archived: true });
+  await updateCard(cardId, { repeat });
+}
 export const deleteCard = async (id: number) => {
   await http.delete(`${BASE}/cards/${id}`);
 };
@@ -156,6 +190,11 @@ export function useFileUrl(url: string | null | undefined) {
     staleTime: Infinity,
     gcTime: 10 * 60_000,
   });
+}
+
+/** K4: a board or My tasks as an Excel file (headers in the app's language). */
+export async function downloadExcel(path: '/my' | `/boards/${number}`, filename: string): Promise<void> {
+  return downloadAttachment(`${BASE}${path}/export.xlsx`, filename);
 }
 
 export async function downloadAttachment(url: string, filename: string): Promise<void> {

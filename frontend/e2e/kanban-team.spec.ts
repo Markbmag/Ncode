@@ -56,7 +56,7 @@ test('three people on one board see each other\'s moves, ticks and comments live
   await expect(aliceDrawer.getByTestId('comment').filter({ hasText: 'Oil topped up, all good' })).toContainText('carol');
 
   // the history says who did what, with times
-  await aliceDrawer.getByTestId('history-tab').click();
+  await aliceDrawer.getByTestId('card-more').click();
   const history = aliceDrawer.getByTestId('history');
   await expect(history.getByTestId('history-entry').filter({ hasText: /alice/i }).first()).toBeVisible();
   await expect(history.getByTestId('history-entry').filter({ hasText: /admin/i }).first()).toBeVisible();

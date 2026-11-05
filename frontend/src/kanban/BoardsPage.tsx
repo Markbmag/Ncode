@@ -6,13 +6,13 @@ import { Tooltip } from '../components/Tooltip';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { ArchiveIcon, PlusIcon, RefreshIcon, TrashIcon, UsersIcon } from '../icons';
+import { ArchiveIcon, LockIcon, PlusIcon, RefreshIcon, TrashIcon, UsersIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { deleteBoard, kanbanKeys, updateBoard, useBoards } from './api';
+import { deleteBoard, kanbanKeys, updateBoard, useBoards, useMyTasks } from './api';
 import { CreateBoardDialog } from './dialogs';
-import { KanbanIcon } from './icons';
-import { boardProgress, colorHex, personName, timeAgo, withAlpha } from './logic';
+import { KanbanIcon, UserIcon } from './icons';
+import { boardProgress, colorHex, personName, timeAgo, todayIso, withAlpha } from './logic';
 import { EmptyState, ProgressBar } from './parts';
 import type { BoardSummary } from './types';
 
@@ -37,6 +37,12 @@ function BoardTile({ board }: { board: BoardSummary }) {
     >
       <Box h="56px" bgGradient={`linear(135deg, ${hex}, ${withAlpha(hex, 0.55)})`} position="relative">
         <Box position="absolute" inset={0} opacity={0.25} bgImage="radial-gradient(circle at 85% 20%, rgba(255,255,255,0.9) 0, transparent 40%)" />
+        {board.private && (
+          <Badge position="absolute" top={3} left={3} bg="rgba(0,0,0,0.28)" color="white" borderRadius="full" px={2} textTransform="none" fontWeight={700} display="flex" alignItems="center" gap={1} data-testid="board-tile-private">
+            <LockIcon boxSize={3} />
+            {t('Members only')}
+          </Badge>
+        )}
         {board.role && (
           <Badge position="absolute" top={3} right={3} bg="rgba(255,255,255,0.22)" color="white" borderRadius="full" px={2} textTransform="none" fontWeight={700}>
             {board.role === 'owner' ? t('You own it') : t('You are a member')}
@@ -130,6 +136,24 @@ function ArchivedRow({ board }: { board: BoardSummary }) {
   );
 }
 
+/** "My tasks · 3 late" (K3): the way to everything assigned to me. */
+function MyTasksButton() {
+  const my = useMyTasks();
+  const today = todayIso();
+  const open = (my.data?.cards ?? []).filter((c) => c.completed_at === null);
+  const late = open.filter((c) => c.due_date !== null && c.due_date < today).length;
+  return (
+    <Button as={RouterLink} to="/kanban/my" size="lg" h="52px" px={6} fontSize="lg" variant="subtle" leftIcon={<UserIcon boxSize={5} />} data-testid="my-tasks-button">
+      {t('My tasks')}
+      {open.length > 0 && (
+        <Text as="span" ml={2} px={2} borderRadius="full" fontSize="sm" fontWeight={800} bg={late ? 'red.500' : 'chipBg'} color={late ? 'white' : 'bodyText'} data-testid="my-tasks-count">
+          {late ? tn(late, '{n} late', '{n} late') : open.length}
+        </Text>
+      )}
+    </Button>
+  );
+}
+
 export default function BoardsPage() {
   const [params] = useSearchParams();
   const q = (params.get('q') ?? '').trim().toLocaleLowerCase();
@@ -165,9 +189,12 @@ export default function BoardsPage() {
               {t('A board is a shared to-do list for a team: each task moves from To do to In progress to Done. Everyone can look at every board; its members change it.')}
             </Text>
           </Box>
-          <Button size="lg" h="52px" px={7} fontSize="lg" leftIcon={<PlusIcon boxSize={5} />} onClick={() => setCreating(true)} flexShrink={0} data-testid="new-board">
-            {t('New board')}
-          </Button>
+          <Flex gap={3} direction={{ base: 'column', sm: 'row' }} flexShrink={0}>
+            <MyTasksButton />
+            <Button size="lg" h="52px" px={7} fontSize="lg" leftIcon={<PlusIcon boxSize={5} />} onClick={() => setCreating(true)} data-testid="new-board">
+              {t('New board')}
+            </Button>
+          </Flex>
         </Flex>
 
         <Tabs index={tab} onChange={setTab} variant="soft-rounded" colorScheme="brand" size="md" mb={5}>
@@ -182,13 +209,15 @@ export default function BoardsPage() {
           </TabList>
         </Tabs>
 
-        {boards.isPending ? (
+        {boards.isPending && boards.fetchStatus === 'paused' ? (
+          <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('No connection')} text={t('The boards were not opened on this device before, so they are not kept here. They show once the connection is back.')} testId="boards-offline" />
+        ) : boards.isPending ? (
           <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} h="210px" borderRadius="2xl" />
             ))}
           </SimpleGrid>
-        ) : boards.isError ? (
+        ) : boards.isError && !boards.data ? (
           <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('Could not load the boards')} text={apiErrorMessage(boards.error, '')} action={t('Try again')} onAction={() => void boards.refetch()} />
         ) : archived ? (
           shown.length ? (

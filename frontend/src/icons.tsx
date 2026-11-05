@@ -256,6 +256,7 @@ export const SaveIcon = make(
 );
 
 export const ChevronRightIcon = make(<path d="m9 18 6-6-6-6" />);
+export const ChevronLeftIcon = make(<path d="m15 18-6-6 6-6" />);
 
 export const MergeIcon = make(
   <>

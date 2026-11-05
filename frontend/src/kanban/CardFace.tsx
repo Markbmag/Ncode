@@ -7,8 +7,8 @@ import { Tooltip } from '../components/Tooltip';
 import { CheckIcon, ChevronDownIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useFileUrl } from './api';
-import { CheckCircleIcon, ListChecksIcon, MessageIcon, PaperclipIcon } from './icons';
-import { colorHex, personName, PRIORITY_COLOR, progressOf, progressText } from './logic';
+import { CheckCircleIcon, ListChecksIcon, MessageIcon, PaperclipIcon, RepeatIcon } from './icons';
+import { colorHex, personName, PRIORITY_COLOR, progressOf, progressText, repeatLabel } from './logic';
 import { AvatarStack, DueChip, LabelChip, PriorityChip, ProgressBar } from './parts';
 import type { CardSummary, Column, Label, Person } from './types';
 
@@ -67,7 +67,7 @@ function MoveTo({ card, columns, onMove }: { card: CardSummary; columns: Column[
 export const CardFace = memo(function CardFace({ card, labels, people, today, done, accent, dragging, ghost, columns, onMove }: CardFaceProps) {
   const cardLabels = labels.filter((l) => card.labels.includes(l.id));
   const progress = progressOf(card.checklist);
-  const names = card.assignees.map((id) => personName(id, people));
+  const names = [...card.assignees.map((id) => personName(id, people)), ...(card.assignee_names ?? [])];
   const urgent = card.priority === 'urgent' && !done;
   return (
     <Box
@@ -108,10 +108,16 @@ export const CardFace = memo(function CardFace({ card, labels, people, today, do
           </Text>
         </HStack>
 
-        {(card.priority !== 'normal' || card.due_date) && (
+        {(card.priority !== 'normal' || card.due_date || card.repeat) && (
           <Flex gap={1.5} mt={2.5} wrap="wrap">
             {card.priority !== 'normal' && <PriorityChip priority={card.priority} />}
             {card.due_date && <DueChip due={card.due_date} today={today} done={done} />}
+            {card.repeat && (
+              <HStack spacing={1} px={2} py={0.5} borderRadius="md" bg="chipBg" fontSize="sm" fontWeight={600} color="mutedText" data-testid="repeat-chip">
+                <RepeatIcon boxSize={3.5} />
+                <Text as="span">{repeatLabel(card.repeat)}</Text>
+              </HStack>
+            )}
           </Flex>
         )}
 

@@ -23,6 +23,9 @@ export interface BoardSummary {
   cards_done: number;
   updated_at: number;
   archived: boolean;
+  private?: boolean;          // K4: only its members (and admins) see it
+  done_keep_days?: number;    // K4: finished tasks leave the board after this many days; 0 = they stay
+  finished_earlier?: number;  // K4: how many left the board that way (with the board's detail)
 }
 
 export interface Column {
@@ -67,6 +70,7 @@ export interface CardSummary {
   due_date: string | null;
   position: number;
   assignees: number[];
+  assignee_names?: string[]; // people who are not Ncode users, by name
   labels: number[];
   checklist: { done: number; total: number };
   comments: number;
@@ -75,6 +79,20 @@ export interface CardSummary {
   completed_at: number | null;
   updated_at: number;
   archived?: boolean;
+  repeat?: Repeat | null; // K3
+}
+
+/** K3: how often a task comes back once it is done. */
+export type Repeat = 'daily' | 'weekdays' | 'weekly' | 'monthly';
+export const REPEATS: Repeat[] = ['daily', 'weekdays', 'weekly', 'monthly'];
+
+/** K3: a task's link to a Search & BI dashboard or question; name null when the viewer may not open it. */
+export interface CardLink {
+  id: number;
+  kind: 'dashboard' | 'question';
+  target_id: number;
+  name: string | null;
+  url: string;
 }
 
 export interface ChecklistItem {
@@ -122,6 +140,8 @@ export interface Card extends CardSummary {
   comments_list: Comment[];
   attachments_list: Attachment[];
   history: HistoryEntry[];
+  links?: CardLink[];
+  next?: { id: number; due_date: string; column: string }; // after moving a repeating task to done
 }
 
 export interface BoardDetail {
@@ -140,4 +160,11 @@ export interface BoardEvent {
   card_id?: number | null;
   by?: string | null;
   action?: string | null;
+}
+
+/** GET /api/kanban/my (K3): the caller's tasks on every board they can see. */
+export interface MyTasks {
+  cards: (CardSummary & { board_id: number })[];
+  boards: { id: number; name: string; color: string | null; can_edit: boolean; columns: Column[]; labels: Label[] }[];
+  people: Person[];
 }

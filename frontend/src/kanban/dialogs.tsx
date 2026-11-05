@@ -5,7 +5,7 @@ import {
 } from '@chakra-ui/react';
 import { Tooltip } from '../components/Tooltip';
 import { apiErrorMessage } from '../api';
-import { ArchiveIcon, PlusIcon, TrashIcon, UsersIcon } from '../icons';
+import { ArchiveIcon, LockIcon, PlusIcon, TrashIcon, UsersIcon } from '../icons';
 import { t } from '../i18n/index.ts';
 import { createBoard, createLabel, deleteLabel, saveMembers, updateBoard, updateLabel } from './api';
 import type { MemberInput } from './api';
@@ -21,7 +21,7 @@ function Dialog({ title, onClose, children, footer, size = 'md', onSubmit }: { t
         <ModalHeader fontSize="xl">{title}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>{children}</ModalBody>
-        {footer && <ModalFooter gap={2}>{footer}</ModalFooter>}
+        {footer && <ModalFooter gap={2} flexWrap="wrap" rowGap={2}>{footer}</ModalFooter>}
       </ModalContent>
     </Modal>
   );
@@ -32,13 +32,14 @@ export function CreateBoardDialog({ onClose, onCreated }: { onClose: () => void;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState(PALETTE[0].name);
+  const [secret, setSecret] = useState(false); // K4: a private board
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const board = await createBoard({ name: name.trim(), description: description.trim() || null, color, template: 'basic' });
+      const board = await createBoard({ name: name.trim(), description: description.trim() || null, color, template: 'basic', private: secret });
       onCreated(board);
       onClose();
     } catch (err) {
@@ -78,6 +79,10 @@ export function CreateBoardDialog({ onClose, onCreated }: { onClose: () => void;
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder={t('What this board is for (optional)')} />
         </FormControl>
         <FormControl>
+          <FormLabel>{t('Who can see the board')}</FormLabel>
+          <VisibilityChoice value={secret} onChange={setSecret} />
+        </FormControl>
+        <FormControl>
           <FormLabel>{t('Colour')}</FormLabel>
           <ColorPicker value={color} onChange={setColor} />
         </FormControl>
@@ -89,17 +94,56 @@ export function CreateBoardDialog({ onClose, onCreated }: { onClose: () => void;
   );
 }
 
+/** K4: everyone in the company, or only the board's members (for HR, management...). */
+function VisibilityChoice({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const items = [
+    { v: false, title: t('Everyone in the company'), text: t('Everyone can look; members change it.') },
+    { v: true, title: t('Only its members'), text: t('For boards others should not see, e.g. HR or management.') },
+  ];
+  return (
+    <VStack align="stretch" spacing={2} role="radiogroup" data-testid="board-visibility">
+      {items.map((it) => (
+        <Box
+          key={String(it.v)}
+          as="button"
+          type="button"
+          role="radio"
+          aria-checked={value === it.v}
+          onClick={() => onChange(it.v)}
+          textAlign="left"
+          p={3}
+          borderRadius="lg"
+          border="2px solid"
+          borderColor={value === it.v ? 'brand.400' : 'lineColor'}
+          bg={value === it.v ? 'rgba(99,102,241,0.08)' : 'transparent'}
+          data-testid={it.v ? 'visibility-members' : 'visibility-everyone'}
+        >
+          <HStack spacing={2}>
+            {it.v ? <LockIcon boxSize={4} /> : <UsersIcon boxSize={4} />}
+            <Text fontWeight={700}>{it.title}</Text>
+          </HStack>
+          <Text fontSize="sm" color="mutedText" mt={0.5}>
+            {it.text}
+          </Text>
+        </Box>
+      ))}
+    </VStack>
+  );
+}
+
 export function BoardSettingsDialog({ board, canManage, onClose, onSaved, onArchived }: { board: BoardSummary; canManage: boolean; onClose: () => void; onSaved: () => void; onArchived: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(board.name);
   const [description, setDescription] = useState(board.description ?? '');
   const [color, setColor] = useState(board.color ?? PALETTE[0].name);
+  const [secret, setSecret] = useState(Boolean(board.private));
+  const [keep, setKeep] = useState<0 | 7 | 14 | 30>(((board.done_keep_days ?? 14) as 0 | 7 | 14 | 30));
   const [busy, setBusy] = useState(false);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      await updateBoard(board.id, { name: name.trim(), description: description.trim() || null, color });
+      await updateBoard(board.id, { name: name.trim(), description: description.trim() || null, color, private: secret, done_keep_days: keep });
       onSaved();
       onClose();
     } catch (err) {
@@ -126,7 +170,7 @@ export function BoardSettingsDialog({ board, canManage, onClose, onSaved, onArch
         <>
           {canManage && (
             <Button variant="ghost" colorScheme="red" leftIcon={<ArchiveIcon boxSize={4} />} mr="auto" onClick={() => void archive()} data-testid="archive-board">
-              {t('Hide the board (can be restored)')}
+              {t('Hide the board')}
             </Button>
           )}
           <Button variant="ghost" onClick={onClose}>
@@ -150,6 +194,22 @@ export function BoardSettingsDialog({ board, canManage, onClose, onSaved, onArch
         <FormControl isDisabled={!canManage}>
           <FormLabel>{t('Colour')}</FormLabel>
           <ColorPicker value={color} onChange={setColor} />
+        </FormControl>
+        <FormControl isDisabled={!canManage}>
+          <FormLabel>{t('Who can see the board')}</FormLabel>
+          <VisibilityChoice value={secret} onChange={setSecret} />
+        </FormControl>
+        <FormControl isDisabled={!canManage}>
+          <FormLabel htmlFor="board-keep">{t('Finished tasks stay on the board')}</FormLabel>
+          <Select id="board-keep" value={keep} onChange={(e) => setKeep(Number(e.target.value) as 0 | 7 | 14 | 30)} data-testid="board-keep">
+            <option value={7}>{t('for 7 days')}</option>
+            <option value={14}>{t('for 14 days')}</option>
+            <option value={30}>{t('for 30 days')}</option>
+            <option value={0}>{t('always')}</option>
+          </Select>
+          <Text fontSize="sm" color="mutedText" mt={1}>
+            {t('After that they are under “Finished earlier” at the bottom of the done stage, still there to open.')}
+          </Text>
         </FormControl>
         {!canManage && (
           <Text fontSize="sm" color="mutedText">

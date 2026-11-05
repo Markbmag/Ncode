@@ -598,15 +598,30 @@ labels and attachments (photos from the phone) are in.
 - **Done when:** a card is created, photographed, moved and ticked off from an iPhone home-screen
   app without zooming.
 
-### K3 · Extras — M
+### K3 · Extras — M  (delivered 2026-11-04, Mark's choice before M16; checklist: [docs/checklists/K3.md](checklists/K3.md))
 
-- Calendar / timeline view of due dates, board templates (e.g. "Weekly production meeting"),
-  recurring cards, links to BI dashboards and questions, my-tasks page across boards; notifications
-  (email, Telegram, phone push) once wanted.
+- **Delivered:** a Calendar view per board (month grid, drag to another day; a day list on phones),
+  My tasks across boards, repeating tasks (next one when done), links from tasks to Search & BI
+  dashboards and questions.
+- **Left for later:** a timeline (start → due bars), board templates (e.g. "Weekly production
+  meeting"), notifications (email, Telegram, phone push) once wanted.
+- **Done when:** a weekly check comes back by itself when done, shows on the calendar and in My tasks,
+  and opens the dashboard it is about.
+
+### K4 · Kanban for daily use — M  (delivered 2026-11-05, Mark's choice before M16; checklist: [docs/checklists/K4.md](checklists/K4.md))
+
+- Finished tasks leave the board after 7 / 14 / 30 days or never ("Finished earlier" keeps them findable).
+- Private boards: only members (and admins) see them.
+- Print (a plain sheet) and Excel for a board and for My tasks.
+- A Timeline view: start → due bars, dragged to move the dates.
+- Work without a connection: the boards last seen stay on the device; ticks, moves, comments and photos
+  wait there and are sent when the connection is back.
+- **Left for later:** notifications (email, Telegram, @mentions, a morning list), board templates,
+  Kanban figures in Search & BI.
 
 ### Order after M12
 
-**K1 → M15 → K2 → M16 → K3 / M13 / M14.** M16 (self-hosted AI) runs on Mark's own MSI graphics card
+**K1 → M15 → K2 → K3 → K4 → M16 → M13 / M14** (K3 and K4 moved before M16 at Mark's request, 2026-11-04/05). M16 (self-hosted AI) runs on Mark's own MSI graphics card
 with Ollama; a short wait per answer is acceptable. The model size is chosen from the card's memory
 (8 GB → ~7–8B models, 12–16 GB → ~14B).
 
@@ -690,6 +705,8 @@ mobile layout (M15), chart images in emails (M15), translated server messages (M
 
 | Date | Change |
 |---|---|
+| 2026-11-05 | K4 delivered before M16 (Mark: the tidy Done stage and all the smaller items). Decisions: (1) finished tasks leave the board after `done_keep_days` (7 / 14 default / 30, 0 = never; migration 0014) by being left out of the board's answer, not archived - they stay tasks, listed under "Finished earlier" (`/boards/{id}/finished`) and back on the board when moved out of done; (2) `private` boards are enforced in one place (`_access`): non-members get 404 everywhere (board, tasks, files, history, sockets, exports), and the list and My tasks leave them out; (3) print is a separate plain sheet (portal + print CSS) rather than the page; Excel is built server-side with xlsxwriter, headers in the person's language; (4) the timeline is hand-made (no Gantt library): six-week window, pointer dragging of bars and ends; (5) **this replaces K2's "no data stored on the phone"**: Kanban keeps the boards last seen in IndexedDB and queues ticks, moves, comments and photos made without a connection (or without an answer), sent in order later; refused changes are dropped and named; creating tasks still needs the connection; the data belongs to one person (cleared on sign-out, after asking when changes wait; another person signing in starts empty); React Query is told the real connection state at start. Verified: an offline reload of the built app shows the board and task from the device, a tick and a comment survive a second offline reload and reach the server after reconnecting |
+| 2026-11-04 | K3 delivered before M16 (Mark: improve Kanban first). Fixes from Mark's review: hover hints no longer open by themselves (only on mouse hover or Tab; focus returned after a menu or a tap no longer opens them), task text is shown exactly as typed (no formatting codes; web addresses as links), "Hide the board" without the bracket text. Decisions: (1) a Calendar view per board (`?view=calendar`): a task sits on its due date, else its start date; dragging changes the due date (a later start moves along); on phones a list of days; (2) My tasks (`GET /api/kanban/my`): open tasks plus those finished in the last 7 days, on every board the person can see; (3) repeating tasks (migration 0012, `kanban_cards.repeat`): the next one is made when a task enters a done stage, its date one step on from the due date and never in the past, and the series moves to the new task so no copies pile up; Undo hides the copy; (4) links (`kanban_card_links`): names come from Search & BI with the viewer's permissions, so a task never shows the name of a dashboard or question the viewer may not open. Mark's choice: calendar (not timeline), my tasks, repeats, BI links; board templates and a timeline left for later |
 | 2026-11-04 | K2 delivered. Decisions: (1) two home-screen apps from one site: on `/kanban` pages the page names `kanban.webmanifest` ("Ncode - Kanban", start `/kanban`, teal icon), elsewhere `manifest.webmanifest` ("Ncode"); icons drawn by `frontend/scripts/make_icons.py`; (2) a small hand-written service worker keeps only the app (pages network-first with a 3 s limit, hashed assets cache-first), never `/api` or `/ws`: no data is stored on the phone; it needs HTTPS (phones trust Caddy's root once); (3) opening without a connection keeps the last signed-in person (forgotten on sign-out and expiry) and says *No connection*; (4) phones get stage tabs (tap, swipe, drop targets while dragging), press-and-hold opens big *Move to* buttons, and a camera button makes a task from a photo; (5) photos over 1.5 MB are scaled to 2560 px JPEG in the browser (orientation kept, location left out); (6) iOS text fields are at least 16 px so the iPhone never zooms; the board socket reconnects when the app comes back from the background. Verified: the done-when on an iPhone-sized screen with touch, and opening the built app offline |
 | 2026-11-04 | M15 delivered. Decisions: (1) number cards compare the last *complete* period with the one before (the running week shows as "so far"), shares in points, colour only when the admin says which direction is good; (2) every save of a question or dashboard keeps a version (migration 0011, `NCODE_HISTORY_KEEP` = 50), restoring is itself a new version and needs edit rights; dashboard edits have undo / redo and *Cancel changes*; (3) *Follow* is a subscription with a digest option: daily or weekly, the biggest changes as sentences, "no big changes" below 5 %, rates are never added up, written in the person's UI language; (4) chart pictures in emails are drawn on the server with Pillow and a bundled DejaVu Sans font, sent as inline images, with the HTML bars as a fallback; (5) four manufacturing templates (Downtime Pareto, Scrap by shift and line, Output vs plan, OEE) map onto real columns through a short dialog and create ordinary questions; OEE shows only what the data supports; (6) numbers in the Russian interface are written the Russian way (0,8 %) whatever the browser's language. Verified: the demo dashboard on a phone in Russian and a real weekly digest email in both languages |
 | 2026-11-04 | K1 delivered. Decisions: (1) Kanban is its own backend package (`app/kanban/`, `/api/kanban/*`, migration 0010) and frontend area (`/kanban`), sharing only sign-in, users and groups, i18n, the theme; the BI home stays at `/` and a launcher (`/start`) offers both services, remembering the last choice; (2) every signed-in person reads every board, members (people or groups, editor / owner) change it, admins can do everything, a board keeps at least one owner; (3) after Mark's review the wording and controls were simplified for newcomers and older managers: *tasks*, *stages*, *steps* ("1 of 3 steps done"), plain dates ("3 days late"), priority as words, 16 px text, 40–44 px buttons, labelled buttons, a *Move to…* button so nobody has to drag, Undo for moves and removals, changes saved automatically; (4) attachments: type checked by content, never by the browser's claim; thumbnails made in the browser; files in `data/kanban/`, included in backups; (5) live updates over a WebSocket per board (the token in the first message, like search); (6) deleted users keep their name on their tasks and comments. Verified: three people on one board (two browsers and a phone) see each other's changes live |

@@ -3,7 +3,7 @@
  * Positions between neighbours, filters, progress, due dates, colours and readable history.
  */
 import { locale, t, tn } from '../i18n/index.ts';
-import type { BoardEvent, CardSummary, Column, GroupRef, HistoryEntry, Label, Person, Priority, UserRef } from './types.ts';
+import type { BoardEvent, CardSummary, Column, GroupRef, HistoryEntry, Label, Person, Priority, Repeat, UserRef } from './types.ts';
 
 // ---------------------------------------------------------------- positions
 
@@ -227,7 +227,7 @@ export function priorityLabel(p: Priority): string {
 
 export interface CardFilter {
   mine: boolean;
-  person: number | null;
+  person: number | string | null; // an Ncode user's id, or a name typed on tasks
   label: number | null;
   priority: Priority | null;
   overdue: boolean;
@@ -254,14 +254,18 @@ export interface FilterContext {
 /** Whether a card passes every filter that is set (search: title and label names, any order of words). */
 export function matchesFilter(card: CardSummary, f: CardFilter, ctx: FilterContext): boolean {
   if (f.mine && (ctx.me === null || !card.assignees.includes(ctx.me))) return false;
-  if (f.person !== null && !card.assignees.includes(f.person)) return false;
+  if (typeof f.person === 'number' && !card.assignees.includes(f.person)) return false;
+  if (typeof f.person === 'string') {
+    const wanted = f.person.toLocaleLowerCase();
+    if (!(card.assignee_names ?? []).some((n) => n.toLocaleLowerCase() === wanted)) return false;
+  }
   if (f.label !== null && !card.labels.includes(f.label)) return false;
   if (f.priority !== null && card.priority !== f.priority) return false;
   if (f.overdue && !isOverdue(card, ctx.today, ctx.doneColumns)) return false;
   const words = f.q.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
     const labelNames = ctx.labels.filter((l) => card.labels.includes(l.id)).map((l) => l.name);
-    const haystack = [card.title, ...labelNames, `#${card.id}`].join(' ').toLocaleLowerCase();
+    const haystack = [card.title, ...labelNames, ...(card.assignee_names ?? []), `#${card.id}`].join(' ').toLocaleLowerCase();
     if (!words.every((w) => haystack.includes(w))) return false;
   }
   return true;
@@ -340,6 +344,8 @@ function cardChange(field: string, value: unknown): string {
       return t('changed the colour');
     case 'is_done':
       return next ? t('made its tasks count as done') : t('made its tasks no longer count as done');
+    case 'repeat':
+      return next ? t('made it repeat {how}', { how: repeatLabel(str(next) as Repeat).toLowerCase() }) : t('stopped it repeating');
     default:
       return t('changed {field}', { field });
   }
@@ -396,6 +402,12 @@ export function historySentence(entry: Pick<HistoryEntry, 'user' | 'action' | 'd
       return said(user, t('edited a comment'));
     case 'comment_deleted':
       return said(user, t('deleted a comment'));
+    case 'card_repeated':
+      return said(user, t('made the next one of this repeating task, due {date}', { date: shortDate(str(d.due)) }));
+    case 'link_added':
+      return said(user, d.kind === 'question' ? t('linked the question “{name}”', { name: str(d.name) }) : t('linked the dashboard “{name}”', { name: str(d.name) }));
+    case 'link_removed':
+      return said(user, t('removed a link to Search & BI'));
     case 'attachment_added':
       return said(user, t('attached {file}', { file: str(d.filename) || t('a file') }));
     case 'attachment_deleted':
@@ -522,4 +534,212 @@ export function shrunkName(name: string): string {
 /** The name of a task made straight from a photo: "Photo 14:05", edited right after. */
 export function photoTaskTitle(now: Date, word: string): string {
   return `${word} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------- calendar (K3)
+
+/** "2026-11-04" from a year, a month (0-11) and a day; days past the month roll over like Date does. */
+export function isoOf(year: number, month: number, day: number): string {
+  const d = new Date(Date.UTC(year, month, day));
+  return d.toISOString().slice(0, 10);
+}
+
+/** The weeks shown for a month: Monday first, whole weeks, 4 to 6 rows of 7 ISO dates. */
+export function monthGrid(year: number, month: number): string[][] {
+  const first = new Date(Date.UTC(year, month, 1));
+  const back = (first.getUTCDay() + 6) % 7; // days since Monday
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const rows = Math.ceil((back + daysInMonth) / 7);
+  return Array.from({ length: rows }, (_, w) => Array.from({ length: 7 }, (_, d) => isoOf(year, month, 1 - back + w * 7 + d)));
+}
+
+/** The month before or after: { year, month } with month 0-11. */
+export function shiftMonth(year: number, month: number, by: number): { year: number; month: number } {
+  const m = year * 12 + month + by;
+  return { year: Math.floor(m / 12), month: ((m % 12) + 12) % 12 };
+}
+
+/** Where a task sits on the calendar: its due date, else its start date, else nowhere. */
+export function calendarDate(card: Pick<CardSummary, 'due_date' | 'start_date'>): string | null {
+  return card.due_date ?? card.start_date ?? null;
+}
+
+/** Tasks by their calendar date, each day in board order (priority first, then position). */
+export function tasksByDate<T extends CardSummary>(cards: T[]): Map<string, T[]> {
+  const rank: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const out = new Map<string, T[]>();
+  for (const c of cards) {
+    const date = calendarDate(c);
+    if (!date) continue;
+    if (!out.has(date)) out.set(date, []);
+    out.get(date)!.push(c);
+  }
+  for (const list of out.values()) list.sort((a, b) => rank[a.priority] - rank[b.priority] || byPosition(a, b));
+  return out;
+}
+
+export interface AgendaDay<T> {
+  date: string | null; // null: the "late" group
+  cards: T[];
+}
+
+/** The phone's day-by-day list for a month: late open tasks first (from before today), then each day
+ * of the month that has tasks; today is always listed so the list starts somewhere familiar. */
+export function agenda<T extends CardSummary>(cards: T[], year: number, month: number, today: string, isDone: (c: T) => boolean): AgendaDay<T>[] {
+  const first = isoOf(year, month, 1);
+  const last = isoOf(year, month + 1, 0);
+  const late = cards.filter((c) => !isDone(c) && c.due_date !== null && c.due_date < today && c.due_date < first);
+  const byDate = tasksByDate(cards.filter((c) => {
+    const d = calendarDate(c);
+    return d !== null && d >= first && d <= last;
+  }));
+  if (today >= first && today <= last && !byDate.has(today)) byDate.set(today, []);
+  const days = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, list]) => ({ date, cards: list }));
+  return late.length ? [{ date: null, cards: late }, ...days] : days;
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const asDate = (iso: string) => new Date(`${iso}T12:00:00`);
+
+/** "November 2026" / "Ноябрь 2026" */
+export function monthTitle(year: number, month: number): string {
+  return cap(new Intl.DateTimeFormat(locale(), { month: 'long', year: 'numeric' }).format(new Date(year, month, 15)).replace(/\s*г\.$/, ''));
+}
+
+/** "Wednesday 4 November" / "Среда, 4 ноября" */
+export function dayTitle(iso: string): string {
+  return cap(new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long' }).format(asDate(iso)));
+}
+
+const WEEK_DAYS = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']; // a Monday ... Sunday
+/** Mon ... Sun / Пн ... Вс */
+export const weekdayNames = () => WEEK_DAYS.map((d) => cap(new Intl.DateTimeFormat(locale(), { weekday: 'short' }).format(asDate(d)).replace('.', '')));
+
+// ---------------------------------------------------------------- my tasks (K3)
+
+export type MyGroupKey = 'late' | 'today' | 'week' | 'later' | 'nodate' | 'done';
+export const MY_GROUPS: MyGroupKey[] = ['late', 'today', 'week', 'later', 'nodate', 'done'];
+
+/** My tasks in the order a person works through them: late, today, the next 7 days, later, without a
+ * date; the ones finished lately last (newest first). Empty groups are left out. */
+export function myGroups<T extends CardSummary>(cards: T[], today: string, isDone: (c: T) => boolean): { key: MyGroupKey; cards: T[] }[] {
+  const weekEnd = isoOf(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) + 7);
+  const rank: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const groups: Record<MyGroupKey, T[]> = { late: [], today: [], week: [], later: [], nodate: [], done: [] };
+  for (const c of cards) {
+    const date = c.due_date;
+    if (isDone(c)) groups.done.push(c);
+    else if (!date) groups.nodate.push(c);
+    else if (date < today) groups.late.push(c);
+    else if (date === today) groups.today.push(c);
+    else if (date < weekEnd) groups.week.push(c);
+    else groups.later.push(c);
+  }
+  const byDate = (a: T, b: T) => (a.due_date ?? '').localeCompare(b.due_date ?? '') || rank[a.priority] - rank[b.priority] || a.id - b.id;
+  for (const key of ['late', 'today', 'week', 'later'] as const) groups[key].sort(byDate);
+  groups.nodate.sort((a, b) => rank[a.priority] - rank[b.priority] || a.id - b.id);
+  groups.done.sort((a, b) => (b.completed_at ?? 0) - (a.completed_at ?? 0));
+  return MY_GROUPS.filter((k) => groups[k].length).map((key) => ({ key, cards: groups[key] }));
+}
+
+export function myGroupTitle(key: MyGroupKey): string {
+  return {
+    late: t('Late'),
+    today: t('Today'),
+    week: t('Next 7 days'),
+    later: t('Later'),
+    nodate: t('No date'),
+    done: t('Done this week'),
+  }[key];
+}
+
+// ---------------------------------------------------------------- repeating tasks (K3)
+
+export function repeatLabel(r: Repeat): string {
+  return { daily: t('Every day'), weekdays: t('Every working day (Mon–Fri)'), weekly: t('Every week'), monthly: t('Every month') }[r];
+}
+
+/** The names typed on a board's tasks (people who are not Ncode users), each once, A to Z. */
+export function namedPeople(cards: Pick<CardSummary, 'assignee_names'>[]): string[] {
+  const byKey = new Map<string, string>();
+  for (const c of cards) for (const n of c.assignee_names ?? []) if (!byKey.has(n.toLocaleLowerCase())) byKey.set(n.toLocaleLowerCase(), n);
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
+// ---------------------------------------------------------------- print (K4)
+
+/** One task as a line of the printed sheet. */
+export function printRow(card: CardSummary, people: Person[], today: string, done: boolean, extra?: string) {
+  const late = !done && !card.completed_at && card.due_date !== null && card.due_date < today;
+  return {
+    title: card.title,
+    who: [...card.assignees.map((id) => personName(id, people)), ...(card.assignee_names ?? [])].join(', '),
+    due: card.due_date ? (late ? dueText(card.due_date, today) : shortDate(card.due_date, today)) : '',
+    late,
+    steps: card.checklist.total ? `${card.checklist.done}/${card.checklist.total}` : '',
+    extra: extra ?? (card.priority === 'normal' ? '' : priorityLabel(card.priority)),
+  };
+}
+
+// ---------------------------------------------------------------- timeline (K4)
+
+/** An ISO date moved by whole days. */
+export function shiftIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return isoOf(y, m - 1, d + days);
+}
+
+/** Whole days from a to b (b - a). */
+export function daysBetween(a: string, b: string): number {
+  return dayNumber(b) - dayNumber(a);
+}
+
+/** The days the timeline shows: whole weeks from the Monday a week before today's week, moved by
+ * `offset` weeks. */
+export function timelineDays(today: string, offset = 0, weeks = 6): string[] {
+  const [y, m, d] = today.split('-').map(Number);
+  const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // 0 = Monday
+  const first = shiftIso(today, -weekday - 7 + offset * 7);
+  return Array.from({ length: weeks * 7 }, (_, i) => shiftIso(first, i));
+}
+
+export interface Bar {
+  from: number; // first day shown (index in the timeline)
+  to: number;   // last day shown
+  cutStart: boolean; // the task starts before the timeline
+  cutEnd: boolean;   // and ends after it
+}
+
+/** Where a task's bar sits: from its start to its due date (one day when it has only one of them);
+ * null when it has no date or is outside the days shown. */
+export function barOf(card: Pick<CardSummary, 'start_date' | 'due_date'>, days: string[]): Bar | null {
+  const start = card.start_date ?? card.due_date;
+  const end = card.due_date ?? card.start_date;
+  if (!start || !end || !days.length) return null;
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (end < first || start > last) return null;
+  return {
+    from: Math.max(0, daysBetween(first, start)),
+    to: Math.min(days.length - 1, daysBetween(first, end)),
+    cutStart: start < first,
+    cutEnd: end > last,
+  };
+}
+
+/** New dates after dragging a bar by `days`: the whole bar, or one end of it (never past the other). */
+export function movedDates(card: Pick<CardSummary, 'start_date' | 'due_date'>, days: number, part: 'bar' | 'start' | 'end'): { start_date: string | null; due_date: string | null } {
+  const start = card.start_date;
+  const due = card.due_date;
+  if (part === 'bar') return { start_date: start ? shiftIso(start, days) : null, due_date: due ? shiftIso(due, days) : null };
+  if (part === 'end') {
+    const base = due ?? start!;
+    const moved = shiftIso(base, days);
+    const floor = start ?? base;
+    return { start_date: start, due_date: moved < floor ? floor : moved };
+  }
+  const base = start ?? due!;
+  const moved = shiftIso(base, days);
+  const ceil = due ?? base;
+  return { start_date: moved > ceil ? ceil : moved, due_date: due };
 }

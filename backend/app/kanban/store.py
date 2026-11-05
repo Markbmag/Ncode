@@ -20,11 +20,13 @@ tombstone (in kanban_activity, board 0) that keeps the name; assignments and mem
 
 from __future__ import annotations
 
+import calendar
 import json
 import time
+from datetime import date, timedelta
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 from fastapi import HTTPException
 from sqlalchemy import case, delete, func, insert, or_, select, update
@@ -35,7 +37,7 @@ from .attachments import INLINE, FileStore, is_image
 from .events import BoardEvents
 from .tables import (
     activity_table, attachments_table, board_members_table, boards_table, card_assignees_table, card_labels_table,
-    cards_table, checklist_table, columns_table, comments_table, labels_table,
+    card_links_table, card_names_table, cards_table, checklist_table, columns_table, comments_table, labels_table,
 )
 
 API = "/api/kanban"
@@ -46,6 +48,59 @@ PRIORITIES = ("low", "normal", "high", "urgent")
 ROLES = ("editor", "owner")
 HISTORY_LIMIT = 200
 TOMBSTONE = "user_deleted"
+REPEATS = ("daily", "weekdays", "weekly", "monthly")   # K3: how often a task comes back
+LINK_KINDS = ("dashboard", "question")                  # K3: what a task may point at in Search & BI
+
+# K3: names of Search & BI items as one person may see them: {(kind, id): name, or None when hidden or gone}
+LinkNames = Callable[[User, list[tuple[str, int]]], dict[tuple[str, int], str | None]]
+
+
+MAX_NAMES = 20  # people by name on one task
+DONE_KEEP_DEFAULT = 14  # K4: days a finished task stays on the board when the board says nothing
+DONE_KEEP_CHOICES = (0, 7, 14, 30)  # 0: finished tasks stay on the board
+
+
+def done_keep(board: Any) -> int:
+    v = getattr(board, "done_keep_days", None)
+    return DONE_KEEP_DEFAULT if v is None else int(v)
+
+
+def clean_names(names: Iterable[str] | None) -> list[str]:
+    """Names of people who are not Ncode users, as typed: trimmed, inner spaces collapsed, each once
+    (whatever the capitals), in the order given."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in names or []:
+        name = " ".join(str(raw).split())[:80]
+        if name and name.casefold() not in seen:
+            seen.add(name.casefold())
+            out.append(name)
+    return out[:MAX_NAMES]
+
+
+def next_due(rule: str, due: date | None, today: date) -> date:
+    """The next date of a repeating task after it is done: one step on from its due date (from today when
+    it had none), then on until it is in the future, so a task finished late is not due in the past."""
+    def step(d: date) -> date:
+        if rule == "daily":
+            return d + timedelta(days=1)
+        if rule == "weekdays":
+            d += timedelta(days=1)
+            while d.weekday() >= 5:
+                d += timedelta(days=1)
+            return d
+        if rule == "weekly":
+            return d + timedelta(days=7)
+        # monthly: the same day next month, the last day when the month is shorter (31 Jan -> 28 Feb)
+        y, m = (d.year + 1, 1) if d.month == 12 else (d.year, d.month + 1)
+        return date(y, m, min(anchor, calendar.monthrange(y, m)[1]))
+
+    start = due or today
+    anchor = start.day
+    nxt = step(start)
+    while nxt <= today:
+        nxt = step(nxt)
+    return nxt
 
 # The columns of a new board, in the creator's UI language
 BASIC_COLUMNS = {
@@ -166,8 +221,9 @@ def attachment_json(a: Any, names: dict[int, str]) -> dict[str, Any]:
 
 
 class KanbanStore:
-    def __init__(self, engine: Engine, files: FileStore, events: BoardEvents):
+    def __init__(self, engine: Engine, files: FileStore, events: BoardEvents, link_names: LinkNames | None = None):
         self.engine, self.files, self.events = engine, files, events
+        self.link_names = link_names
 
     @contextmanager
     def _write(self, user: User) -> Iterator[_Tx]:
@@ -187,7 +243,7 @@ class KanbanStore:
         if row is None:
             raise HTTPException(status_code=404, detail="Board not found")
         acc = Access(row, _roles(conn, user, [board_id]).get(board_id), user.is_admin)
-        if row.archived and not acc.can_edit:
+        if (row.archived or row.private) and not acc.can_edit:  # K4: a private board is for its members only
             raise HTTPException(status_code=404, detail="Board not found")
         if need == "read":
             return acc
@@ -273,7 +329,8 @@ class KanbanStore:
                 "member_names": sorted(member_names.get(r.id, []), key=str.lower)[:6],
                 "cards_open": counts.get((r.id, False), 0), "cards_done": counts.get((r.id, True), 0),
                 "created_at": r.created_at, "updated_at": r.updated_at, "updated_by": r.updated_by,
-                "archived": bool(r.archived),
+                "archived": bool(r.archived), "private": bool(r.private),
+                "done_keep_days": done_keep(r),
             })
         return out
 
@@ -285,16 +342,16 @@ class KanbanStore:
         with self.engine.connect() as conn:
             rows = conn.execute(select(boards_table).where(boards_table.c.archived.is_(archived))
                                 .order_by(boards_table.c.updated_at.desc(), boards_table.c.id.desc())).all()
-            if archived and not user.is_admin:
+            if not user.is_admin:
                 mine = _roles(conn, user)
-                rows = [r for r in rows if r.id in mine]
+                rows = [r for r in rows if r.id in mine or not (archived or r.private)]
             return self._board_summaries(conn, user, rows)
 
     def create_board(self, user: User, *, name: str, description: str | None, color: str | None,
-                     template: str = "basic", lang: str = "en") -> dict[str, Any]:
+                     template: str = "basic", lang: str = "en", private: bool = False) -> dict[str, Any]:
         with self._write(user) as tx:
             bid = int(tx.conn.execute(insert(boards_table).values(
-                name=name, description=description, color=color, owner_id=user.id, archived=False,
+                name=name, description=description, color=color, owner_id=user.id, archived=False, private=private,
                 created_at=tx.now, updated_at=tx.now, updated_by=user.username,
             )).inserted_primary_key[0])
             tx.conn.execute(insert(board_members_table).values(board_id=bid, user_id=user.id, role="owner"))
@@ -315,6 +372,15 @@ class KanbanStore:
             cards = conn.execute(select(cards_table).where(
                 cards_table.c.board_id == board_id, cards_table.c.archived.is_(archived_cards),
             ).order_by(cards_table.c.column_id, cards_table.c.position, cards_table.c.id)).all()
+            # K4: finished tasks leave the board after a while (they stay findable under "Finished earlier")
+            earlier = 0
+            keep = done_keep(acc.board)
+            if keep and not archived_cards:
+                done_ids = {c.id for c in columns if c.is_done}
+                cutoff = time.time() - keep * 86400
+                kept = [c for c in cards if not (c.column_id in done_ids and c.completed_at is not None and c.completed_at < cutoff)]
+                earlier = len(cards) - len(kept)
+                cards = kept
             summaries = self._summaries(conn, cards, board_id=board_id)
             assigned = {uid for c in summaries for uid in c["assignees"]}
             # everyone who can be assigned (active users), plus disabled ones still assigned here
@@ -323,7 +389,7 @@ class KanbanStore:
             ).order_by(users_table.c.username)).all()
             groups = conn.execute(select(groups_table.c.id, groups_table.c.name).order_by(groups_table.c.name)).all()
             return {
-                "board": self._board_summaries(conn, user, [acc.board])[0],
+                "board": {**self._board_summaries(conn, user, [acc.board])[0], "finished_earlier": earlier},
                 "columns": [_column_json(c) for c in columns],
                 "labels": [{"id": lb.id, "name": lb.name, "color": lb.color} for lb in labels],
                 "members": self._members(conn, board_id),
@@ -357,7 +423,7 @@ class KanbanStore:
             card_ids = select(cards_table.c.id).where(cards_table.c.board_id == board_id)
             for table in (attachments_table, comments_table, checklist_table):
                 conn.execute(delete(table).where(table.c.card_id.in_(card_ids)))
-            for table in (card_assignees_table, card_labels_table):
+            for table in (card_assignees_table, card_labels_table, card_links_table, card_names_table):
                 conn.execute(delete(table).where(table.c.card_id.in_(card_ids)))
             for table in (cards_table, labels_table, columns_table, board_members_table, activity_table):
                 conn.execute(delete(table).where(table.c.board_id == board_id))
@@ -522,6 +588,10 @@ class KanbanStore:
         for r in conn.execute(select(card_assignees_table).where(card_assignees_table.c.card_id.in_(scope))
                               .order_by(card_assignees_table.c.user_id)):
             assignees.setdefault(r.card_id, []).append(r.user_id)
+        named: dict[int, list[str]] = {}
+        for r in conn.execute(select(card_names_table).where(card_names_table.c.card_id.in_(scope))
+                              .order_by(card_names_table.c.position, card_names_table.c.name)):
+            named.setdefault(r.card_id, []).append(r.name)
         labels: dict[int, list[int]] = {}
         for r in conn.execute(select(card_labels_table).where(card_labels_table.c.card_id.in_(scope))
                               .order_by(card_labels_table.c.label_id)):
@@ -546,14 +616,15 @@ class KanbanStore:
             out.append({
                 "id": c.id, "board_id": c.board_id, "column_id": c.column_id, "title": c.title, "priority": c.priority,
                 "start_date": c.start_date, "due_date": c.due_date, "position": c.position, "archived": bool(c.archived),
-                "assignees": assignees.get(c.id, []), "labels": labels.get(c.id, []),
+                "assignees": assignees.get(c.id, []), "assignee_names": named.get(c.id, []), "labels": labels.get(c.id, []),
                 "checklist": {"done": done, "total": total}, "comments": comments.get(c.id, 0),
                 "attachments": files.get(c.id, 0), "cover": covers.get(c.id),
                 "completed_at": c.completed_at, "updated_at": c.updated_at, "updated_by": c.updated_by,
+                "repeat": c.repeat,
             })
         return out
 
-    def _card_full(self, conn: Connection, card_id: int) -> dict[str, Any]:
+    def _card_full(self, conn: Connection, user: User, card_id: int) -> dict[str, Any]:
         c = self._card_row(conn, card_id)
         out = self._summaries(conn, [c])[0]
         items = conn.execute(select(checklist_table).where(checklist_table.c.card_id == card_id)
@@ -577,13 +648,116 @@ class KanbanStore:
                                "body": x.body, "created_at": x.created_at, "edited_at": x.edited_at} for x in comments],
             "attachments_list": [attachment_json(f, names) for f in files],
             "history": [_history_json(h, names) for h in history],
+            "links": self._links(conn, user, card_id),
         })
         return out
+
+    def _links(self, conn: Connection, user: User, card_id: int) -> list[dict[str, Any]]:
+        """K3: the task's Search & BI links; names only for what this person may open."""
+        rows = conn.execute(select(card_links_table).where(card_links_table.c.card_id == card_id)
+                            .order_by(card_links_table.c.id)).all()
+        if not rows:
+            return []
+        wanted = [(r.kind, r.target_id) for r in rows]
+        names = self.link_names(user, wanted) if self.link_names else {}
+        return [{"id": r.id, "kind": r.kind, "target_id": r.target_id, "name": names.get((r.kind, r.target_id)),
+                 "url": f"/{'dashboards' if r.kind == 'dashboard' else 'questions'}/{r.target_id}"} for r in rows]
+
+    def add_link(self, user: User, card_id: int, kind: str, target_id: int) -> dict[str, Any]:
+        with self._write(user) as tx:
+            conn = tx.conn
+            c, _acc = self._card(conn, user, card_id, "edit")
+            if kind not in LINK_KINDS:
+                raise HTTPException(status_code=400, detail="Unknown link")
+            name = (self.link_names(user, [(kind, target_id)]) if self.link_names else {}).get((kind, target_id))
+            if name is None:  # only what the person adding it may open
+                raise HTTPException(status_code=404, detail="Dashboard not found" if kind == "dashboard" else "Question not found")
+            exists = conn.execute(select(card_links_table.c.id).where(
+                card_links_table.c.card_id == card_id, card_links_table.c.kind == kind,
+                card_links_table.c.target_id == target_id)).first()
+            if exists is None:
+                conn.execute(insert(card_links_table).values(card_id=card_id, kind=kind, target_id=target_id,
+                                                             added_by=user.id, created_at=tx.now))
+                tx.log(c.board_id, "link_added", card_id, kind=kind, name=name)
+            return self._card_full(conn, user, card_id)
+
+    def remove_link(self, user: User, link_id: int) -> dict[str, Any]:
+        with self._write(user) as tx:
+            conn = tx.conn
+            row = conn.execute(select(card_links_table).where(card_links_table.c.id == link_id)).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="Link not found")
+            c, _acc = self._card(conn, user, row.card_id, "edit")
+            conn.execute(delete(card_links_table).where(card_links_table.c.id == link_id))
+            tx.log(c.board_id, "link_removed", c.id, kind=row.kind)
+            return self._card_full(conn, user, c.id)
 
     def get_card(self, user: User, card_id: int) -> dict[str, Any]:
         with self.engine.connect() as conn:
             self._card(conn, user, card_id)
-            return self._card_full(conn, card_id)
+            return self._card_full(conn, user, card_id)
+
+    def my_cards(self, user: User, done_days: int = 7) -> dict[str, Any]:
+        """The person's tasks on every board they can see (K3 "My tasks"): open ones, and the ones finished
+        in the last done_days days. With each board's stages, so a task can be moved from the list."""
+        with self.engine.connect() as conn:
+            since = time.time() - done_days * 86400
+            a, c, b = card_assignees_table.c, cards_table.c, boards_table.c
+            rows = conn.execute(
+                select(cards_table).join(card_assignees_table, a.card_id == c.id).join(boards_table, b.id == c.board_id).where(
+                    a.user_id == user.id, c.archived.is_(False), b.archived.is_(False),
+                    or_(c.completed_at.is_(None), c.completed_at >= since),
+                ).order_by(c.due_date, c.board_id, c.position, c.id)
+            ).all()
+            board_ids = sorted({r.board_id for r in rows})
+            boards = conn.execute(select(boards_table).where(b.id.in_(board_ids))).all() if board_ids else []
+            roles = _roles(conn, user, board_ids)
+            # K4: a private board's tasks only for its members (someone taken off the board keeps no window into it)
+            hidden = {bd.id for bd in boards if bd.private and bd.id not in roles and not user.is_admin}
+            if hidden:
+                rows = [r for r in rows if r.board_id not in hidden]
+                boards = [bd for bd in boards if bd.id not in hidden]
+                board_ids = [i for i in board_ids if i not in hidden]
+            columns = conn.execute(select(columns_table).where(columns_table.c.board_id.in_(board_ids))
+                                   .order_by(columns_table.c.position, columns_table.c.id)).all() if board_ids else []
+            done_cols = {col.id for col in columns if col.is_done}
+            # a task in a "done" stage without a finish time counts as done long ago
+            cards = [s for s in self._summaries(conn, rows) if not (s["column_id"] in done_cols and s["completed_at"] is None)]
+            people = sorted({uid for s in cards for uid in s["assignees"]})
+            names = _names(conn, people)
+            by_board: dict[int, list[dict[str, Any]]] = {}
+            for col in columns:
+                by_board.setdefault(col.board_id, []).append(_column_json(col))
+            labels: dict[int, list[dict[str, Any]]] = {}
+            for lb in conn.execute(select(labels_table).where(labels_table.c.board_id.in_(board_ids))
+                                   .order_by(labels_table.c.name, labels_table.c.id)).all() if board_ids else []:
+                labels.setdefault(lb.board_id, []).append({"id": lb.id, "name": lb.name, "color": lb.color})
+            return {
+                "cards": cards,
+                "boards": [{"id": bd.id, "name": bd.name, "color": bd.color,
+                            "can_edit": Access(bd, roles.get(bd.id), user.is_admin).can_edit,
+                            "columns": by_board.get(bd.id, []), "labels": labels.get(bd.id, [])} for bd in boards],
+                "people": [{"id": uid, "username": names.get(uid, "?")} for uid in people],
+            }
+
+    def finished_earlier(self, user: User, board_id: int, q: str = "", limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """K4: the tasks that left the board because they were finished long enough ago, newest first."""
+        with self.engine.connect() as conn:
+            acc = self._access(conn, user, board_id)
+            keep = done_keep(acc.board)
+            if not keep:
+                return {"cards": [], "total": 0, "keep_days": 0}
+            done_ids = [c.id for c in conn.execute(select(columns_table.c.id).where(
+                columns_table.c.board_id == board_id, columns_table.c.is_done.is_(True)))]
+            cond = [cards_table.c.board_id == board_id, cards_table.c.archived.is_(False),
+                    cards_table.c.column_id.in_(done_ids), cards_table.c.completed_at < time.time() - keep * 86400]
+            words = [w for w in q.lower().split() if w]
+            for w in words:
+                cond.append(func.lower(cards_table.c.title).contains(w))
+            total = conn.execute(select(func.count()).select_from(cards_table).where(*cond)).scalar() or 0
+            rows = conn.execute(select(cards_table).where(*cond).order_by(cards_table.c.completed_at.desc(), cards_table.c.id.desc())
+                                .limit(limit).offset(offset)).all()
+            return {"cards": self._summaries(conn, rows), "total": total, "keep_days": keep}
 
     def board_history(self, user: User, board_id: int, limit: int = 100) -> list[dict[str, Any]]:
         with self.engine.connect() as conn:
@@ -616,7 +790,8 @@ class KanbanStore:
     def create_card(self, user: User, board_id: int, *, column_id: int, title: str, description: str | None = None,
                     priority: str = "normal", start_date: Any = None, due_date: Any = None,
                     assignees: list[int] | None = None, labels: list[int] | None = None,
-                    position: float | None = None) -> dict[str, Any]:
+                    position: float | None = None, repeat: str | None = None,
+                    assignee_names: list[str] | None = None) -> dict[str, Any]:
         with self._write(user) as tx:
             conn = tx.conn
             self._access(conn, user, board_id, "edit")
@@ -631,16 +806,19 @@ class KanbanStore:
                 board_id=board_id, column_id=column_id, title=title, description=description, priority=priority,
                 start_date=start, due_date=due, position=self._top(conn, column_id) if position is None else position,
                 archived=False, completed_at=tx.now if col.is_done else None, created_by=user.id,
+                repeat=repeat if repeat in REPEATS else None,
                 created_at=tx.now, updated_at=tx.now, updated_by=user.username,
             )).inserted_primary_key[0])
             for uid in people:
                 conn.execute(insert(card_assignees_table).values(card_id=cid, user_id=uid))
+            for i, name in enumerate(clean_names(assignee_names)):
+                conn.execute(insert(card_names_table).values(card_id=cid, name=name, position=i))
             for lid in tags:
                 conn.execute(insert(card_labels_table).values(card_id=cid, label_id=lid))
             if position is not None:
                 _renumber_if_needed(conn, cards_table, cards_table.c.column_id == column_id)
             tx.log(board_id, "card_created", cid, title=title, column=col.name)
-            return self._card_full(conn, cid)
+            return self._card_full(conn, user, cid)
 
     def update_card(self, user: User, card_id: int, changes: dict[str, Any]) -> dict[str, Any]:
         with self._write(user) as tx:
@@ -659,6 +837,11 @@ class KanbanStore:
             if "description" in changes and (changes["description"] or None) != (c.description or None):
                 diff["description"] = True  # the text itself can be long: the card has it
                 values["description"] = changes["description"]
+            if "repeat" in changes:
+                new_repeat = changes["repeat"] if changes["repeat"] in REPEATS else None
+                if new_repeat != c.repeat:
+                    diff["repeat"] = [c.repeat, new_repeat]
+                    values["repeat"] = new_repeat
             _check_dates(values.get("start_date", c.start_date), values.get("due_date", c.due_date))
             if values:
                 conn.execute(update(cards_table).where(cards_table.c.id == card_id).values(**values))
@@ -675,6 +858,20 @@ class KanbanStore:
                         conn.execute(insert(card_assignees_table).values(card_id=card_id, user_id=uid))
                     names = _names(conn, added + removed)
                     diff["assignees"] = {"added": [names.get(u) for u in added], "removed": [names.get(u) for u in removed]}
+            if changes.get("assignee_names") is not None:
+                new_names = clean_names(changes["assignee_names"])
+                old_names = [r.name for r in conn.execute(select(card_names_table.c.name).where(card_names_table.c.card_id == card_id)
+                                                          .order_by(card_names_table.c.position, card_names_table.c.name))]
+                if new_names != old_names:
+                    conn.execute(delete(card_names_table).where(card_names_table.c.card_id == card_id))
+                    for i, name in enumerate(new_names):
+                        conn.execute(insert(card_names_table).values(card_id=card_id, name=name, position=i))
+                    old_keys, new_keys = {n.casefold() for n in old_names}, {n.casefold() for n in new_names}
+                    added = [n for n in new_names if n.casefold() not in old_keys]
+                    removed = [n for n in old_names if n.casefold() not in new_keys]
+                    if added or removed:
+                        prev = diff.get("assignees", {"added": [], "removed": []})
+                        diff["assignees"] = {"added": prev["added"] + added, "removed": prev["removed"] + removed}
             if changes.get("labels") is not None:
                 new_tags = set(changes["labels"])
                 old_tags = {r.label_id for r in conn.execute(select(card_labels_table.c.label_id)
@@ -694,7 +891,7 @@ class KanbanStore:
                 conn.execute(update(cards_table).where(cards_table.c.id == card_id)
                              .values(archived=bool(changes["archived"])))
                 tx.log(c.board_id, "card_archived" if changes["archived"] else "card_restored", card_id)
-            return self._card_full(conn, card_id)
+            return self._card_full(conn, user, card_id)
 
     def move_card(self, user: User, card_id: int, column_id: int, position: float | None) -> dict[str, Any]:
         with self._write(user) as tx:
@@ -711,7 +908,50 @@ class KanbanStore:
             conn.execute(update(cards_table).where(cards_table.c.id == card_id).values(**values))
             _renumber_if_needed(conn, cards_table, cards_table.c.column_id == column_id)
             tx.log(c.board_id, "card_moved", card_id, **{"from": source.name, "to": target.name})
-            return self._card_full(conn, card_id)
+            nxt = self._repeat(tx, c) if c.repeat and target.is_done and not source.is_done else None
+            out = self._card_full(conn, user, card_id)
+            if nxt:
+                out["next"] = nxt
+            return out
+
+    def _repeat(self, tx: _Tx, c: Any) -> dict[str, Any] | None:
+        """K3: a repeating task that is done comes back as a new task in the board's first open stage, with
+        the same people, labels and steps (none ticked) and its next date. The done one stops repeating:
+        the series goes on with the new task, so moving the old one back and forth makes no copies."""
+        conn = tx.conn
+        first = conn.execute(select(columns_table).where(columns_table.c.board_id == c.board_id,
+                                                         columns_table.c.is_done.is_(False))
+                             .order_by(columns_table.c.position, columns_table.c.id)).first()
+        if first is None:
+            return None
+        today = date.fromtimestamp(tx.now)
+        old_due = date.fromisoformat(c.due_date) if c.due_date else None
+        due = next_due(c.repeat, old_due, today)
+        start = None
+        if c.start_date and c.due_date:  # keep the same lead time
+            start = (due - (old_due - date.fromisoformat(c.start_date))).isoformat()
+        nid = int(conn.execute(insert(cards_table).values(
+            board_id=c.board_id, column_id=first.id, title=c.title, description=c.description, priority=c.priority,
+            start_date=start, due_date=due.isoformat(), position=self._top(conn, first.id), archived=False,
+            completed_at=None, repeat=c.repeat, created_by=tx.user.id, created_at=tx.now, updated_at=tx.now,
+            updated_by=tx.user.username,
+        )).inserted_primary_key[0])
+        for r in conn.execute(select(card_assignees_table.c.user_id).where(card_assignees_table.c.card_id == c.id)):
+            conn.execute(insert(card_assignees_table).values(card_id=nid, user_id=r.user_id))
+        for r in conn.execute(select(card_names_table).where(card_names_table.c.card_id == c.id)):
+            conn.execute(insert(card_names_table).values(card_id=nid, name=r.name, position=r.position))
+        for r in conn.execute(select(card_labels_table.c.label_id).where(card_labels_table.c.card_id == c.id)):
+            conn.execute(insert(card_labels_table).values(card_id=nid, label_id=r.label_id))
+        for i in conn.execute(select(checklist_table).where(checklist_table.c.card_id == c.id)
+                              .order_by(checklist_table.c.position, checklist_table.c.id)):
+            conn.execute(insert(checklist_table).values(card_id=nid, text=i.text, done=False, position=i.position,
+                                                        created_at=tx.now))
+        for r in conn.execute(select(card_links_table).where(card_links_table.c.card_id == c.id)):
+            conn.execute(insert(card_links_table).values(card_id=nid, kind=r.kind, target_id=r.target_id,
+                                                         added_by=r.added_by, created_at=tx.now))
+        conn.execute(update(cards_table).where(cards_table.c.id == c.id).values(repeat=None))
+        tx.log(c.board_id, "card_repeated", nid, title=c.title, due=due.isoformat(), column=first.name)
+        return {"id": nid, "due_date": due.isoformat(), "column": first.name}
 
     def delete_card(self, user: User, card_id: int) -> None:
         with self._write(user) as tx:
@@ -722,7 +962,7 @@ class KanbanStore:
             files = conn.execute(select(attachments_table.c.file, attachments_table.c.thumb)
                                  .where(attachments_table.c.card_id == card_id)).all()
             for table in (attachments_table, comments_table, checklist_table, card_assignees_table,
-                          card_labels_table, activity_table):
+                          card_labels_table, card_links_table, card_names_table, activity_table):
                 conn.execute(delete(table).where(table.c.card_id == card_id))
             conn.execute(delete(cards_table).where(cards_table.c.id == card_id))
             tx.files.append((c.board_id, [n for f in files for n in (f.file, f.thumb)]))
@@ -746,7 +986,7 @@ class KanbanStore:
             tx.conn.execute(insert(checklist_table).values(
                 card_id=card_id, text=text, done=False, position=(last or 0) + STEP, created_at=tx.now))
             tx.log(c.board_id, "item_added", card_id, text=text)
-            return self._card_full(tx.conn, card_id)
+            return self._card_full(tx.conn, user, card_id)
 
     def update_item(self, user: User, item_id: int, changes: dict[str, Any]) -> dict[str, Any]:
         with self._write(user) as tx:
@@ -767,14 +1007,14 @@ class KanbanStore:
                 conn.execute(update(checklist_table).where(checklist_table.c.id == item_id).values(**values))
                 if "position" in values:
                     _renumber_if_needed(conn, checklist_table, checklist_table.c.card_id == c.id)
-            return self._card_full(conn, c.id)
+            return self._card_full(conn, user, c.id)
 
     def delete_item(self, user: User, item_id: int) -> dict[str, Any]:
         with self._write(user) as tx:
             item, c = self._item(tx.conn, user, item_id, "edit")
             tx.conn.execute(delete(checklist_table).where(checklist_table.c.id == item_id))
             tx.log(c.board_id, "item_deleted", c.id, text=item.text)
-            return self._card_full(tx.conn, c.id)
+            return self._card_full(tx.conn, user, c.id)
 
     # ------------------------------------------------------------------ comments
     def _comment(self, conn: Connection, user: User, comment_id: int, need: str) -> tuple[Any, Any, Access]:
@@ -790,7 +1030,7 @@ class KanbanStore:
             cid = int(tx.conn.execute(insert(comments_table).values(
                 card_id=card_id, user_id=user.id, body=body, created_at=tx.now)).inserted_primary_key[0])
             tx.log(c.board_id, "comment_added", card_id, comment_id=cid, excerpt=body[:120])
-            return self._card_full(tx.conn, card_id)
+            return self._card_full(tx.conn, user, card_id)
 
     def edit_comment(self, user: User, comment_id: int, body: str) -> dict[str, Any]:
         with self._write(user) as tx:
@@ -803,7 +1043,7 @@ class KanbanStore:
                 tx.conn.execute(update(comments_table).where(comments_table.c.id == comment_id)
                                 .values(body=body, edited_at=tx.now))
                 tx.log(c.board_id, "comment_edited", c.id, comment_id=comment_id, excerpt=body[:120])
-            return self._card_full(tx.conn, c.id)
+            return self._card_full(tx.conn, user, c.id)
 
     def delete_comment(self, user: User, comment_id: int) -> dict[str, Any]:
         with self._write(user) as tx:
@@ -814,7 +1054,7 @@ class KanbanStore:
                 raise HTTPException(status_code=409, detail="The board is archived: restore it first")
             tx.conn.execute(delete(comments_table).where(comments_table.c.id == comment_id))
             tx.log(c.board_id, "comment_deleted", c.id, comment_id=comment_id, excerpt=row.body[:120])
-            return self._card_full(tx.conn, c.id)
+            return self._card_full(tx.conn, user, c.id)
 
     # ------------------------------------------------------------------ attachments
     def check_card_edit(self, user: User, card_id: int) -> int:
@@ -845,7 +1085,7 @@ class KanbanStore:
             )).inserted_primary_key[0])
             tx.log(c.board_id, "attachment_added", card_id, attachment_id=aid, filename=filename)
             row = tx.conn.execute(select(attachments_table).where(attachments_table.c.id == aid)).one()
-            return {**attachment_json(row, _names(tx.conn, [user.id])), "card": self._card_full(tx.conn, card_id)}
+            return {**attachment_json(row, _names(tx.conn, [user.id])), "card": self._card_full(tx.conn, user, card_id)}
 
     def attachment_for_thumb(self, user: User, att_id: int) -> int:
         """The board id when the user may give this attachment a preview."""
@@ -871,7 +1111,7 @@ class KanbanStore:
             tx.conn.execute(delete(attachments_table).where(attachments_table.c.id == att_id))
             tx.files.append((c.board_id, [row.file, row.thumb]))
             tx.log(c.board_id, "attachment_deleted", c.id, filename=row.filename)
-            return self._card_full(tx.conn, c.id)
+            return self._card_full(tx.conn, user, c.id)
 
     def attachment_file(self, user: User, att_id: int, thumb: bool = False) -> tuple[Any, int]:
         with self.engine.connect() as conn:

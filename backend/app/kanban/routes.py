@@ -4,9 +4,17 @@
     POST   /api/kanban/boards                    {name, description?, color?, template?: "basic"} -> board
     GET    /api/kanban/boards/{id}?archived_cards=false
                                                  {board, columns, labels, members, cards, people, groups}
-    PATCH  /api/kanban/boards/{id}               {name?, description?, color?, archived?} -> board (owners)
+    PATCH  /api/kanban/boards/{id}               {name?, description?, color?, archived?, private?, done_keep_days?}
+                                                 -> board (owners). K4: private = members only; done_keep_days
+                                                 0 | 7 | 14 | 30 (0: finished tasks stay on the board)
     DELETE /api/kanban/boards/{id}               an archived board, with its files (owners)
     GET    /api/kanban/boards/{id}/history?limit=100   {"history": [...]} the board's latest changes
+    GET    /api/kanban/boards/{id}/finished?q=&limit=50&offset=0   {cards, total, keep_days} tasks that left the
+                                                 board because they were finished more than keep_days ago (K4)
+    GET    /api/kanban/boards/{id}/export.xlsx   the tasks on the board as an Excel file (K4)
+    GET    /api/kanban/my/export.xlsx            my tasks as an Excel file (K4)
+    GET    /api/kanban/my?done_days=7            {cards, boards: [{id, name, color, can_edit, columns, labels}], people}
+                                                 the caller's tasks on every board they can see (K3)
     PUT    /api/kanban/boards/{id}/members       {members: [{user: id | group: id, role}]} -> {"members"}
     POST   /api/kanban/boards/{id}/columns       {name, color?, is_done?} -> column
     PATCH  /api/kanban/columns/{id}              {name?, color?, is_done?, position?} -> column
@@ -15,11 +23,16 @@
     PATCH  /api/kanban/labels/{id}               {name?, color?} -> label
     DELETE /api/kanban/labels/{id}
     POST   /api/kanban/boards/{id}/cards         {column_id, title, description?, priority?, start_date?, due_date?,
-                                                  assignees?, labels?, position?} -> card (at the top by default)
+                                                  assignees?, assignee_names?, labels?, position?, repeat?} -> card
+                                                 (at the top by default; assignee_names: people who are not Ncode users)
     GET    /api/kanban/cards/{id}                -> card
     PATCH  /api/kanban/cards/{id}                {title?, description?, priority?, start_date?, due_date?, assignees?,
-                                                  labels?, archived?} -> card
-    POST   /api/kanban/cards/{id}/move           {column_id, position?} -> card
+                                                  labels?, archived?, repeat?} -> card
+                                                 repeat: daily | weekdays | weekly | monthly | null (K3)
+    POST   /api/kanban/cards/{id}/move           {column_id, position?} -> card (+ "next": {id, due_date, column}
+                                                 when a repeating card is done and its next one was made, K3)
+    POST   /api/kanban/cards/{id}/links          {kind: "dashboard" | "question", target_id} -> card (K3)
+    DELETE /api/kanban/links/{id}                -> card
     DELETE /api/kanban/cards/{id}                an archived card, with its files
     POST   /api/kanban/cards/{id}/checklist      {text} -> card
     PATCH  /api/kanban/checklist/{id}            {text?, done?, position?} -> card
@@ -48,11 +61,11 @@ import os
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from ..appdb import AppDB, User
@@ -62,7 +75,8 @@ from .attachments import (
     HEAD, INLINE, THUMB_MAX, FileStore, clean_filename, content_matches, extension, new_name, thumb_kind, type_for,
 )
 from .events import BoardEvents
-from .store import KanbanStore
+from .export import board_xlsx, my_xlsx
+from .store import KanbanStore, LinkNames
 
 PING_SEC = 30
 SAMPLE = 8192  # bytes of a text file checked for binary content
@@ -76,6 +90,7 @@ SAFE_HEADERS = {
 Color = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^(#[0-9a-fA-F]{6}|[a-z]{2,10}(\.[0-9]{2,3})?)$")]
 Priority = Literal["low", "normal", "high", "urgent"]
 Position = Annotated[float, Field(allow_inf_nan=False)]
+Repeat = Literal["daily", "weekdays", "weekly", "monthly"]
 
 
 def _text(max_len: int) -> Any:
@@ -91,6 +106,7 @@ class BoardIn(_In):
     description: str | None = Field(default=None, max_length=5000)
     color: Color | None = None
     template: Literal["basic"] = "basic"
+    private: bool = False                # K4: only its members see it
 
 
 class BoardPatch(_In):
@@ -98,6 +114,8 @@ class BoardPatch(_In):
     description: str | None = Field(default=None, max_length=5000)
     color: Color | None = None
     archived: bool | None = None
+    private: bool | None = None                              # K4
+    done_keep_days: Literal[0, 7, 14, 30] | None = None      # K4: 0 = finished tasks stay
 
 
 class MemberIn(BaseModel):  # extra fields (id, name from GET) are ignored: the list can be sent back as read
@@ -143,6 +161,8 @@ class CardIn(_In):
     assignees: list[int] = Field(default_factory=list, max_length=50)
     labels: list[int] = Field(default_factory=list, max_length=50)
     position: Position | None = None
+    repeat: Repeat | None = None
+    assignee_names: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=50)
 
 
 class CardPatch(_In):
@@ -154,6 +174,13 @@ class CardPatch(_In):
     assignees: list[int] | None = Field(default=None, max_length=50)
     labels: list[int] | None = Field(default=None, max_length=50)
     archived: bool | None = None
+    repeat: Repeat | None = None        # null: no longer repeats
+    assignee_names: list[Annotated[str, StringConstraints(max_length=200)]] | None = Field(default=None, max_length=50)
+
+
+class LinkIn(_In):
+    kind: Literal["dashboard", "question"]
+    target_id: int
 
 
 class MoveIn(_In):
@@ -203,11 +230,12 @@ def register_kanban_routes(
     settings: Settings,
     current_user: Callable[..., User],
     user_from_token: Callable[[str | None], User | None],
+    link_names: LinkNames | None = None,
 ) -> KanbanStore:
     files = FileStore(Path(app_db.path).parent / "kanban")
     files.sweep_partial()
     events = BoardEvents()
-    store = KanbanStore(app_db.engine, files, events)
+    store = KanbanStore(app_db.engine, files, events, link_names)
     router = APIRouter(prefix="/api/kanban", tags=["kanban"])
 
     # ------------------------------------------------------------------ boards
@@ -219,7 +247,7 @@ def register_kanban_routes(
     def create_board(body: BoardIn, request: Request, user: User = Depends(current_user)):
         lang = parse_language(request.headers.get("accept-language"))
         return store.create_board(user, name=body.name, description=body.description, color=body.color,
-                                  template=body.template, lang=lang)
+                                  template=body.template, lang=lang, private=body.private)
 
     @router.get("/boards/{board_id}")
     def get_board(board_id: int, archived_cards: bool = False, user: User = Depends(current_user)):
@@ -228,7 +256,7 @@ def register_kanban_routes(
     @router.patch("/boards/{board_id}")
     def patch_board(board_id: int, body: BoardPatch, user: User = Depends(current_user)):
         changes = body.model_dump(exclude_unset=True)
-        for key in ("name", "archived"):
+        for key in ("name", "archived", "private", "done_keep_days"):
             if key in changes and changes[key] is None:
                 del changes[key]
         return store.update_board(user, board_id, changes)
@@ -238,6 +266,33 @@ def register_kanban_routes(
         name = store.delete_board(user, board_id)
         app_db.audit(user.username, "kanban_board_delete", phrase=f"{name} (board {board_id})", status="ok")
         return {"deleted": board_id}
+
+    def _xlsx(data: bytes, name: str) -> Response:
+        safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in name).strip() or "tasks"
+        stamp = date.today().isoformat()
+        return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={
+            "Content-Disposition": f"attachment; filename=\"kanban-{stamp}.xlsx\"; filename*=UTF-8''{quote(f'{safe} {stamp}.xlsx')}",
+        })
+
+    @router.get("/boards/{board_id}/export.xlsx")
+    def export_board(board_id: int, request: Request, user: User = Depends(current_user)):
+        detail = store.get_board(user, board_id)
+        lang = parse_language(request.headers.get("accept-language"))
+        return _xlsx(board_xlsx(detail, lang, date.today()), detail["board"]["name"])
+
+    @router.get("/my/export.xlsx")
+    def export_my(request: Request, user: User = Depends(current_user)):
+        lang = parse_language(request.headers.get("accept-language"))
+        return _xlsx(my_xlsx(store.my_cards(user), lang, date.today()), "Мои задачи" if lang == "ru" else "My tasks")
+
+    @router.get("/boards/{board_id}/finished")
+    def finished_earlier(board_id: int, q: str = Query("", max_length=200), limit: int = Query(50, ge=1, le=200),
+                         offset: int = Query(0, ge=0), user: User = Depends(current_user)):
+        return store.finished_earlier(user, board_id, q, limit, offset)
+
+    @router.get("/my")
+    def my_tasks(done_days: int = Query(7, ge=0, le=60), user: User = Depends(current_user)):
+        return store.my_cards(user, done_days)
 
     @router.get("/boards/{board_id}/history")
     def board_history(board_id: int, limit: int = Query(100, ge=1, le=500), user: User = Depends(current_user)):
@@ -295,6 +350,14 @@ def register_kanban_routes(
             if key in changes and changes[key] is None:
                 del changes[key]
         return store.update_card(user, card_id, changes)
+
+    @router.post("/cards/{card_id}/links")
+    def add_link(card_id: int, body: LinkIn, user: User = Depends(current_user)):
+        return store.add_link(user, card_id, body.kind, body.target_id)
+
+    @router.delete("/links/{link_id}")
+    def remove_link(link_id: int, user: User = Depends(current_user)):
+        return store.remove_link(user, link_id)
 
     @router.post("/cards/{card_id}/move")
     def move_card(card_id: int, body: MoveIn, user: User = Depends(current_user)):

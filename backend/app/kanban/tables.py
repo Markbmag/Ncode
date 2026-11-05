@@ -1,8 +1,8 @@
-"""Kanban tables (migration 0010). In the app's one MetaData so the migration test compares them."""
+"""Kanban tables (migrations 0010, 0012, 0013, 0014). In the app's one MetaData so the migration test compares them."""
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Table, Text
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Table, Text, false
 
 from ..appdb import metadata
 
@@ -18,6 +18,8 @@ boards_table = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     Column("updated_by", String(64)),
+    Column("private", Boolean, nullable=False, default=False, server_default=false()),  # K4: members only
+    Column("done_keep_days", Integer),               # K4: finished tasks leave the board after N days; 0 never, null 14
 )
 
 board_members_table = Table(  # everyone signed in sees every board; members (people or groups) edit
@@ -64,6 +66,7 @@ cards_table = Table(
     Column("position", Float, nullable=False),
     Column("archived", Boolean, nullable=False, default=False),
     Column("completed_at", Float),
+    Column("repeat", String(16)),                    # K3: daily | weekdays | weekly | monthly (migration 0012)
     Column("created_by", Integer),
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
@@ -135,4 +138,23 @@ activity_table = Table(  # history: who did what, when
     Column("created_at", Float, nullable=False),
     Index("ix_kanban_activity_board_time", "board_id", "created_at"),
     Index("ix_kanban_activity_card_time", "card_id", "created_at"),
+)
+
+card_links_table = Table(  # K3: a task points at a Search & BI dashboard or question (migration 0012)
+    "kanban_card_links",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("card_id", Integer, ForeignKey("kanban_cards.id"), nullable=False, index=True),
+    Column("kind", String(16), nullable=False),      # "dashboard" | "question"
+    Column("target_id", Integer, nullable=False),
+    Column("added_by", Integer),
+    Column("created_at", Float, nullable=False),
+)
+
+card_names_table = Table(  # people on a task who are not Ncode users, by name (migration 0013)
+    "kanban_card_names",
+    metadata,
+    Column("card_id", Integer, ForeignKey("kanban_cards.id"), primary_key=True),
+    Column("name", String(80), primary_key=True),
+    Column("position", Integer, nullable=False, server_default="0"),
 )

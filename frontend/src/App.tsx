@@ -8,7 +8,7 @@ import { queryClient } from './lib/queryClient';
 import Login from './Login';
 import { AppRoutes } from './routes';
 import { WorkspaceProvider } from './workspace/WorkspaceProvider';
-import { t } from './i18n/index.ts';
+import { t, tn } from './i18n/index.ts';
 
 // Public links and embeds (M8) open without signing in.
 const PublicPage = lazy(() => import('./public/PublicPage'));
@@ -87,6 +87,10 @@ function SignedInApp() {
   }, []);
 
   const logout = useCallback(async () => {
+    // K4: Kanban changes made without a connection that are not sent yet would be lost
+    const offline = await import('./kanban/offline');
+    const waiting = await offline.waitingCount();
+    if (waiting && !window.confirm(tn(waiting, '{n} change made without a connection is not sent yet. Sign out anyway? It will be lost.', '{n} changes made without a connection are not sent yet. Sign out anyway? They will be lost.'))) return;
     try {
       await http.post('/api/auth/logout');
     } catch {
@@ -95,6 +99,7 @@ function SignedInApp() {
     setToken(null);
     rememberUser(null);
     queryClient.clear();
+    await offline.forgetOfflineData(); // nothing of this person stays on a shared phone
     setUser(null);
     setNotice('');
   }, []);

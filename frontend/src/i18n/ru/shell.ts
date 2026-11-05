@@ -329,4 +329,6 @@ export const SHELL: Record<string, string> = {
   'Pick a database': 'Выберите базу данных',
   // K2: phone
   'No connection. You can look at what is on the screen; changes need the connection.': 'Нет связи. То, что на экране, можно смотреть; для изменений нужна связь.',
+  // K4: Kanban changes made without a connection
+  '{n} change made without a connection is not sent yet. Sign out anyway? It will be lost.|{n} changes made without a connection are not sent yet. Sign out anyway? They will be lost.': '{n} изменение, сделанное без связи, ещё не отправлено. Всё равно выйти? Оно пропадёт.|{n} изменения, сделанные без связи, ещё не отправлены. Всё равно выйти? Они пропадут.|{n} изменений, сделанных без связи, ещё не отправлены. Всё равно выйти? Они пропадут.',
 };

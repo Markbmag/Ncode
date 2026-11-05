@@ -56,6 +56,7 @@ from .errors import install_error_handling
 from .i18n import localize, parse_language
 from .explore import browse_table, csv_stream, table_structure
 from .content.routes import register_content_routes
+from .content.store import ContentError
 from .query.routes import register_query_routes
 from .query.values import register_value_routes
 from .analysis.routes import register_analysis_routes
@@ -817,8 +818,21 @@ def create_app(settings: Settings, connections: dict[str, ConnectionConfig], app
         app, registry=registry, semantic=semantic, queries=queries, content=content,
         current_user=current_user, require_connection=require_connection,
     )
+    def kanban_link_names(user: User, items: list[tuple[str, int]]) -> dict[tuple[str, int], str | None]:
+        # K3: a task's links to Search & BI show a name only for what this person may open
+        out: dict[tuple[str, int], str | None] = {}
+        for kind, item_id in items:
+            try:
+                services = app.state.content
+                item = services.dashboards.get(user, item_id) if kind == "dashboard" else services.store.get_question(user, item_id)
+                out[(kind, item_id)] = item.name
+            except ContentError:
+                out[(kind, item_id)] = None
+        return out
+
     register_kanban_routes(  # Ncode - Kanban (§8c): /api/kanban/*, WS /ws/kanban/{board_id}
         app, app_db=app_db, settings=settings, current_user=current_user, user_from_token=user_from_token,
+        link_names=kanban_link_names,
     )
     if demo.registered():
         # M11: the demo's examples (a collection with questions and a dashboard), made once
