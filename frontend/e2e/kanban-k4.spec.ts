@@ -69,3 +69,49 @@ test('a board prints as a plain sheet and downloads as Excel', async ({ page }) 
   await expect(sheet).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('the timeline: drag a bar to move its dates, its end to change the due date', async ({ page }) => {
+  const errors = watchErrors(page);
+  const day = (offset: number) => {
+    const d = new Date(Date.now() + offset * 86_400_000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const board = await api(page.request, 'carol', 'POST', '/api/kanban/boards', { name: unique('Repair') });
+  const detail = await api(page.request, 'carol', 'GET', `/api/kanban/boards/${board.id}`);
+  const card = await api(page.request, 'carol', 'POST', `/api/kanban/boards/${board.id}/cards`, { column_id: detail.columns[0].id, title: 'Replace the cylinder', start_date: day(1), due_date: day(3) });
+  await signIn(page, 'carol', `/kanban/b/${board.id}`);
+  await page.getByTestId('view-timeline').locator('visible=true').click();
+  await expect(page).toHaveURL(/view=timeline/);
+  const bar = page.getByTestId('timeline-bar');
+  await expect(bar).toHaveCount(1);
+  const dayWidth = 34;
+
+  // the whole bar two days later
+  let box = (await bar.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + dayWidth * 2, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const c = await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`);
+    return [c.start_date, c.due_date];
+  }).toEqual([day(3), day(5)]);
+  await expect(page.getByTestId('notice')).toContainText('is now due');
+
+  // its end one day later: only the due date changes
+  box = (await bar.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 4, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 4 + dayWidth, box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const c = await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`);
+    return [c.start_date, c.due_date];
+  }).toEqual([day(3), day(6)]);
+  // Undo (in the newest note; the one before may still be fading out), and a tap opens the task
+  await page.getByTestId('notice-undo').last().click();
+  await expect.poll(async () => (await api(page.request, 'carol', 'GET', `/api/kanban/cards/${card.id}`)).due_date).toBe(day(5));
+  await bar.click();
+  await expect(page.getByTestId('card-drawer').getByTestId('card-title')).toHaveValue('Replace the cylinder');
+  expect(errors).toEqual([]);
+});

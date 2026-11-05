@@ -61,3 +61,24 @@ test('month and day names in both languages', () => {
   assert.deepEqual(weekdayNames(), ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']);
   setLangForTests('en');
 });
+
+test('timeline: six weeks from the Monday before this week; bars from start to due', async () => {
+  const { barOf, daysBetween, movedDates, shiftIso, timelineDays } = await import('../src/kanban/logic.ts');
+  const days = timelineDays('2026-11-04'); // a Wednesday
+  assert.equal(days.length, 42);
+  assert.equal(days[0], '2026-10-26');      // the Monday of the week before
+  assert.equal(timelineDays('2026-11-04', 2)[0], '2026-11-09');
+  assert.equal(shiftIso('2026-02-27', 3), '2026-03-02');
+  assert.equal(daysBetween('2026-10-26', '2026-11-04'), 9);
+  assert.deepEqual(barOf({ start_date: '2026-11-02', due_date: '2026-11-06' }, days), { from: 7, to: 11, cutStart: false, cutEnd: false });
+  assert.deepEqual(barOf({ start_date: null, due_date: '2026-11-04' }, days), { from: 9, to: 9, cutStart: false, cutEnd: false });
+  assert.deepEqual(barOf({ start_date: '2026-10-01', due_date: '2026-10-28' }, days), { from: 0, to: 2, cutStart: true, cutEnd: false });
+  assert.equal(barOf({ start_date: '2026-09-01', due_date: '2026-09-02' }, days), null);
+  assert.equal(barOf({ start_date: null, due_date: null }, days), null);
+  // dragging: the whole bar, or one end, never past the other
+  assert.deepEqual(movedDates({ start_date: '2026-11-02', due_date: '2026-11-06' }, 3, 'bar'), { start_date: '2026-11-05', due_date: '2026-11-09' });
+  assert.deepEqual(movedDates({ start_date: '2026-11-02', due_date: '2026-11-06' }, -10, 'end'), { start_date: '2026-11-02', due_date: '2026-11-02' });
+  assert.deepEqual(movedDates({ start_date: '2026-11-02', due_date: '2026-11-06' }, 2, 'start'), { start_date: '2026-11-04', due_date: '2026-11-06' });
+  assert.deepEqual(movedDates({ start_date: null, due_date: '2026-11-06' }, 2, 'end'), { start_date: null, due_date: '2026-11-08' });
+  assert.deepEqual(movedDates({ start_date: null, due_date: '2026-11-06' }, -3, 'start'), { start_date: '2026-11-03', due_date: '2026-11-06' });
+});

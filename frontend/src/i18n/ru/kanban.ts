@@ -408,4 +408,12 @@ export const KANBAN: Record<string, string> = {
   'Print': 'Печать',
   'Printed {when}': 'Напечатано {when}',
   'only the tasks shown with the filters': 'только задачи, видимые с фильтрами',
+  // K4: timeline
+  'Changed the dates of “{title}”': 'Даты задачи «{title}» изменены',
+  'Timeline': 'График',
+  'Drag a bar to move the dates; drag its ends to change the start or the due date.': 'Перетащите полосу, чтобы сдвинуть даты; потяните за край, чтобы изменить начало или срок.',
+  'Earlier': 'Раньше',
+  'No task has a date in these weeks.': 'В эти недели нет задач с датами.',
+  '{n} task has dates in other weeks|{n} tasks have dates in other weeks': '{n} задача с датами в другие недели|{n} задачи с датами в другие недели|{n} задач с датами в другие недели',
+  '{n} task has no date|{n} tasks have no date': '{n} задача без даты|{n} задачи без даты|{n} задач без даты',
 };

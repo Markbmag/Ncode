@@ -105,3 +105,4 @@ export const ArrowDownIcon = make(<path d="M12 5v14M19 12l-7 7-7-7" />);
 export const RepeatIcon = make(<path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />);
 export const LinkIcon = make(<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />);
 export const PrinterIcon = make(<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" />);
+export const TimelineIcon = make(<path d="M3 6h10M7 12h12M5 18h8" />);

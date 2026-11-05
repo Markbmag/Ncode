@@ -18,13 +18,14 @@ import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { createCard, createColumn, deleteColumn, downloadExcel, kanbanKeys, moveCard, undoRepeat, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
 import { CalendarView } from './CalendarView';
+import { TimelineView } from './TimelineView';
 import { printSheet } from './print';
 import { PrintSheet } from './PrintSheet';
 import { FinishedEarlier } from './FinishedEarlier';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
-import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, PrinterIcon, TagIcon } from './icons';
+import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, PrinterIcon, TagIcon, TimelineIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
   dayTitle, namedPeople, photoTaskTitle, printRow, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
@@ -566,10 +567,13 @@ function FirstSteps({ firstColumn, doneColumn }: { firstColumn: string; doneColu
 }
 
 /** Board | Calendar (K3): the same tasks as stages or on their dates. */
-function ViewSwitch({ view, onChange, wide = false }: { view: 'board' | 'calendar'; onChange: (v: 'board' | 'calendar') => void; wide?: boolean }) {
+type View = 'board' | 'calendar' | 'timeline';
+
+function ViewSwitch({ view, onChange, wide = false }: { view: View; onChange: (v: View) => void; wide?: boolean }) {
   const items = [
     { key: 'board' as const, label: t('Board'), icon: <KanbanIcon boxSize={4} /> },
     { key: 'calendar' as const, label: t('Calendar'), icon: <CalendarIcon boxSize={4} /> },
+    { key: 'timeline' as const, label: t('Timeline'), icon: <TimelineIcon boxSize={4} /> },
   ];
   return (
     <HStack spacing={0} bg="chipBg" borderRadius="lg" p="3px" role="group" aria-label={t('Show the board as')} data-testid="view-switch" w={wide ? '100%' : undefined}>
@@ -620,7 +624,8 @@ export default function BoardPage() {
   const boardId = Number(params.board);
   const cardId = params.card ? Number(params.card) : null;
   const [search, setSearch] = useSearchParams();
-  const view: 'board' | 'calendar' = search.get('view') === 'calendar' ? 'calendar' : 'board';
+  const viewParam = search.get('view');
+  const view: View = viewParam === 'calendar' || viewParam === 'timeline' ? viewParam : 'board';
   const q = search.get('q') ?? '';
   const navigate = useNavigate();
   const toast = useToast();
@@ -880,9 +885,21 @@ export default function BoardPage() {
     },
     [saveDates, notify],
   );
-  const setView = (next: 'board' | 'calendar') => {
+  const setDates = useCallback(
+    (card: CardSummary, dates: { start_date: string | null; due_date: string | null }) => {
+      const before = { due_date: card.due_date, start_date: card.start_date };
+      void saveDates(card.id, dates).then((ok) => {
+        if (!ok) return;
+        notify(dates.due_date ? t('“{title}” is now due {date}', { title: card.title, date: dayTitle(dates.due_date) }) : t('Changed the dates of “{title}”', { title: card.title }), {
+          undo: () => void saveDates(card.id, before),
+        });
+      });
+    },
+    [saveDates, notify],
+  );
+  const setView = (next: View) => {
     const params = new URLSearchParams(search);
-    if (next === 'calendar') params.set('view', 'calendar');
+    if (next !== 'board') params.set('view', next);
     else params.delete('view');
     setSearch(params, { replace: true });
   };
@@ -1062,6 +1079,18 @@ export default function BoardPage() {
             canEdit={canEdit}
             onOpen={openCard}
             onSetDate={setDate}
+          />
+        </Box>
+      )}
+      {view === 'timeline' && (
+        <Box flex={1} minH={0} pt={2}>
+          <TimelineView
+            cards={columns.flatMap((c) => (visible[c.id] ?? []).map((id) => cardsById.get(id)).filter((x): x is CardSummary => Boolean(x)))}
+            columns={columns}
+            today={today}
+            canEdit={canEdit}
+            onOpen={openCard}
+            onSetDates={setDates}
           />
         </Box>
       )}

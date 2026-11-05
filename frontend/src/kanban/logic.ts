@@ -680,3 +680,66 @@ export function printRow(card: CardSummary, people: Person[], today: string, don
     extra: extra ?? (card.priority === 'normal' ? '' : priorityLabel(card.priority)),
   };
 }
+
+// ---------------------------------------------------------------- timeline (K4)
+
+/** An ISO date moved by whole days. */
+export function shiftIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return isoOf(y, m - 1, d + days);
+}
+
+/** Whole days from a to b (b - a). */
+export function daysBetween(a: string, b: string): number {
+  return dayNumber(b) - dayNumber(a);
+}
+
+/** The days the timeline shows: whole weeks from the Monday a week before today's week, moved by
+ * `offset` weeks. */
+export function timelineDays(today: string, offset = 0, weeks = 6): string[] {
+  const [y, m, d] = today.split('-').map(Number);
+  const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // 0 = Monday
+  const first = shiftIso(today, -weekday - 7 + offset * 7);
+  return Array.from({ length: weeks * 7 }, (_, i) => shiftIso(first, i));
+}
+
+export interface Bar {
+  from: number; // first day shown (index in the timeline)
+  to: number;   // last day shown
+  cutStart: boolean; // the task starts before the timeline
+  cutEnd: boolean;   // and ends after it
+}
+
+/** Where a task's bar sits: from its start to its due date (one day when it has only one of them);
+ * null when it has no date or is outside the days shown. */
+export function barOf(card: Pick<CardSummary, 'start_date' | 'due_date'>, days: string[]): Bar | null {
+  const start = card.start_date ?? card.due_date;
+  const end = card.due_date ?? card.start_date;
+  if (!start || !end || !days.length) return null;
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (end < first || start > last) return null;
+  return {
+    from: Math.max(0, daysBetween(first, start)),
+    to: Math.min(days.length - 1, daysBetween(first, end)),
+    cutStart: start < first,
+    cutEnd: end > last,
+  };
+}
+
+/** New dates after dragging a bar by `days`: the whole bar, or one end of it (never past the other). */
+export function movedDates(card: Pick<CardSummary, 'start_date' | 'due_date'>, days: number, part: 'bar' | 'start' | 'end'): { start_date: string | null; due_date: string | null } {
+  const start = card.start_date;
+  const due = card.due_date;
+  if (part === 'bar') return { start_date: start ? shiftIso(start, days) : null, due_date: due ? shiftIso(due, days) : null };
+  if (part === 'end') {
+    const base = due ?? start!;
+    const moved = shiftIso(base, days);
+    const floor = start ?? base;
+    return { start_date: start, due_date: moved < floor ? floor : moved };
+  }
+  const base = start ?? due!;
+  const moved = shiftIso(base, days);
+  const ceil = due ?? base;
+  return { start_date: moved > ceil ? ceil : moved, due_date: due };
+}
