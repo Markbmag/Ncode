@@ -192,6 +192,11 @@ export function useFileUrl(url: string | null | undefined) {
   });
 }
 
+/** K4: a board or My tasks as an Excel file (headers in the app's language). */
+export async function downloadExcel(path: '/my' | `/boards/${number}`, filename: string): Promise<void> {
+  return downloadAttachment(`${BASE}${path}/export.xlsx`, filename);
+}
+
 export async function downloadAttachment(url: string, filename: string): Promise<void> {
   const blob = (await http.get<Blob>(apiPath(url), { responseType: 'blob' })).data;
   const href = URL.createObjectURL(blob);

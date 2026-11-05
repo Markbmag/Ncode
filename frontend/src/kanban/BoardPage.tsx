@@ -13,19 +13,21 @@ import { CSS } from '@dnd-kit/utilities';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { ArchiveIcon, CheckIcon, ChevronDownIcon, EyeIcon, LockIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
+import { ArchiveIcon, CheckIcon, ChevronDownIcon, DownloadIcon, EyeIcon, LockIcon, MoreIcon, PencilIcon, PlusIcon, SettingsIcon, TrashIcon, UsersIcon, XIcon } from '../icons';
 import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { createCard, createColumn, deleteColumn, kanbanKeys, moveCard, undoRepeat, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
+import { createCard, createColumn, deleteColumn, downloadExcel, kanbanKeys, moveCard, undoRepeat, updateCard, updateColumn, useArchivedCards, useBoard } from './api';
 import { CalendarView } from './CalendarView';
+import { printSheet } from './print';
+import { PrintSheet } from './PrintSheet';
 import { FinishedEarlier } from './FinishedEarlier';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
 import { BoardSettingsDialog, LabelsDialog, MembersDialog } from './dialogs';
-import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, TagIcon } from './icons';
+import { ArrowLeftIcon, CalendarIcon, CameraIcon, FilterIcon, KanbanIcon, PrinterIcon, TagIcon } from './icons';
 import {
   applyMove, byPosition, colorHex, filterActive, filterCount, groupName, liveSentence, matchesFilter, NO_FILTER, PALETTE, personName, positionBetween,
-  dayTitle, namedPeople, photoTaskTitle, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
+  dayTitle, namedPeople, photoTaskTitle, printRow, priorityLabel, stageInView, tabColumn, todayIso, withAlpha,
 } from './logic';
 import type { CardFilter } from './logic';
 import { AvatarStack, EmptyState, PersonAvatar } from './parts';
@@ -1019,6 +1021,18 @@ export default function BoardPage() {
                 <MenuItem icon={<ArchiveIcon boxSize={4} />} onClick={() => setDialog('hidden')} data-testid="archived-cards">
                   {t('Hidden tasks')}
                 </MenuItem>
+                <MenuDivider />
+                <MenuItem icon={<PrinterIcon boxSize={4} />} onClick={printSheet} data-testid="board-print">
+                  {t('Print')}
+                </MenuItem>
+                <MenuItem
+                  icon={<DownloadIcon boxSize={4} />}
+                  onClick={() => void downloadExcel(`/boards/${boardId}`, `${board.name}.xlsx`).catch((err: unknown) => fail(err, t('Could not download the file')))}
+                  data-testid="board-excel"
+                >
+                  {t('Download as Excel')}
+                </MenuItem>
+                <MenuDivider />
                 <MenuItem icon={<SettingsIcon boxSize={4} />} onClick={() => setDialog('settings')} data-testid="board-settings">
                   {t('Board name, colour, hide')}
                 </MenuItem>
@@ -1147,6 +1161,15 @@ export default function BoardPage() {
       {dialog === 'members' && <MembersDialog detail={detail} canManage={canManage && !board.archived} onClose={() => setDialog(null)} onSaved={refresh} />}
       {dialog === 'labels' && <LabelsDialog boardId={boardId} labels={detail.labels} canEdit={canEdit} onClose={() => setDialog(null)} onChanged={refresh} />}
       {dialog === 'hidden' && <HiddenTasks boardId={boardId} onOpen={openCard} onClose={() => setDialog(null)} />}
+      <PrintSheet
+        title={board.name}
+        note={filterActive(filter) ? t('only the tasks shown with the filters') : undefined}
+        extraTitle={t('Importance')}
+        groups={columns.map((c) => ({
+          title: c.name,
+          rows: (visible[c.id] ?? []).map((id) => cardsById.get(id)).filter((x): x is CardSummary => Boolean(x)).map((card) => printRow(card, detail.people, today, doneColumns.has(c.id))),
+        }))}
+      />
       {dialog === 'finished' && <FinishedEarlier boardId={boardId} onOpen={openCard} onClose={() => setDialog(null)} />}
       {dialog === 'settings' && (
         <BoardSettingsDialog

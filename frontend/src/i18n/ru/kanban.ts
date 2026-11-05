@@ -403,4 +403,9 @@ export const KANBAN: Record<string, string> = {
   'for 14 days': '14 дней',
   'for 30 days': '30 дней',
   'for 7 days': '7 дней',
+  // K4: print and Excel
+  'Download as Excel': 'Скачать в Excel',
+  'Print': 'Печать',
+  'Printed {when}': 'Напечатано {when}',
+  'only the tasks shown with the filters': 'только задачи, видимые с фильтрами',
 };

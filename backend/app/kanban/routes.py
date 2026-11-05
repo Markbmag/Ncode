@@ -11,6 +11,8 @@
     GET    /api/kanban/boards/{id}/history?limit=100   {"history": [...]} the board's latest changes
     GET    /api/kanban/boards/{id}/finished?q=&limit=50&offset=0   {cards, total, keep_days} tasks that left the
                                                  board because they were finished more than keep_days ago (K4)
+    GET    /api/kanban/boards/{id}/export.xlsx   the tasks on the board as an Excel file (K4)
+    GET    /api/kanban/my/export.xlsx            my tasks as an Excel file (K4)
     GET    /api/kanban/my?done_days=7            {cards, boards: [{id, name, color, can_edit, columns, labels}], people}
                                                  the caller's tasks on every board they can see (K3)
     PUT    /api/kanban/boards/{id}/members       {members: [{user: id | group: id, role}]} -> {"members"}
@@ -59,11 +61,11 @@ import os
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from ..appdb import AppDB, User
@@ -73,6 +75,7 @@ from .attachments import (
     HEAD, INLINE, THUMB_MAX, FileStore, clean_filename, content_matches, extension, new_name, thumb_kind, type_for,
 )
 from .events import BoardEvents
+from .export import board_xlsx, my_xlsx
 from .store import KanbanStore, LinkNames
 
 PING_SEC = 30
@@ -263,6 +266,24 @@ def register_kanban_routes(
         name = store.delete_board(user, board_id)
         app_db.audit(user.username, "kanban_board_delete", phrase=f"{name} (board {board_id})", status="ok")
         return {"deleted": board_id}
+
+    def _xlsx(data: bytes, name: str) -> Response:
+        safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in name).strip() or "tasks"
+        stamp = date.today().isoformat()
+        return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={
+            "Content-Disposition": f"attachment; filename=\"kanban-{stamp}.xlsx\"; filename*=UTF-8''{quote(f'{safe} {stamp}.xlsx')}",
+        })
+
+    @router.get("/boards/{board_id}/export.xlsx")
+    def export_board(board_id: int, request: Request, user: User = Depends(current_user)):
+        detail = store.get_board(user, board_id)
+        lang = parse_language(request.headers.get("accept-language"))
+        return _xlsx(board_xlsx(detail, lang, date.today()), detail["board"]["name"])
+
+    @router.get("/my/export.xlsx")
+    def export_my(request: Request, user: User = Depends(current_user)):
+        lang = parse_language(request.headers.get("accept-language"))
+        return _xlsx(my_xlsx(store.my_cards(user), lang, date.today()), "Мои задачи" if lang == "ru" else "My tasks")
 
     @router.get("/boards/{board_id}/finished")
     def finished_earlier(board_id: int, q: str = Query("", max_length=200), limit: int = Query(50, ge=1, le=200),

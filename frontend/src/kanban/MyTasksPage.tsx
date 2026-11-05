@@ -5,13 +5,15 @@ import { Box, Button, Flex, Heading, HStack, Skeleton, Text, VStack } from '@cha
 import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
-import { CheckIcon } from '../icons';
+import { CheckIcon, DownloadIcon } from '../icons';
 import { t } from '../i18n/index.ts';
-import { kanbanKeys, moveCardToTop, undoRepeat, useBoard, useMyTasks } from './api';
+import { downloadExcel, kanbanKeys, moveCardToTop, undoRepeat, useBoard, useMyTasks } from './api';
+import { printSheet } from './print';
+import { PrintSheet } from './PrintSheet';
 import { CardDrawer } from './CardDrawer';
 import { CardFace } from './CardFace';
-import { UserIcon } from './icons';
-import { colorHex, dayTitle, myGroups, myGroupTitle, todayIso } from './logic';
+import { PrinterIcon, UserIcon } from './icons';
+import { colorHex, dayTitle, myGroups, myGroupTitle, printRow, todayIso } from './logic';
 import { EmptyState } from './parts';
 import type { CardSummary, MyTasks } from './types';
 import { useNotify } from './useNotify';
@@ -102,9 +104,24 @@ export default function MyTasksPage() {
         <Flex w="40px" h="40px" borderRadius="xl" bg="rgba(99,102,241,0.14)" color="brand.400" align="center" justify="center">
           <UserIcon boxSize={5} />
         </Flex>
-        <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} letterSpacing="-0.02em">
+        <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} letterSpacing="-0.02em" flex={1}>
           {t('My tasks')}
         </Heading>
+        {groups.length > 0 && (
+          <HStack spacing={2}>
+            <Button variant="subtle" leftIcon={<PrinterIcon boxSize={4} />} onClick={printSheet} data-testid="my-print">
+              <Text as="span" display={{ base: 'none', sm: 'inline' }}>{t('Print')}</Text>
+            </Button>
+            <Button
+              variant="subtle"
+              leftIcon={<DownloadIcon boxSize={4} />}
+              onClick={() => void downloadExcel('/my', `${t('My tasks')}.xlsx`).catch((err: unknown) => notify(apiErrorMessage(err, t('Could not download the file')), { error: true }))}
+              data-testid="my-excel"
+            >
+              <Text as="span" display={{ base: 'none', sm: 'inline' }}>Excel</Text>
+            </Button>
+          </HStack>
+        )}
       </HStack>
       <Text color="mutedText" mb={6}>
         {t('Everything assigned to you, on all boards.')}
@@ -173,6 +190,14 @@ export default function MyTasksPage() {
           ))}
         </VStack>
       )}
+      <PrintSheet
+        title={t('My tasks')}
+        extraTitle={t('Board')}
+        groups={groups.map((g) => ({
+          title: myGroupTitle(g.key),
+          rows: g.cards.map((c) => printRow(c, my.data?.people ?? [], today, isDone(c), boards.get(c.board_id)?.name)),
+        }))}
+      />
       {opened && <OpenTask key={opened.id} cardId={opened.id} boardId={opened.board_id} onClose={() => open(null)} onMove={(c, col) => void move(c, col)} />}
     </Box>
   );

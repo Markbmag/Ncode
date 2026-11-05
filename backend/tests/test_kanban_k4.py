@@ -68,3 +68,32 @@ def test_finished_tasks_leave_the_board_after_a_while(env):
     assert len(call(env, "GET", f"/boards/{board['id']}")["cards"]) == 4
     assert call(env, "GET", f"/boards/{board['id']}/finished")["keep_days"] == 0
     call(env, "PATCH", f"/boards/{board['id']}", json={"done_keep_days": 3}, status=422)
+
+
+def test_a_board_and_my_tasks_as_excel(env):
+    import io
+
+    from openpyxl import load_workbook
+
+    board, detail = new_board(env, "alice", "Press line")
+    todo, done = detail["columns"][0]["id"], detail["columns"][-1]["id"]
+    new_card(env, board["id"], todo, title="Check the gauge", assignees=[env.ids["bob"]], assignee_names=["Ivan Petrov"],
+             due_date="2020-01-10", priority="high")
+    finished = new_card(env, board["id"], todo, title="Swept", due_date="2020-01-01")
+    call(env, "POST", f"/cards/{finished['id']}/move", json={"column_id": done})
+    res = env.client.get(f"/api/kanban/boards/{board['id']}/export.xlsx", headers={**env.h["alice"], "Accept-Language": "ru"})
+    assert res.status_code == 200 and "spreadsheetml" in res.headers["content-type"]
+    assert "Press%20line" in res.headers["content-disposition"]
+    rows = list(load_workbook(io.BytesIO(res.content)).active.iter_rows(values_only=True))
+    assert rows[0][:6] == ("Этап", "Задача", "Кто", "Начало", "Срок", "Просрочена")
+    gauge = next(r for r in rows if r[1] == "Check the gauge")
+    assert gauge[2] == "bob, Ivan Petrov" and gauge[4].date().isoformat() == "2020-01-10" and gauge[5] == "да" and gauge[6] == "Высокий"
+    swept = next(r for r in rows if r[1] == "Swept")
+    assert swept[5] is None and swept[10] is not None  # finished: not late, with the day it was finished
+    # my tasks
+    mine = env.client.get("/api/kanban/my/export.xlsx", headers=env.h["bob"])
+    my_rows = list(load_workbook(io.BytesIO(mine.content)).active.iter_rows(values_only=True))
+    assert my_rows[0][:3] == ("Board", "Stage", "Task") and [r[2] for r in my_rows[1:]] == ["Check the gauge"]
+    # a private board: not for others
+    call(env, "PATCH", f"/boards/{board['id']}", json={"private": True})
+    assert env.client.get(f"/api/kanban/boards/{board['id']}/export.xlsx", headers=env.h["carol"]).status_code == 404

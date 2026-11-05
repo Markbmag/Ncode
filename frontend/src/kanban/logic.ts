@@ -665,3 +665,18 @@ export function namedPeople(cards: Pick<CardSummary, 'assignee_names'>[]): strin
   for (const c of cards) for (const n of c.assignee_names ?? []) if (!byKey.has(n.toLocaleLowerCase())) byKey.set(n.toLocaleLowerCase(), n);
   return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
+
+// ---------------------------------------------------------------- print (K4)
+
+/** One task as a line of the printed sheet. */
+export function printRow(card: CardSummary, people: Person[], today: string, done: boolean, extra?: string) {
+  const late = !done && !card.completed_at && card.due_date !== null && card.due_date < today;
+  return {
+    title: card.title,
+    who: [...card.assignees.map((id) => personName(id, people)), ...(card.assignee_names ?? [])].join(', '),
+    due: card.due_date ? (late ? dueText(card.due_date, today) : shortDate(card.due_date, today)) : '',
+    late,
+    steps: card.checklist.total ? `${card.checklist.done}/${card.checklist.total}` : '',
+    extra: extra ?? (card.priority === 'normal' ? '' : priorityLabel(card.priority)),
+  };
+}
