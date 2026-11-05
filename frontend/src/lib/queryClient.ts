@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { onlineManager, QueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 
 /** Server state (connections, table lists, schemas ...) lives in this cache. Cleared on sign-out. */
@@ -17,6 +17,9 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Opened without a connection (the phone app, K4): requests wait for it instead of failing at once.
+if (typeof navigator !== 'undefined') onlineManager.setOnline(navigator.onLine);
 
 export const queryKeys = {
   connections: ['connections'] as const,

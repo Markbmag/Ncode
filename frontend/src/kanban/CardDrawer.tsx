@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import { apiErrorMessage } from '../api';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, DownloadIcon, MoreIcon, PencilIcon, PlusIcon, RefreshIcon, TrashIcon, XIcon } from '../icons';
-import { t } from '../i18n/index.ts';
+import { t, tn } from '../i18n/index.ts';
 import { useWorkspace } from '../workspace/useWorkspace';
 import {
   addCardLink, addChecklistItem, addComment, deleteAttachment, deleteCard, deleteChecklistItem, deleteComment, downloadAttachment, kanbanKeys, updateCard,
@@ -25,13 +25,15 @@ import {
 } from './logic';
 import { LinkPicker } from './LinkPicker';
 import { LabelChip, PersonAvatar, PlainText, ProgressBar } from './parts';
-import { attachFile } from './upload';
+import { attachOrQueue } from './upload';
+import { isQueued, sendOrQueue } from './offline/queue';
+import { useWaiting } from './offline/useWaiting';
 import { WhoPicker } from './WhoPicker';
 import type { Attachment, BoardDetail, Card, CardSummary, ChecklistItem, Column, Repeat } from './types';
 import { PRIORITIES, REPEATS } from './types';
 import { useNotify } from './useNotify';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SaveState = 'idle' | 'saving' | 'saved' | 'queued' | 'error';
 
 function Section({ icon, title, right, children, testId }: { icon: ReactNode; title: string; right?: ReactNode; children: ReactNode; testId?: string }) {
   return (
@@ -190,7 +192,19 @@ export function CardDrawer({ cardId, detail, columns, canEdit, canManage, onClos
     <Drawer isOpen placement="right" onClose={onClose} size={size}>
       <DrawerOverlay bg="rgba(8,12,24,0.45)" />
       <DrawerContent data-testid="card-drawer" borderLeftRadius={{ base: 0, md: '2xl' }} overflow="hidden" fontSize="md">
-        {cardQuery.isPending ? (
+        {cardQuery.isPending && cardQuery.fetchStatus === 'paused' ? (
+          <Box p={6} data-testid="card-offline">
+            <Flex justify="flex-end">
+              <Button leftIcon={<XIcon boxSize={4} />} variant="subtle" onClick={onClose}>
+                {t('Close')}
+              </Button>
+            </Flex>
+            <Text mt={6} fontWeight={600} fontSize="lg">
+              {t('No connection')}
+            </Text>
+            <Text color="mutedText">{t('This task was not opened on this device before, so it is not kept here. It opens once the connection is back.')}</Text>
+          </Box>
+        ) : cardQuery.isPending ? (
           <Box p={6}>
             <Skeleton h="32px" w="70%" mb={6} borderRadius="md" />
             <Skeleton h="90px" mb={4} borderRadius="lg" />
@@ -252,6 +266,10 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
     setSaveState('saving');
     try {
       const answer = await what();
+      if (isQueued(answer)) {
+        setSaveState('queued'); // K4: kept on the phone, sent when the connection is back
+        return true;
+      }
       // task changes answer with the whole task: show it at once
       if (answer && typeof answer === 'object' && (answer as Card).id === card.id && 'checklist_items' in answer) queryClient.setQueryData(key, answer);
       setSaveState('saved');
@@ -265,6 +283,10 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
     }
   };
   const [picking, setPicking] = useState(false); // K3: choosing a Search & BI link
+  // K4: comments and files made without a connection, until they are sent
+  const waiting = useWaiting(card.id);
+  const waitingComments = waiting.filter((op) => op.kind === 'comment');
+  const waitingFiles = waiting.filter((op) => op.kind === 'attach');
   const firstOpen = columns.find((c) => !c.is_done);
   const patch = (body: CardInput) => {
     queryClient.setQueryData<Card>(key, (old) => (old ? ({ ...old, ...body } as Card) : old));
@@ -306,7 +328,9 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
 
   const toggleItem = (item: ChecklistItem, value: boolean) => {
     queryClient.setQueryData<Card>(key, (old) => (old ? { ...old, checklist_items: old.checklist_items.map((i) => (i.id === item.id ? { ...i, done: value, done_by: value ? ws.user.username : null, done_at: value ? Date.now() / 1000 : null } : i)) } : old));
-    void run(() => updateChecklistItem(item.id, { done: value }));
+    // the board's "2 of 3 steps" at once too (also without a connection)
+    queryClient.setQueryData<BoardDetail>(kanbanKeys.board(detail.board.id), (old) => (old ? { ...old, cards: old.cards.map((c) => (c.id === card.id ? { ...c, checklist: { ...c.checklist, done: Math.max(0, c.checklist.done + (value ? 1 : -1)) } } : c)) } : old));
+    void run(() => sendOrQueue({ kind: 'tick', cardId: card.id, itemId: item.id, done: value, label: value ? t('tick “{text}”', { text: item.text }) : t('untick “{text}”', { text: item.text }) }, () => updateChecklistItem(item.id, { done: value })));
   };
   const moveItem = (index: number, by: -1 | 1) => {
     const item = items[index];
@@ -340,25 +364,27 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
     setUploading((n) => n + chosen.length);
     setSaveState('saving');
     let ok = 0;
+    let kept = 0;
     for (const file of chosen) {
       try {
-        await attachFile(card.id, file);
-        ok += 1;
+        if (isQueued(await attachOrQueue(card.id, file))) kept += 1;
+        else ok += 1;
       } catch (err) {
         notify(apiErrorMessage(err, t('Could not add {file}', { file: file.name })), { error: true });
       } finally {
         setUploading((n) => n - 1);
       }
     }
-    setSaveState(ok ? 'saved' : 'error');
+    setSaveState(kept ? 'queued' : ok ? 'saved' : 'error');
     if (ok) notify(ok === 1 ? t('Added {file}', { file: chosen[0].name }) : t('Added {n} files', { n: ok }));
-    refresh();
+    if (kept) notify(tn(kept, '{n} file is kept on this device and sent when the connection is back', '{n} files are kept on this device and sent when the connection is back'));
+    if (ok) refresh();
   };
 
   const sendComment = async () => {
     const body = comment.trim();
     if (!body) return;
-    if (await run(() => addComment(card.id, body), t('Could not save the comment'))) setComment('');
+    if (await run(() => sendOrQueue({ kind: 'comment', cardId: card.id, body, label: t('comment on “{title}”', { title: card.title }) }, () => addComment(card.id, body)), t('Could not save the comment'))) setComment('');
   };
 
   const removeFile = (a: Attachment) => {
@@ -417,7 +443,7 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
   return (
     <>
       <DrawerHeader borderBottom="1px solid" borderColor="lineColor" px={{ base: 4, md: 6 }} py={3} borderTop="5px solid" borderTopColor={done ? '#22c55e' : accent}>
-        <Flex align="center" gap={2}>
+        <Flex align="center" gap={2} wrap="wrap">
           {canEdit ? (
             <Menu isLazy placement="bottom-start">
               <MenuButton
@@ -457,8 +483,8 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
               <Text as="span">{column?.name}</Text>
             </HStack>
           )}
-          <Text fontSize="sm" color={saveState === 'error' ? 'red.500' : 'mutedText'} data-testid="save-state" aria-live="polite" display={saveState === 'idle' ? 'none' : 'block'}>
-            {saveState === 'saving' ? t('Saving…') : saveState === 'saved' ? t('Saved') : saveState === 'error' ? t('Not saved') : ''}
+          <Text fontSize="sm" color={saveState === 'error' ? 'red.500' : saveState === 'queued' ? 'orange.500' : 'mutedText'} data-testid="save-state" aria-live="polite" display={saveState === 'idle' ? 'none' : 'block'} order={{ base: 10, md: 0 }} w={{ base: '100%', md: 'auto' }}>
+            {saveState === 'saving' ? t('Saving…') : saveState === 'saved' ? t('Saved') : saveState === 'queued' ? t('Kept, sent later') : saveState === 'error' ? t('Not saved') : ''}
           </Text>
           <Box flex={1} />
           {canEdit && !done && doneColumn && (
@@ -809,7 +835,22 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                 </Flex>
               ))}
             </VStack>
-            {!card.attachments_list.length && <Text color="mutedText">{canEdit ? t('None yet.') : t('No photos or files.')}</Text>}
+            {waitingFiles.map((op) => (
+              <Flex key={op.id} align="center" gap={3} px={2} py={2} borderRadius="lg" border="1px dashed" borderColor="orange.400" mt={1} data-testid="waiting-file">
+                <Box color="orange.400">
+                  <CameraIcon boxSize={5} />
+                </Box>
+                <Box flex={1} minW={0}>
+                  <Text fontWeight={600} noOfLines={1}>
+                    {op.kind === 'attach' ? op.name : ''}
+                  </Text>
+                  <Text fontSize="sm" color="orange.500">
+                    {t('Waiting to be sent')}
+                  </Text>
+                </Box>
+              </Flex>
+            ))}
+            {!card.attachments_list.length && !waitingFiles.length && <Text color="mutedText">{canEdit ? t('None yet.') : t('No photos or files.')}</Text>}
           </Section>
 
           {/* links to Search & BI: in the main part when there are some */}
@@ -869,6 +910,19 @@ function CardBody({ card, detail, columns, canEdit, canManage, canRestore, onClo
                   </Flex>
                 );
               })}
+              {waitingComments.map((op) => (
+                <Flex key={op.id} gap={3} data-testid="waiting-comment">
+                  <PersonAvatar name={ws.user.username} size="sm" />
+                  <Box flex={1} minW={0}>
+                    <Text fontSize="sm" color="orange.500" fontWeight={600}>
+                      {t('Waiting to be sent')}
+                    </Text>
+                    <Box mt={1} px={3} py={2} borderRadius="lg" border="1px dashed" borderColor="orange.400" fontSize="md">
+                      <PlainText text={op.kind === 'comment' ? op.body : ''} />
+                    </Box>
+                  </Box>
+                </Flex>
+              ))}
               {canEdit ? (
                 <Flex gap={2} align="flex-end">
                   <Textarea

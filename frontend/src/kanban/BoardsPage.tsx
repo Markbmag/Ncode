@@ -209,13 +209,15 @@ export default function BoardsPage() {
           </TabList>
         </Tabs>
 
-        {boards.isPending ? (
+        {boards.isPending && boards.fetchStatus === 'paused' ? (
+          <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('No connection')} text={t('The boards were not opened on this device before, so they are not kept here. They show once the connection is back.')} testId="boards-offline" />
+        ) : boards.isPending ? (
           <SimpleGrid columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} h="210px" borderRadius="2xl" />
             ))}
           </SimpleGrid>
-        ) : boards.isError ? (
+        ) : boards.isError && !boards.data ? (
           <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('Could not load the boards')} text={apiErrorMessage(boards.error, '')} action={t('Try again')} onAction={() => void boards.refetch()} />
         ) : archived ? (
           shown.length ? (

@@ -13,7 +13,7 @@ import { useBoards } from './api';
 import { KanbanIcon, UserIcon } from './icons';
 import { colorHex } from './logic';
 import { PersonAvatar } from './parts';
-import { OfflineBanner } from '../pwa/OfflineBanner';
+import { KanbanOfflineBanner, OfflineSync } from './offline/OfflineSync';
 import { setAppIdentity } from '../pwa/identity';
 
 export function KanbanLogo() {
@@ -186,6 +186,7 @@ function AccountMenu() {
 
 /** Ncode - Kanban's own frame: a top bar (logo, boards, search, services, you) over the page. */
 export default function KanbanShell() {
+  const ws = useWorkspace();
   // "Add to Home Screen" here makes a Kanban icon that opens Kanban (K2)
   useEffect(() => {
     setAppIdentity('kanban');
@@ -215,7 +216,8 @@ export default function KanbanShell() {
         </Flex>
         <AccountMenu />
       </Flex>
-      <OfflineBanner />
+      <KanbanOfflineBanner />
+      <OfflineSync user={ws.user.username} />
       <Box flex={1} minH={0} position="relative">
         <Suspense fallback={<Skeleton m={6} h="200px" borderRadius="2xl" />}>
           <Outlet />

@@ -36,6 +36,8 @@ import type { BoardDetail, BoardEvent, Card, CardSummary, Column, Priority } fro
 import { PRIORITIES } from './types';
 import { useBoardSocket } from './useBoardSocket';
 import { useNotify } from './useNotify';
+import { isQueued, sendOrQueue } from './offline/queue';
+import type { Queued } from './offline/queue';
 import { MoveSheet, StageTabs } from './phone';
 import { attachFile } from './upload';
 
@@ -712,15 +714,20 @@ export default function BoardPage() {
 
   /** Moves a task; the board shows it at once, before the server answers. */
   const shift = useCallback(
-    async (id: number, columnId: number, position: number): Promise<Card | null> => {
+    async (id: number, columnId: number, position: number): Promise<Card | Queued | null> => {
+      const title = queryClient.getQueryData<BoardDetail>(kanbanKeys.board(boardId))?.cards.find((c) => c.id === id)?.title ?? '';
       queryClient.setQueryData<BoardDetail>(kanbanKeys.board(boardId), (old) => (old ? { ...old, cards: applyMove(old.cards, id, columnId, position, doneColumns) } : old));
+      let queued = false;
       try {
-        return await moveCard(id, columnId, position);
+        // K4: without a connection the move waits on the phone; the board shows it already
+        const res = await sendOrQueue({ kind: 'move', cardId: id, columnId, position, label: t('move “{title}”', { title }) }, () => moveCard(id, columnId, position));
+        queued = isQueued(res);
+        return res;
       } catch (err) {
         fail(err, t('Could not move the task'));
         return null;
       } finally {
-        refresh();
+        if (!queued) refresh();
       }
     },
     [queryClient, boardId, doneColumns, refresh, fail],
@@ -735,6 +742,10 @@ export default function BoardPage() {
       const target = columns.find((c) => c.id === columnId);
       void shift(id, columnId, position).then((res) => {
         if (!res || before.column === columnId) return;
+        if (isQueued(res)) {
+          notify(t('Moved “{title}” to {column}. It is sent when the connection is back.', { title: card.title, column: target?.name ?? '' }), { undo: () => void shift(id, before.column, before.position) });
+          return;
+        }
         const next = res.next;
         if (next && card.repeat) {
           // K3: a repeating task came back; Undo also takes the new one away again
@@ -842,6 +853,7 @@ export default function BoardPage() {
   // ------------------------------------------------ phones (K2)
   const photoTask = useCallback(
     async (column: Column, file: File) => {
+      if (!navigator.onLine) return void notify(t('Adding a task needs the connection. Ticks, moves, comments and photos on tasks work without it.'), { error: true });
       try {
         const card = await createCard(boardId, { column_id: column.id, title: photoTaskTitle(new Date(), t('Photo')) });
         await attachFile(card.id, file);
@@ -852,7 +864,7 @@ export default function BoardPage() {
         refresh();
       }
     },
-    [boardId, refresh, navigate, fail, boardSearch],
+    [boardId, refresh, navigate, fail, boardSearch, notify],
   );
 
   // ------------------------------------------------ calendar (K3): a task's date, with Undo
@@ -907,6 +919,7 @@ export default function BoardPage() {
   // ------------------------------------------------ stages and tasks
   const addCard = useCallback(
     async (column: Column, title: string) => {
+      if (!navigator.onLine) return void notify(t('Adding a task needs the connection. Ticks, moves, comments and photos on tasks work without it.'), { error: true });
       try {
         await createCard(boardId, { column_id: column.id, title });
         refresh();
@@ -961,8 +974,15 @@ export default function BoardPage() {
   };
 
   // ------------------------------------------------ render
+  if (boardQuery.isPending && boardQuery.fetchStatus === 'paused') {
+    return (
+      <Box p={6} maxW="640px" mx="auto">
+        <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('No connection')} text={t('This board was not opened on this device before, so it is not kept here. It opens once the connection is back.')} testId="board-offline" />
+      </Box>
+    );
+  }
   if (boardQuery.isPending) return <BoardSkeleton />;
-  if (boardQuery.isError || !detail) {
+  if (!detail) {  // a board kept on the phone (K4) still shows when it cannot be read again
     return (
       <Box p={6} maxW="640px" mx="auto">
         <EmptyState icon={<KanbanIcon boxSize={7} />} title={t('Could not open the board')} text={apiErrorMessage(boardQuery.error, '')} action={t('All boards')} onAction={() => navigate('/kanban')} />

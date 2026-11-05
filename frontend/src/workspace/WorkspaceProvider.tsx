@@ -58,7 +58,8 @@ export function WorkspaceProvider({ user, onLogout, children }: WorkspaceProvide
   const loaded = !connectionsQuery.isPending;
 
   useEffect(() => {
-    if (connectionsQuery.isError) {
+    // without a connection the strip at the top already says so (K4)
+    if (connectionsQuery.isError && navigator.onLine) {
       toast({ title: t('Could not load your databases'), description: apiErrorMessage(connectionsQuery.error, ''), status: 'error' });
     }
   }, [connectionsQuery.isError, connectionsQuery.error, toast]);

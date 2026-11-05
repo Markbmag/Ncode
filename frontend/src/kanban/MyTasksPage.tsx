@@ -17,6 +17,7 @@ import { colorHex, dayTitle, myGroups, myGroupTitle, printRow, todayIso } from '
 import { EmptyState } from './parts';
 import type { CardSummary, MyTasks } from './types';
 import { useNotify } from './useNotify';
+import { isQueued, sendOrQueue } from './offline/queue';
 
 type Board = MyTasks['boards'][number];
 
@@ -70,8 +71,16 @@ export default function MyTasksPage() {
       const board = boards.get((card as CardSummary & { board_id: number }).board_id);
       const target = board?.columns.find((c) => c.id === columnId);
       const before = card.column_id;
+      // the list follows at once, also without a connection (K4)
+      queryClient.setQueryData<MyTasks>(kanbanKeys.my, (old) => (old ? { ...old, cards: old.cards.map((c) => (c.id === card.id ? { ...c, column_id: columnId, completed_at: target?.is_done ? Date.now() / 1000 : null } : c)) } : old));
       try {
-        const res = await moveCardToTop(card.id, columnId);
+        const res = await sendOrQueue({ kind: 'move', cardId: card.id, columnId, position: null, label: t('move “{title}”', { title: card.title }) }, () => moveCardToTop(card.id, columnId));
+        if (isQueued(res)) {
+          notify(t('Moved “{title}” to {column}. It is sent when the connection is back.', { title: card.title, column: target?.name ?? '' }), {
+            undo: () => void sendOrQueue({ kind: 'move', cardId: card.id, columnId: before, position: null, label: t('move “{title}”', { title: card.title }) }, () => moveCardToTop(card.id, before)).then(() => board && refresh(board.id)),
+          });
+          return;
+        }
         const next = res.next;
         if (next && card.repeat) {
           const repeat = card.repeat;
@@ -89,7 +98,7 @@ export default function MyTasksPage() {
         if (board) refresh(board.id);
       }
     },
-    [boards, notify, refresh],
+    [boards, notify, refresh, queryClient],
   );
   const open = (id: number | null) => {
     const next = new URLSearchParams(search);
@@ -131,7 +140,7 @@ export default function MyTasksPage() {
         <VStack align="stretch" spacing={3}>
           {[0, 1, 2].map((i) => <Skeleton key={i} h="84px" borderRadius="xl" />)}
         </VStack>
-      ) : my.isError ? (
+      ) : my.isError && !my.data ? (
         <EmptyState icon={<UserIcon boxSize={7} />} title={t('Could not load your tasks')} text={apiErrorMessage(my.error, '')} action={t('Try again')} onAction={() => void my.refetch()} />
       ) : !groups.length ? (
         <EmptyState icon={<CheckIcon boxSize={7} />} title={t('Nothing assigned to you')} text={t('Tasks where you are chosen under “Who does it” show up here, from every board.')} testId="my-tasks-empty" />
